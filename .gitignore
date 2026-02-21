@@ -42,3 +42,9 @@ temp/
 
 # MongoDB (local data)
 data/
+
+.env
+.env.local
+.env.development
+.env.production
+/src/generated/prisma
