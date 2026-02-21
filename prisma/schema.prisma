@@ -6,11 +6,596 @@ datasource db {
   provider = "mongodb"
 }
 
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Role {
+  CLIENT
+  FREELANCER
+  ADMIN
+}
+
+enum ProjectStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  UNDER_REVIEW
+  REVISION_REQUESTED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum ProjectSize {
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  HELD_IN_ESCROW
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum DisputeResolution {
+  FAVOR_CLIENT
+  FAVOR_FREELANCER
+  SPLIT
+  DISMISSED
+}
+
+enum MessageType {
+  TEXT
+  FILE
+  SYSTEM
+}
+
+enum NotificationType {
+  PROPOSAL_RECEIVED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  PROJECT_STARTED
+  MILESTONE_SUBMITTED
+  MILESTONE_APPROVED
+  PAYMENT_RELEASED
+  MESSAGE_RECEIVED
+  REVIEW_RECEIVED
+  DISPUTE_OPENED
+  DISPUTE_RESOLVED
+  SYSTEM_ALERT
+}
+
+enum ExperienceLevel {
+  ENTRY
+  MID
+  SENIOR
+  EXPERT
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  UNAVAILABLE
+}
+
+// ============================================================
+// USER (Unified auth model — role decides the site)
+// ============================================================
+
 model User {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  email             String    @unique
+  passwordHash      String? // null if Google OAuth only
+  googleId          String?   @unique
+  role              Role
+  isEmailVerified   Boolean   @default(false)
+  isPaymentVerified Boolean   @default(false)
+  isBanned          Boolean   @default(false)
+  banReason         String?
+  profileImage      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastActiveAt      DateTime?
+
+  // Relations
+  clientProfile     ClientProfile?
+  freelancerProfile FreelancerProfile?
+  adminProfile      AdminProfile?
+
+  sentMessages  Message[]      @relation("MessageSender")
+  notifications Notification[]
+  sessions      Session[]
+
+  // Reviews given and received
+  reviewsGiven    Review[] @relation("ReviewGiver")
+  reviewsReceived Review[] @relation("ReviewReceiver")
+
+  // Disputes
+  disputesAsClient     Dispute[] @relation("DisputeClient")
+  disputesAsFreelancer Dispute[] @relation("DisputeFreelancer")
+
+  @@map("users")
+}
+
+// ============================================================
+// SESSION (JWT refresh token tracking)
+// ============================================================
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  refreshToken String   @unique
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ============================================================
+// CLIENT PROFILE
+// ============================================================
+
+model ClientProfile {
+  id                String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String           @unique @db.ObjectId
+  fullName          String
+  company           String?
+  companyType       String? // "Startup", "Enterprise", "Individual", etc.
+  industry          String?
+  bio               String?
+  website           String?
+  location          String?
+  timezone          String?
+  hiringPreference  String? // "Hourly", "Fixed", "Both"
+  budgetRange       String? // "Low", "Medium", "High"
+  preferredExpLevel ExperienceLevel?
+  commMethod        String? // "Slack", "Email", "Chat"
+  availability      String? // "Full-time", "Part-time"
+  profileCompletion Int              @default(0)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@map("client_profiles")
+}
+
+// ============================================================
+// FREELANCER PROFILE
+// ============================================================
+
+model FreelancerProfile {
+  id                String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String             @unique @db.ObjectId
+  fullName          String
+  bio               String?
+  tagline           String?
+  location          String?
+  timezone          String?
+  hourlyRate        Float?
+  experienceLevel   ExperienceLevel    @default(ENTRY)
+  availability      AvailabilityStatus @default(AVAILABLE)
+  responseTime      String? // e.g. "within 2 hours"
+  languages         String[]
+  profileCompletion Int                @default(0)
+
+  // Social / portfolio links
+  github    String?
+  linkedin  String?
+  portfolio String?
+  website   String?
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills         FreelancerSkill[]
+  portfolioItems PortfolioItem[]
+  proposals      Proposal[]
+  certificates   Certificate[]
+
+  @@map("freelancer_profiles")
+}
+
+// ============================================================
+// FREELANCER SKILLS (Many-to-Many via join model)
+// ============================================================
+
+model Skill {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String
-  email     String   @unique
-  password  String
-  role      String   @default("client")
+  name      String   @unique // e.g. "React", "Graphic Design"
+  category  String // e.g. "Frontend", "Design", "Writing"
   createdAt DateTime @default(now())
+
+  freelancers   FreelancerSkill[]
+  projectSkills ProjectSkill[]
+
+  @@map("skills")
+}
+
+model FreelancerSkill {
+  id                  String @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String @db.ObjectId
+  skillId             String @db.ObjectId
+  proficiencyLevel    Int    @default(3) // 1-5
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  skill             Skill             @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([freelancerProfileId, skillId])
+  @@map("freelancer_skills")
+}
+
+// ============================================================
+// PORTFOLIO ITEMS (Freelancer's past work showcase)
+// ============================================================
+
+model PortfolioItem {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String    @db.ObjectId
+  title               String
+  description         String?
+  imageUrl            String?
+  projectUrl          String?
+  techStack           String[]
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("portfolio_items")
+}
+
+// ============================================================
+// CERTIFICATES (Freelancer credentials)
+// ============================================================
+
+model Certificate {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String    @db.ObjectId
+  title               String
+  issuingOrganization String
+  issueDate           DateTime
+  expiryDate          DateTime?
+  credentialUrl       String?
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("certificates")
+}
+
+// ============================================================
+// ADMIN PROFILE
+// ============================================================
+
+model AdminProfile {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @unique @db.ObjectId
+  fullName   String
+  department String?
+  createdAt  DateTime @default(now())
+
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resolvedDisputes Dispute[]  @relation("DisputeAdmin")
+  adminLogs        AdminLog[]
+
+  @@map("admin_profiles")
+}
+
+// ============================================================
+// PROJECT
+// ============================================================
+
+model Project {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  clientProfileId String        @db.ObjectId
+  title           String
+  description     String
+  size            ProjectSize
+  status          ProjectStatus @default(OPEN)
+  budgetMin       Float
+  budgetMax       Float
+  deadline        DateTime?
+  category        String // e.g. "Web Development", "Graphic Design"
+  attachments     String[] // file URLs
+  isAiScoped      Boolean       @default(false) // was this scoped by AI?
+  aiScopeSummary  String? // AI-generated scope summary
+  proposalCount   Int           @default(0)
+  viewCount       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  clientProfile ClientProfile  @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  skills        ProjectSkill[]
+  proposals     Proposal[]
+  contract      Contract?
+  dispute       Dispute?
+
+  @@map("projects")
+}
+
+// ============================================================
+// PROJECT SKILLS (Required skills for a project)
+// ============================================================
+
+model ProjectSkill {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  projectId String @db.ObjectId
+  skillId   String @db.ObjectId
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, skillId])
+  @@map("project_skills")
+}
+
+// ============================================================
+// AI SCOPING SESSION (tracks AI assistant conversations)
+// ============================================================
+
+model AiScopingSession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  input     String // raw user description
+  output    Json // structured AI response: {category, size, budgetRange, skills[]}
+  projectId String?  @db.ObjectId // linked if user posted the project after
+  createdAt DateTime @default(now())
+
+  @@map("ai_scoping_sessions")
+}
+
+// ============================================================
+// PROPOSAL (Freelancer bids on a project)
+// ============================================================
+
+model Proposal {
+  id                  String         @id @default(auto()) @map("_id") @db.ObjectId
+  projectId           String         @db.ObjectId
+  freelancerProfileId String         @db.ObjectId
+  proposedPrice       Float
+  deliveryTime        Int // in days
+  coverLetter         String
+  status              ProposalStatus @default(PENDING)
+  submittedAt         DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, freelancerProfileId]) // one proposal per freelancer per project
+  @@map("proposals")
+}
+
+// ============================================================
+// CONTRACT (Created when a proposal is accepted)
+// ============================================================
+
+model Contract {
+  id                  String         @id @default(auto()) @map("_id") @db.ObjectId
+  projectId           String         @unique @db.ObjectId
+  freelancerProfileId String         @db.ObjectId
+  agreedPrice         Float
+  startDate           DateTime       @default(now())
+  endDate             DateTime?
+  status              ContractStatus @default(ACTIVE)
+  termsAccepted       Boolean        @default(false)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  milestones Milestone[]
+  payments   Payment[]
+  chatRoom   ChatRoom?
+
+  @@map("contracts")
+}
+
+// ============================================================
+// MILESTONE (Deliverable checkpoints within a contract)
+// ============================================================
+
+model Milestone {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  contractId  String          @db.ObjectId
+  title       String
+  description String?
+  amount      Float // payment for this milestone
+  dueDate     DateTime?
+  status      MilestoneStatus @default(PENDING)
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  attachments String[] // submitted file URLs
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  payment  Payment?
+
+  @@map("milestones")
+}
+
+// ============================================================
+// PAYMENT (Escrow and release tracking)
+// ============================================================
+
+model Payment {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  contractId    String        @db.ObjectId
+  milestoneId   String?       @unique @db.ObjectId
+  amount        Float
+  status        PaymentStatus @default(PENDING)
+  transactionId String? // from payment gateway (e.g. Stripe)
+  paidAt        DateTime?
+  releasedAt    DateTime?
+  createdAt     DateTime      @default(now())
+
+  contract  Contract   @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+
+  @@map("payments")
+}
+
+// ============================================================
+// CHAT ROOM (One per contract)
+// ============================================================
+
+model ChatRoom {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  contractId String   @unique @db.ObjectId
+  createdAt  DateTime @default(now())
+
+  contract Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@map("chat_rooms")
+}
+
+// ============================================================
+// MESSAGE (Real-time chat via Socket.IO)
+// ============================================================
+
+model Message {
+  id         String      @id @default(auto()) @map("_id") @db.ObjectId
+  chatRoomId String      @db.ObjectId
+  senderId   String      @db.ObjectId
+  content    String
+  type       MessageType @default(TEXT)
+  fileUrl    String? // if type = FILE
+  isRead     Boolean     @default(false)
+  sentAt     DateTime    @default(now())
+
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  sender   User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+// ============================================================
+// REVIEW (Blind review system)
+// ============================================================
+
+model Review {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  contractId  String    @db.ObjectId
+  giverId     String    @db.ObjectId // who wrote the review
+  receiverId  String    @db.ObjectId // who gets the review
+  rating      Int // 1-5
+  comment     String?
+  isRevealed  Boolean   @default(false) // blind until both submit or timeout
+  submittedAt DateTime  @default(now())
+  revealedAt  DateTime?
+
+  giver    User @relation("ReviewGiver", fields: [giverId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReviewReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, giverId]) // one review per person per contract
+  @@map("reviews")
+}
+
+// ============================================================
+// DISPUTE
+// ============================================================
+
+model Dispute {
+  id             String             @id @default(auto()) @map("_id") @db.ObjectId
+  projectId      String             @unique @db.ObjectId
+  clientId       String             @db.ObjectId
+  freelancerId   String             @db.ObjectId
+  adminId        String?            @db.ObjectId
+  reason         String
+  details        String?
+  status         DisputeStatus      @default(OPEN)
+  resolution     DisputeResolution?
+  resolutionNote String?
+  openedAt       DateTime           @default(now())
+  resolvedAt     DateTime?
+
+  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client     User          @relation("DisputeClient", fields: [clientId], references: [id])
+  freelancer User          @relation("DisputeFreelancer", fields: [freelancerId], references: [id])
+  admin      AdminProfile? @relation("DisputeAdmin", fields: [adminId], references: [id])
+
+  @@map("disputes")
+}
+
+// ============================================================
+// NOTIFICATION
+// ============================================================
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String           @db.ObjectId
+  type      NotificationType
+  title     String
+  body      String
+  link      String? // deep-link to relevant page
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ============================================================
+// ADMIN LOG (Audit trail for admin actions)
+// ============================================================
+
+model AdminLog {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  adminProfileId String   @db.ObjectId
+  action         String // e.g. "BANNED_USER", "RESOLVED_DISPUTE"
+  targetType     String // e.g. "User", "Project", "Dispute"
+  targetId       String   @db.ObjectId
+  note           String?
+  createdAt      DateTime @default(now())
+
+  adminProfile AdminProfile @relation(fields: [adminProfileId], references: [id], onDelete: Cascade)
+
+  @@map("admin_logs")
+}
+
+// ============================================================
+// PLATFORM SETTINGS (Admin-controlled global settings)
+// ============================================================
+
+model PlatformSetting {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  key       String   @unique // e.g. "platform_fee_percentage"
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
 }
