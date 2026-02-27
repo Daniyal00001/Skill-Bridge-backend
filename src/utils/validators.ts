@@ -28,5 +28,23 @@ export const signupSchema = z.object({
   }),
 })
 
-// ── TypeScript type auto-generated from schema ────────────────
+
+
+
+// ── Login Schema ──────────────────────────────────────────────
+export const loginSchema = z.object({
+  email: z
+    .string()
+    .email('Please enter a valid email')
+    .toLowerCase()
+    .trim(),
+
+  password: z
+    .string()
+    .min(1, 'Password is required'),
+})
+
+
+
+export type LoginInput = z.infer<typeof loginSchema>
 export type SignupInput = z.infer<typeof signupSchema>

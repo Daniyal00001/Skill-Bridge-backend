@@ -122,7 +122,7 @@ model User {
   name              String
   email             String    @unique
   passwordHash      String? // null if Google OAuth only
-  googleId          String?   @unique
+  googleId          String?
   role              Role
   isEmailVerified   Boolean   @default(false)
   isPaymentVerified Boolean   @default(false)
