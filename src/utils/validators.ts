@@ -19,8 +19,8 @@ export const signupSchema = z.object({
     .min(8, 'Password must be at least 8 characters')
     .max(100, 'Password too long')
     .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      'Password must have uppercase, lowercase and a number'
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/,
+      'Password must have uppercase, lowercase, a number and a special character (@$!%*?&)'
     ),
 
   role: z.enum(['client', 'freelancer'], {
