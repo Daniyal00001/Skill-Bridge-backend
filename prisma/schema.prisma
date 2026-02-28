@@ -123,7 +123,7 @@ model User {
   email             String    @unique
   passwordHash      String? // null if Google OAuth only
   googleId          String?
-  role              Role
+  role              Role?
   isEmailVerified   Boolean   @default(false)
   isPaymentVerified Boolean   @default(false)
   isBanned          Boolean   @default(false)
@@ -601,4 +601,15 @@ model PlatformSetting {
   updatedAt DateTime @updatedAt
 
   @@map("platform_settings")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
 }

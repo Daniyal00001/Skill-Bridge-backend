@@ -13,6 +13,10 @@ import { loginSchema } from '../utils/validators'
 
 
 
+// forgot password
+import crypto from 'crypto'
+import { sendPasswordResetEmail } from '../utils/email'
+import { forgotPasswordSchema, resetPasswordSchema } from '../utils/validators'
 
 
 
@@ -449,6 +453,308 @@ export const logout = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Logout error:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    })
+  }
+}
+
+
+
+
+
+
+
+
+
+// google auth 
+// ── Google OAuth callback ─────────────────────────────────────
+// This runs after Google redirects back to our app
+export const googleCallback = async (req: Request, res: Response) => {
+  console.log("google callback called")
+  try {
+    // Passport attaches the result to req.user
+    const { user, appAccessToken, appRefreshToken } = req.user as any
+
+    // Set refresh token cookie
+    res.cookie('refreshToken', appRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    })
+
+    // Redirect to frontend with accessToken in URL
+    // WHY URL param: we can't set headers on a redirect
+    // Frontend reads it once then stores in memory
+    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:8080'
+
+    return res.redirect(
+      `${frontendURL}/auth/google/success?token=${appAccessToken}&role=${user.role || ''}`
+    )
+
+  } catch (error) {
+    const frontendURL = process.env.FRONTEND_URL || 'http://localhost:8080'
+    return res.redirect(`${frontendURL}/login?error=google_failed`)
+  }
+}
+
+// ── Complete Google Signup ────────────────────────────────────
+// Update role and create profile for new Google users
+export const completeGoogleSignup = async (req: Request, res: Response) => {
+  try {
+    const { role } = req.body
+    const userId = req.user?.userId
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized.',
+      })
+    }
+
+    if (!role || !['CLIENT', 'FREELANCER'].includes(role.toUpperCase())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid role selection.',
+      })
+    }
+
+    const updatedRole = role.toUpperCase() as 'CLIENT' | 'FREELANCER'
+
+    const user = await prisma.$transaction(async (tx) => {
+      // 1. Update user role
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { role: updatedRole },
+      })
+
+      // 2. Create profile
+      if (updatedRole === 'CLIENT') {
+        await tx.clientProfile.create({
+          data: {
+            userId: updatedUser.id,
+            fullName: updatedUser.name,
+          },
+        })
+      } else {
+        await tx.freelancerProfile.create({
+          data: {
+            userId: updatedUser.id,
+            fullName: updatedUser.name,
+            languages: [],
+          },
+        })
+      }
+
+      return updatedUser
+    })
+
+    // 3. Generate new access token with the role
+    const accessToken = generateAccessToken({
+      userId: user.id,
+      role: user.role!,
+    })
+
+    return res.status(200).json({
+      success: true,
+      message: 'Role updated and profile created successfully!',
+      data: {
+        accessToken,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          profileImage: user.profileImage,
+          isEmailVerified: user.isEmailVerified,
+        },
+      },
+    })
+
+  } catch (error) {
+    console.error('Complete Google signup error:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    })
+  }
+}
+
+
+
+
+
+
+
+// ── Forgot Password ───────────────────────────────────────────
+export const forgotPassword = async (req: Request, res: Response) => {
+  console.log("forgot password api called")
+  try {
+
+    // ── STEP 1: Validate email ──────────────────────────────
+    const parsed = forgotPasswordSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter a valid email address.',
+      })
+    }
+
+    const { email } = parsed.data
+
+    // ── STEP 2: Find user ───────────────────────────────────
+    const user = await prisma.user.findUnique({
+      where: { email },
+    })
+
+    // ── STEP 3: Always return success ──────────────────────
+    // WHY: Never reveal if email exists or not
+    //      Hackers use this to enumerate valid emails
+    //      We send the same response regardless
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: 'If this email exists, a reset link has been sent.',
+      })
+    }
+
+    // ── STEP 4: Check if user uses Google login ─────────────
+    if (!user.passwordHash) {
+      return res.status(200).json({
+        success: true,
+        message: 'If this email exists, a reset link has been sent.',
+      })
+    }
+
+    // ── STEP 5: Delete any existing reset tokens ────────────
+    // WHY: User should only have one valid reset token at a time
+    await prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id },
+    })
+
+    // ── STEP 6: Generate secure reset token ─────────────────
+    // WHY: crypto.randomBytes is cryptographically secure
+    //      Never use Math.random() for security tokens
+    const resetToken = crypto.randomBytes(32).toString('hex')
+
+    const expiresAt = new Date()
+    expiresAt.setHours(expiresAt.getHours() + 1) // 1 hour
+
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        token: resetToken,
+        expiresAt,
+      },
+    })
+
+    // ── STEP 7: Send email ──────────────────────────────────
+    await sendPasswordResetEmail(user.email, user.name, resetToken)
+
+    return res.status(200).json({
+      success: true,
+      message: 'If this email exists, a reset link has been sent.',
+    })
+
+  } catch (error) {
+    console.error('Forgot password error:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error.',
+    })
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+// ── Reset Password ────────────────────────────────────────────
+export const resetPassword = async (req: Request, res: Response) => {
+  console.log("reset password api called")
+  try {
+
+    // ── STEP 1: Validate input ──────────────────────────────
+    const parsed = resetPasswordSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: parsed.error.flatten().fieldErrors,
+      })
+    }
+
+    const { token, password } = parsed.data
+
+    // ── STEP 2: Find the reset token ────────────────────────
+    const resetRecord = await prisma.passwordResetToken.findUnique({
+      where: { token },
+    })
+
+    // ── STEP 3: Validate token ──────────────────────────────
+    if (!resetRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset link. Please request a new one.',
+      })
+    }
+
+    // ── STEP 4: Check token not expired ────────────────────
+    if (resetRecord.expiresAt < new Date()) {
+      await prisma.passwordResetToken.delete({
+        where: { id: resetRecord.id },
+      })
+      return res.status(400).json({
+        success: false,
+        message: 'Reset link has expired. Please request a new one.',
+      })
+    }
+
+    // ── STEP 5: Check token not already used ────────────────
+    if (resetRecord.used) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset link has already been used. Please request a new one.',
+      })
+    }
+
+    // ── STEP 6: Hash new password ───────────────────────────
+    const hashedPassword = await bcrypt.hash(password, 12)
+
+    // ── STEP 7: Update password + mark token as used ────────
+    // WHY transaction: both must succeed together
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: resetRecord.userId },
+        data: { passwordHash: hashedPassword },
+      }),
+      prisma.passwordResetToken.update({
+        where: { id: resetRecord.id },
+        data: { used: true },
+      }),
+      // Delete all sessions — force re-login everywhere
+      // WHY: If someone stole their old password,
+      //      changing password logs them out everywhere
+      prisma.session.deleteMany({
+        where: { userId: resetRecord.userId },
+      }),
+    ])
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successfully! Please log in with your new password.',
+    })
+
+  } catch (error) {
+    console.error('Reset password error:', error)
     return res.status(500).json({
       success: false,
       message: 'Internal server error.',

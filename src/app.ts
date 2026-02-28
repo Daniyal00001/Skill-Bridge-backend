@@ -2,6 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import authRoutes from './routes/auth.routes'
+import passport from './config/passport'
 
 const app = express()
 
@@ -17,13 +18,10 @@ app.use(cors({
 
 app.use(express.json())
 app.use(cookieParser())
-
+app.use(passport.initialize())  // for google auth
 // ── Routes ────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
 
-// ── Health check ──────────────────────────────────────────────
-app.get('/', (req, res) => {
-  res.send('SkillBridge API Running 🚀')
-})
+
 
 export default app
