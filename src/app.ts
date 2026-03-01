@@ -3,6 +3,7 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import authRoutes from './routes/auth.routes'
 import passport from './config/passport'
+import { requestLogger } from './middlewares/logger.middleware'
 
 const app = express()
 
@@ -18,6 +19,7 @@ app.use(cors({
 
 app.use(express.json())
 app.use(cookieParser())
+app.use(requestLogger)
 app.use(passport.initialize())  // for google auth
 // ── Routes ────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
