@@ -7,8 +7,10 @@ import {
   googleCallback,
   forgotPassword,
   resetPassword,
+  completeGoogleSignup,
 } from '../controllers/auth.controller'
 import passport from '../config/passport'
+import { protect } from '../middlewares/auth.middleware'
 
 const router = Router()
 
@@ -18,6 +20,7 @@ router.post('/login', login)
 router.post('/logout', logout)
 router.post('/forgot-password', forgotPassword)
 router.post('/reset-password', resetPassword)
+router.post('/complete-google-signup', protect, completeGoogleSignup)
 
 // Google OAuth
 router.get('/google', passport.authenticate('google', {
