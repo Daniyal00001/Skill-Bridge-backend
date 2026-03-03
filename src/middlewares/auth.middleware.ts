@@ -1,10 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { verifyAccessToken } from '../utils/jwt'
+import { isTokenBlacklisted } from '../utils/redis'
 
-// ── Extend Express Request type ───────────────────────────────
-// WHY: By default req.user doesn't exist in Express
-//      We add it so controllers can access req.user.userId etc.
-// just for typescript....extra safety
 declare global {
   namespace Express {
     interface Request {
@@ -16,13 +13,12 @@ declare global {
   }
 }
 
-// ── protect ───────────────────────────────────────────────────
-// Use this on any route that requires login
-// Example: router.get('/profile', protect, getProfile)
-export const protect = (req: Request, res: Response, next: NextFunction) => {
+export const protect = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
-    // Token comes in header like:
-    // Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
     const authHeader = req.headers.authorization
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -32,20 +28,27 @@ export const protect = (req: Request, res: Response, next: NextFunction) => {
       })
     }
 
-    // Remove "Bearer " and get just the token
     const token = authHeader.split(' ')[1]
 
-    // Verify — throws error if invalid or expired
+    // ── Check blacklist ───────────────────────────────────
+    // WHY: User may have logged out but token is still valid
+    //      We check Redis blacklist before trusting the token
+    const blacklisted = await isTokenBlacklisted(token)
+    if (blacklisted) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token has been invalidated. Please log in again.',
+      })
+    }
+
     const decoded = verifyAccessToken(token)
 
-    // Attach user info to request
-    // Now any controller after this can use req.user
     req.user = {
       userId: decoded.userId,
       role: decoded.role,
     }
 
-    next() // move to next middleware or controller
+    next()
 
   } catch (error) {
     return res.status(401).json({
@@ -55,9 +58,6 @@ export const protect = (req: Request, res: Response, next: NextFunction) => {
   }
 }
 
-// ── requireRole ───────────────────────────────────────────────
-// Use AFTER protect to restrict to specific roles
-// Example: router.get('/admin', protect, requireRole('ADMIN'), ...)
 export const requireRole = (...roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user) {

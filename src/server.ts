@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import app from './app'
 import { prisma } from './config/prisma'
+import './config/redis'
 
 const PORT = process.env.PORT || 5000
 
