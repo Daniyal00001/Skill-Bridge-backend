@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
-
+import { uploadToCloudinary } from "../utils/uploadToCloudinary"
 // ─────────────────────────────────────────────────────────────
 // CREATE PROJECT (Client only)
 // POST /api/projects
@@ -43,13 +43,16 @@ export const createProject = async (req: Request, res: Response) => {
     } = req.body
 
     // Handle uploaded files (from upload.middleware)
-    const attachments: string[] = []
-    if (req.files && Array.isArray(req.files)) {
-      // For now storing original names — replace with Cloudinary URLs later
-      req.files.forEach((file: Express.Multer.File) => {
-        attachments.push(file.originalname)
-      })
-    }
+ const attachments: string[] = []
+
+if (req.files && Array.isArray(req.files)) {
+  for (const file of req.files as Express.Multer.File[]) {
+
+    const url = await uploadToCloudinary(file.buffer)
+
+    attachments.push(url)
+  }
+}
 
     // Map projectSize string to enum
     const sizeMap: Record<string, 'SMALL' | 'MEDIUM' | 'LARGE'> = {
@@ -82,8 +85,14 @@ export const createProject = async (req: Request, res: Response) => {
     })
 
     // Attach skills if provided
-    if (skills && Array.isArray(skills) && skills.length > 0) {
-      for (const skillName of skills) {
+    let parsedSkills: string[] = []
+    if (skills) {
+      if (typeof skills === 'string') parsedSkills = [skills]
+      else if (Array.isArray(skills)) parsedSkills = skills
+    }
+
+    if (parsedSkills.length > 0) {
+      for (const skillName of parsedSkills) {
         // Find or create skill
         let skill = await prisma.skill.findFirst({
           where: { name: { equals: skillName } }
@@ -173,6 +182,14 @@ export const updateProject = async (req: Request, res: Response) => {
       small: 'SMALL', medium: 'MEDIUM', large: 'LARGE',
     }
 
+    const newAttachments: string[] = []
+    if (req.files && Array.isArray(req.files)) {
+      for (const file of req.files as Express.Multer.File[]) {
+        const url = await uploadToCloudinary(file.buffer)
+        newAttachments.push(url)
+      }
+    }
+
     const updated = await prisma.project.update({
       where: { id },
       data: {
@@ -192,15 +209,22 @@ export const updateProject = async (req: Request, res: Response) => {
         ...(language && { language }),
         ...(locationPref && { locationPref }),
         ...(status && { status }),
+        ...(newAttachments.length > 0 && { attachments: [...(existing.attachments || []), ...newAttachments] }),
       }
     })
 
     // Update skills if provided
-    if (skills && Array.isArray(skills) && skills.length > 0) {
+    let parsedSkills: string[] = []
+    if (skills) {
+      if (typeof skills === 'string') parsedSkills = [skills]
+      else if (Array.isArray(skills)) parsedSkills = skills
+    }
+
+    if (parsedSkills.length > 0) {
       // Delete old skills
       await prisma.projectSkill.deleteMany({ where: { projectId: id } })
 
-      for (const skillName of skills) {
+      for (const skillName of parsedSkills) {
         let skill = await prisma.skill.findFirst({
           where: { name: { equals: skillName } }
         })
@@ -275,7 +299,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
 // GET /api/projects/my
 // ─────────────────────────────────────────────────────────────
 export const getMyProjects = async (req: Request, res: Response) => {
-  
+
    console.log("get my project route called")
   try {
     const userId = req.user?.userId

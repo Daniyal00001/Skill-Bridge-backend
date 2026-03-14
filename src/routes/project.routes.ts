@@ -13,7 +13,7 @@ import {
 const router = Router()
 
 router.post('/', protect, requireRole('CLIENT'), upload.array('files', 5), createProject)
-router.patch('/:id', protect, requireRole('CLIENT'), updateProject)
+router.patch('/:id', protect, requireRole('CLIENT'), upload.array('files', 5), updateProject)
 router.get('/client/my', protect, requireRole('CLIENT'), getMyProjects)
 router.get('/', protect, getAllProjects)
 router.get('/:id', protect, getProjectById)
