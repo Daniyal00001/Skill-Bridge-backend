@@ -330,13 +330,13 @@ model Project {
   description     String
   requirements    String?
   referenceLinks  String?
-  subCategory     String?
   budgetType      String        @default("fixed")
   budget          Float
   size            ProjectSize
   status          ProjectStatus @default(OPEN)
   deadline        DateTime?
-  category        String
+  categoryId      String?       @db.ObjectId
+  subCategoryId   String?       @db.ObjectId
   attachments     String[]
   experienceLevel String        @default("intermediate")
   hiringMethod    String        @default("bidding")
@@ -350,6 +350,8 @@ model Project {
   updatedAt       DateTime      @updatedAt
 
   clientProfile ClientProfile  @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  category      Category?      @relation(fields: [categoryId], references: [id])
+  subCategory   SubCategory?   @relation(fields: [subCategoryId], references: [id])
   skills        ProjectSkill[]
   proposals     Proposal[]
   contract      Contract?
@@ -372,6 +374,34 @@ model ProjectSkill {
 
   @@unique([projectId, skillId])
   @@map("project_skills")
+}
+
+// projecvt category
+model Category {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique // "Web Development"
+  slug      String   @unique // "web"
+  icon      String? // store icon name as string e.g. "Layout"
+  createdAt DateTime @default(now())
+
+  subCategories SubCategory[]
+  projects      Project[]
+
+  @@map("categories")
+}
+
+// project subcategory
+model SubCategory {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  name       String // "Frontend"
+  slug       String // "frontend"
+  categoryId String @db.ObjectId
+
+  category Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@unique([categoryId, slug])
+  @@map("sub_categories")
 }
 
 // ============================================================

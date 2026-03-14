@@ -5,7 +5,7 @@ import authRoutes from './routes/auth.routes'
 import passport from './config/passport'
 import { requestLogger } from './middlewares/logger.middleware'
 import projectRoutes from './routes/project.routes'
-
+import categoryRoutes from "./routes/category.routes";
 
 const app = express()
 
@@ -23,8 +23,14 @@ app.use(express.json())
 app.use(cookieParser())
 app.use(requestLogger)
 app.use(passport.initialize())  // for google auth
+
+
 // ── Routes ────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
+
+
+// to fetch categories and sub categories
+app.use("/api/categories", categoryRoutes);
 
 
 // project routes 

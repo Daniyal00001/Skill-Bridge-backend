@@ -8,6 +8,6 @@ export const upload = multer({
   fileFilter: (_, file: any, cb: any) => {
     const allowed = ['image/jpeg', 'image/png', 'application/pdf']
     if (allowed.includes(file.mimetype)) cb(null, true)
-    else cb(new Error('Only JPG, PNG and PDF allowed'))
+    else cb(null, false) // silently skip — frontend handles the user-facing warning
   },
 })
