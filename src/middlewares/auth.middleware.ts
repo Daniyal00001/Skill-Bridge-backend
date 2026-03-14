@@ -4,11 +4,9 @@ import { isTokenBlacklisted } from '../utils/redis'
 
 declare global {
   namespace Express {
-    interface Request {
-      user?: {
-        userId: string
-        role: string
-      }
+    interface User {
+      userId: string
+      role: string
     }
   }
 }
@@ -76,4 +74,6 @@ export const requireRole = (...roles: string[]) => {
 
     next()
   }
+
+  
 }

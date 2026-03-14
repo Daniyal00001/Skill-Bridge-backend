@@ -4,6 +4,8 @@ import cookieParser from 'cookie-parser'
 import authRoutes from './routes/auth.routes'
 import passport from './config/passport'
 import { requestLogger } from './middlewares/logger.middleware'
+import projectRoutes from './routes/project.routes'
+
 
 const app = express()
 
@@ -23,6 +25,10 @@ app.use(requestLogger)
 app.use(passport.initialize())  // for google auth
 // ── Routes ────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
+
+
+// project routes 
+app.use('/api/projects', projectRoutes)
 
 
 
