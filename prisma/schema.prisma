@@ -696,3 +696,16 @@ model PasswordResetToken {
 
   @@map("password_reset_tokens")
 }
+
+model EmailVerification {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  email        String   @unique
+  otp          String
+  name         String
+  passwordHash String
+  role         Role
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@map("email_verifications")
+}
