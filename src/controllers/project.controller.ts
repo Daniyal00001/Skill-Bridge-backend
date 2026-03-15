@@ -28,8 +28,8 @@ export const createProject = async (req: Request, res: Response) => {
       description,
       requirements,
       referenceLinks,
-      category,
-      subCategory,
+      categoryId,
+      subCategoryId,
       budget,
       budgetType,
       projectSize,
@@ -69,8 +69,8 @@ if (req.files && Array.isArray(req.files)) {
         description,
         requirements,
         referenceLinks,
-        category,
-        subCategory,
+        categoryId,
+        subCategoryId,
         budget: Number(budget),
         budgetType,
         size: sizeMap[projectSize] || 'MEDIUM',
@@ -102,7 +102,7 @@ if (req.files && Array.isArray(req.files)) {
           skill = await prisma.skill.create({
             data: {
               name: skillName,
-              category: category || 'other'
+              category: 'other'
             }
           })
         }
@@ -173,7 +173,7 @@ export const updateProject = async (req: Request, res: Response) => {
 
     const {
       title, shortDesc, description, requirements,
-      referenceLinks, category, subCategory, budget,
+      referenceLinks, categoryId, subCategoryId, budget,
       budgetType, projectSize, deadline, skills,
       experienceLevel, hiringMethod, language, locationPref, status
     } = req.body
@@ -198,8 +198,8 @@ export const updateProject = async (req: Request, res: Response) => {
         ...(description && { description }),
         ...(requirements && { requirements }),
         ...(referenceLinks && { referenceLinks }),
-        ...(category && { category }),
-        ...(subCategory && { subCategory }),
+        ...(categoryId && { categoryId }),
+        ...(subCategoryId && { subCategoryId }),
         ...(budget && { budget: Number(budget) }),
         ...(budgetType && { budgetType }),
         ...(projectSize && { size: sizeMap[projectSize] }),
@@ -230,7 +230,7 @@ export const updateProject = async (req: Request, res: Response) => {
         })
         if (!skill) {
           skill = await prisma.skill.create({
-            data: { name: skillName, category: category || 'other' }
+            data: { name: skillName, category: 'other' }
           })
         }
         await prisma.projectSkill.create({
