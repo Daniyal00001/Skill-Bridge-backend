@@ -346,7 +346,8 @@ const CATEGORIES = [
   },
 ];
 
-async function main() {
+// ✅ Export as a function so index.ts can call it
+export async function seedCategories() {
   console.log("🌱 Seeding categories and subcategories...\n");
 
   let categoryCount = 0;
@@ -369,18 +370,9 @@ async function main() {
         .replace(/^-|-$/g, "");
 
       await prisma.subCategory.upsert({
-        where: {
-          categoryId_slug: {
-            categoryId: created.id,
-            slug: subSlug,
-          },
-        },
+        where: { categoryId_slug: { categoryId: created.id, slug: subSlug } },
         update: { name: subName },
-        create: {
-          name: subName,
-          slug: subSlug,
-          categoryId: created.id,
-        },
+        create: { name: subName, slug: subSlug, categoryId: created.id },
       });
 
       subCategoryCount++;
@@ -388,10 +380,15 @@ async function main() {
     }
   }
 
-  console.log("\n----------------------------------------");
+  console.log("\n────────────────────────────────────");
   console.log(`🎉 Seeded ${categoryCount} categories`);
   console.log(`🎉 Seeded ${subCategoryCount} subcategories`);
-  console.log("----------------------------------------");
+  console.log("────────────────────────────────────");
+}
+
+// ✅ Keep this so you can still run seed.ts standalone
+async function main() {
+  await seedCategories();
 }
 
 main()
