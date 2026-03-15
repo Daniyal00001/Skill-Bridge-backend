@@ -128,12 +128,16 @@ enum AvailabilityStatus {
 model User {
   id                String    @id @default(auto()) @map("_id") @db.ObjectId
   name              String
+  firstName         String?
+  lastName          String?
   email             String    @unique
   passwordHash      String? // null if Google OAuth only
   googleId          String?
   role              Role?
   isEmailVerified   Boolean   @default(false)
   isPaymentVerified Boolean   @default(false)
+  isIdVerified      Boolean   @default(false)
+  idDocumentUrl     String?
   isBanned          Boolean   @default(false)
   banReason         String?
   profileImage      String?
@@ -216,21 +220,22 @@ model ClientProfile {
 // ============================================================
 
 model FreelancerProfile {
-  id                String             @id @default(auto()) @map("_id") @db.ObjectId
-  userId            String             @unique @db.ObjectId
-  fullName          String
-  bio               String?
-  tagline           String?
-  location          String?
-  timezone          String?
-  hourlyRate        Float?
-  experienceLevel   ExperienceLevel    @default(ENTRY)
-  availability      AvailabilityStatus @default(AVAILABLE)
-  responseTime      String? // e.g. "within 2 hours"
-  languages         String[]
-  profileCompletion Int                @default(0)
-  createdAt         DateTime?          @default(now())
-  updatedAt         DateTime?          @updatedAt
+  id                      String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId                  String             @unique @db.ObjectId
+  fullName                String
+  bio                     String?
+  tagline                 String?
+  location                String?
+  preferredClientLocation String?
+  timezone                String?
+  hourlyRate              Float?
+  experienceLevel         ExperienceLevel    @default(ENTRY)
+  availability            AvailabilityStatus @default(AVAILABLE)
+  responseTime            String? // e.g. "within 2 hours"
+  languages               String[]
+  profileCompletion       Int                @default(0)
+  createdAt               DateTime?          @default(now())
+  updatedAt               DateTime?          @updatedAt
 
   // Social / portfolio links
   github    String?
@@ -243,6 +248,7 @@ model FreelancerProfile {
   portfolioItems PortfolioItem[]
   proposals      Proposal[]
   certificates   Certificate[]
+  educations     Education[]
   invitations    Invitation[]
   chatRooms      ChatRoom[]
 
@@ -314,6 +320,22 @@ model Certificate {
   freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
 
   @@map("certificates")
+}
+
+// ============================================================
+// EDUCATION (Freelancer education)
+// ============================================================
+
+model Education {
+  id                  String             @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String             @db.ObjectId
+  school              String
+  degree              String
+  year                String?
+
+  freelancerProfile   FreelancerProfile  @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("education")
 }
 
 // ============================================================
