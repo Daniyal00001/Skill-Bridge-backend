@@ -257,34 +257,86 @@ export const updateProject = async (req: Request, res: Response) => {
 // GET /api/projects
 // ─────────────────────────────────────────────────────────────
 export const getAllProjects = async (req: Request, res: Response) => {
-   console.log("get all project route called")
+  console.log("get all project route called")
   try {
-    const { category, skills, experienceLevel, budgetMin, budgetMax } = req.query
+    const { 
+      category, 
+      skills, 
+      experienceLevel, 
+      budgetMin, 
+      budgetMax, 
+      projectSize,
+      search,
+      page = 1,
+      limit = 25
+    } = req.query
 
-    const projects = await prisma.project.findMany({
-      where: {
-        status: 'OPEN',
-        ...(category && { category: String(category) }),
-        ...(experienceLevel && { experienceLevel: String(experienceLevel) }),
-        ...(budgetMin || budgetMax ? {
-          budget: {
-            ...(budgetMin && { gte: Number(budgetMin) }),
-            ...(budgetMax && { lte: Number(budgetMax) }),
-          }
-        } : {}),
-      },
-      include: {
-        skills: { include: { skill: true } },
-        clientProfile: {
-          select: { fullName: true, company: true }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
+    const pageNum = Number(page)
+    const limitNum = Number(limit)
+    const skip = (pageNum - 1) * limitNum
+
+    const where: any = {
+      status: 'OPEN',
+    }
+
+    // Search filter
+    if (search) {
+      where.OR = [
+        { title: { contains: String(search), mode: 'insensitive' } },
+        { description: { contains: String(search), mode: 'insensitive' } },
+      ]
+    }
+
+    // Category filter (by slug)
+    if (category && category !== 'All') {
+      where.category = { slug: String(category) }
+    }
+
+    // Experience Level filter
+    if (experienceLevel) {
+      where.experienceLevel = String(experienceLevel)
+    }
+
+    // Project Size filter
+    if (projectSize) {
+      where.size = String(projectSize).toUpperCase()
+    }
+
+    // Budget range filter
+    if (budgetMin || budgetMax) {
+      where.budget = {
+        ...(budgetMin && { gte: Number(budgetMin) }),
+        ...(budgetMax && { lte: Number(budgetMax) }),
+      }
+    }
+
+    // Fetch projects with pagination
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where,
+        include: {
+          skills: { include: { skill: true } },
+          clientProfile: {
+            select: { fullName: true, company: true }
+          },
+          category: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum,
+      }),
+      prisma.project.count({ where })
+    ])
 
     return res.status(200).json({
       success: true,
-      projects
+      projects,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
+      }
     })
 
   } catch (error) {
