@@ -1,11 +1,15 @@
-import express from 'express'
+import express from "express";
+import dotenv from "dotenv";
+import authRoutes from './routes/auth.routes'
+import { aiRoutes } from './routes/ai.routes'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-import authRoutes from './routes/auth.routes'
 import passport from './config/passport'
 import { requestLogger } from './middlewares/logger.middleware'
 
-const app = express()
+dotenv.config();
+
+const app = express();
 
 // ── Middlewares ───────────────────────────────────────────────
 app.use(cors({
@@ -17,13 +21,13 @@ app.use(cors({
   credentials: true,
 }))
 
-app.use(express.json())
+app.use(express.json())            // <– required for req.body
 app.use(cookieParser())
 app.use(requestLogger)
 app.use(passport.initialize())  // for google auth
 // ── Routes ────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes)
-
-
+app.use('/api/ai', aiRoutes)
 
 export default app
+
