@@ -98,6 +98,14 @@ enum NotificationType {
   DISPUTE_OPENED
   DISPUTE_RESOLVED
   SYSTEM_ALERT
+  INVITATION_RECEIVED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
 }
 
 enum ExperienceLevel {
@@ -192,9 +200,13 @@ model ClientProfile {
   commMethod        String? // "Slack", "Email", "Chat"
   availability      String? // "Full-time", "Part-time"
   profileCompletion Int              @default(0)
+  createdAt         DateTime?        @default(now())
+  updatedAt         DateTime?        @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects Project[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects    Project[]
+  invitations Invitation[]
+  chatRooms   ChatRoom[]
 
   @@map("client_profiles")
 }
@@ -217,6 +229,8 @@ model FreelancerProfile {
   responseTime      String? // e.g. "within 2 hours"
   languages         String[]
   profileCompletion Int                @default(0)
+  createdAt         DateTime?          @default(now())
+  updatedAt         DateTime?          @updatedAt
 
   // Social / portfolio links
   github    String?
@@ -229,6 +243,8 @@ model FreelancerProfile {
   portfolioItems PortfolioItem[]
   proposals      Proposal[]
   certificates   Certificate[]
+  invitations    Invitation[]
+  chatRooms      ChatRoom[]
 
   @@map("freelancer_profiles")
 }
@@ -355,6 +371,8 @@ model Project {
   skills        ProjectSkill[]
   proposals     Proposal[]
   contract      Contract?
+  invitations   Invitation[]
+  chatRooms     ChatRoom[]
   dispute       Dispute?
 
   @@map("projects")
@@ -442,6 +460,27 @@ model Proposal {
 }
 
 // ============================================================
+// INVITATION (Client invites freelancer to a project)
+// ============================================================
+
+model Invitation {
+  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
+  projectId           String           @db.ObjectId
+  freelancerProfileId String           @db.ObjectId
+  clientProfileId     String           @db.ObjectId
+  message             String?
+  status              InvitationStatus @default(PENDING)
+  createdAt           DateTime         @default(now())
+
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  clientProfile     ClientProfile     @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, freelancerProfileId]) // one invitation per freelancer per project
+  @@map("invitations")
+}
+
+// ============================================================
 // CONTRACT (Created when a proposal is accepted)
 // ============================================================
 
@@ -509,16 +548,22 @@ model Payment {
 }
 
 // ============================================================
-// CHAT ROOM (One per contract)
+// CHAT ROOM (One per contract or for recruitment)
 // ============================================================
 
 model ChatRoom {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  contractId String   @unique @db.ObjectId
-  createdAt  DateTime @default(now())
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  contractId          String?  @unique @db.ObjectId
+  projectId           String?  @db.ObjectId
+  freelancerProfileId String?  @db.ObjectId
+  clientProfileId     String?  @db.ObjectId
+  createdAt           DateTime @default(now())
 
-  contract Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  messages Message[]
+  contract          Contract?          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile? @relation(fields: [freelancerProfileId], references: [id])
+  clientProfile     ClientProfile?     @relation(fields: [clientProfileId], references: [id])
+  messages          Message[]
 
   @@map("chat_rooms")
 }

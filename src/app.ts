@@ -6,6 +6,7 @@ import passport from './config/passport'
 import { requestLogger } from './middlewares/logger.middleware'
 import projectRoutes from './routes/project.routes'
 import categoryRoutes from "./routes/category.routes";
+import freelancerRoutes from './routes/freelancer.routes'
 
 const app = express()
 
@@ -35,6 +36,9 @@ app.use("/api/categories", categoryRoutes);
 
 // project routes 
 app.use('/api/projects', projectRoutes)
+
+// freelancer routes
+app.use('/api/freelancers', freelancerRoutes)
 
 
 
