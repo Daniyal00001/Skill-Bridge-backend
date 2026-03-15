@@ -277,6 +277,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
 
     const where: any = {
       status: 'OPEN',
+      hiringMethod: 'bidding'
     }
 
     // Search filter
@@ -400,7 +401,9 @@ export const getProjectById = async (req: Request, res: Response) => {
         clientProfile: {
           select: { fullName: true, company: true, location: true }
         },
-        proposals: { select: { id: true } }
+        proposals: { select: { id: true } },
+        category: true,
+        subCategory: true
       }
     })
 

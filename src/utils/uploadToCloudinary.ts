@@ -5,7 +5,12 @@ export const uploadToCloudinary = (fileBuffer: Buffer): Promise<string> => {
   return new Promise((resolve, reject) => {
 
     const stream = cloudinary.uploader.upload_stream(
-      { folder: "project_attachments" },
+      { 
+        folder: "project_attachments", 
+        resource_type: "auto",
+        type: "upload",
+        access_mode: "public"
+      },
       (error, result) => {
         if (error) return reject(error)
         if (result) return resolve(result.secure_url)
