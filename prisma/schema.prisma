@@ -37,9 +37,23 @@ enum ProjectSize {
 
 enum ProposalStatus {
   PENDING
+  SHORTLISTED
   ACCEPTED
   REJECTED
   WITHDRAWN
+}
+
+enum TokenWalletTxType {
+  CREDIT
+  DEBIT
+}
+
+enum TokenTxReason {
+  REGISTRATION_BONUS
+  PROPOSAL_SUBMITTED
+  PROPOSAL_WITHDRAWN
+  ADMIN_GRANT
+  ADMIN_DEDUCT
 }
 
 enum ContractStatus {
@@ -89,6 +103,7 @@ enum NotificationType {
   PROPOSAL_RECEIVED
   PROPOSAL_ACCEPTED
   PROPOSAL_REJECTED
+  PROPOSAL_SHORTLISTED
   PROJECT_STARTED
   MILESTONE_SUBMITTED
   MILESTONE_APPROVED
@@ -99,6 +114,8 @@ enum NotificationType {
   DISPUTE_RESOLVED
   SYSTEM_ALERT
   INVITATION_RECEIVED
+  TOKEN_CREDITED
+  TOKEN_DEDUCTED
 }
 
 enum InvitationStatus {
@@ -234,6 +251,7 @@ model FreelancerProfile {
   responseTime            String? // e.g. "within 2 hours"
   languages               String[]
   profileCompletion       Int                @default(0)
+  skillTokenBalance       Int                @default(0) // SkillTokens economy
   createdAt               DateTime?          @default(now())
   updatedAt               DateTime?          @updatedAt
 
@@ -243,14 +261,15 @@ model FreelancerProfile {
   portfolio String?
   website   String?
 
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills         FreelancerSkill[]
-  portfolioItems PortfolioItem[]
-  proposals      Proposal[]
-  certificates   Certificate[]
-  educations     Education[]
-  invitations    Invitation[]
-  chatRooms      ChatRoom[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills            FreelancerSkill[]
+  portfolioItems    PortfolioItem[]
+  proposals         Proposal[]
+  certificates      Certificate[]
+  educations        Education[]
+  invitations       Invitation[]
+  chatRooms         ChatRoom[]
+  tokenTransactions TokenTransaction[]
 
   @@map("freelancer_profiles")
 }
@@ -467,9 +486,11 @@ model Proposal {
   id                  String         @id @default(auto()) @map("_id") @db.ObjectId
   projectId           String         @db.ObjectId
   freelancerProfileId String         @db.ObjectId
-  proposedPrice       Float
-  deliveryTime        Int // in days
+  proposedPrice       Float          // bid amount
+  deliveryTime        Int            // in days
   coverLetter         String
+  attachments         String[]       // optional file URLs
+  tokenCost           Int            @default(0) // SkillTokens spent on this proposal
   status              ProposalStatus @default(PENDING)
   submittedAt         DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
@@ -479,6 +500,26 @@ model Proposal {
 
   @@unique([projectId, freelancerProfileId]) // one proposal per freelancer per project
   @@map("proposals")
+}
+
+// ============================================================
+// TOKEN TRANSACTION (SkillToken economy ledger)
+// ============================================================
+
+model TokenTransaction {
+  id                  String             @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String             @db.ObjectId
+  type                TokenWalletTxType
+  reason              TokenTxReason
+  amount              Int                // always positive; type determines direction
+  balanceAfter        Int                // snapshot of balance after transaction
+  description         String?            // human-readable note
+  relatedProposalId   String?            @db.ObjectId // linked proposal if applicable
+  createdAt           DateTime           @default(now())
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("token_transactions")
 }
 
 // ============================================================

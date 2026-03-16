@@ -8,6 +8,7 @@ import projectRoutes from './routes/project.routes'
 import categoryRoutes from "./routes/category.routes";
 import freelancerRoutes from './routes/freelancer.routes'
 import proposalRoutes from './routes/proposal.routes'
+import tokenRoutes from './routes/token.routes'
 
 const app = express()
 
@@ -43,6 +44,9 @@ app.use('/api/freelancers', freelancerRoutes)
 
 // proposal routes
 app.use('/api/proposals', proposalRoutes)
+
+// token routes (SkillToken economy)
+app.use('/api/tokens', tokenRoutes)
 
 
 

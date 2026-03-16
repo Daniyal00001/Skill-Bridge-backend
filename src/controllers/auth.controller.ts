@@ -145,8 +145,19 @@ export const verifyOtp = async (req: Request, res: Response) => {
           data: { userId: newUser.id, fullName: verificationRecord.name },
         })
       } else {
-        await tx.freelancerProfile.create({
-          data: { userId: newUser.id, fullName: verificationRecord.name, languages: [] },
+        const freelancerProfile = await tx.freelancerProfile.create({
+          data: { userId: newUser.id, fullName: verificationRecord.name, languages: [], skillTokenBalance: 30 },
+        })
+        // Grant initial 30 SkillTokens
+        await tx.tokenTransaction.create({
+          data: {
+            freelancerProfileId: freelancerProfile.id,
+            type: 'CREDIT',
+            reason: 'REGISTRATION_BONUS',
+            amount: 30,
+            balanceAfter: 30,
+            description: 'Welcome bonus! 30 SkillTokens granted on registration.',
+          }
         })
       }
 
@@ -568,8 +579,19 @@ export const completeGoogleSignup = async (req: Request, res: Response) => {
           data: { userId: updatedUser.id, fullName: updatedUser.name },
         })
       } else {
-        await tx.freelancerProfile.create({
-          data: { userId: updatedUser.id, fullName: updatedUser.name, languages: [] },
+        const freelancerProfile = await tx.freelancerProfile.create({
+          data: { userId: updatedUser.id, fullName: updatedUser.name, languages: [], skillTokenBalance: 30 },
+        })
+        // Grant initial 30 SkillTokens
+        await tx.tokenTransaction.create({
+          data: {
+            freelancerProfileId: freelancerProfile.id,
+            type: 'CREDIT',
+            reason: 'REGISTRATION_BONUS',
+            amount: 30,
+            balanceAfter: 30,
+            description: 'Welcome bonus! 30 SkillTokens granted on registration.',
+          }
         })
       }
 
