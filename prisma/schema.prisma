@@ -399,6 +399,10 @@ model Project {
   hiringMethod    String        @default("bidding")
   language        String        @default("English")
   locationPref    String        @default("Any location")
+  languageId      String?       @db.ObjectId
+  locationId      String?       @db.ObjectId
+  languageObj     Language?     @relation(fields: [languageId], references: [id])
+  locationObj     Location?     @relation(fields: [locationId], references: [id])
   proposalCount   Int           @default(0)
   viewCount       Int           @default(0)
   isAiScoped      Boolean       @default(false)
@@ -771,4 +775,24 @@ model EmailVerification {
   createdAt    DateTime @default(now())
 
   @@map("email_verifications")
+}
+
+model Language {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  code      String?  @unique // e.g., "en", "es"
+  createdAt DateTime @default(now())
+  projects  Project[]
+
+  @@map("languages")
+}
+
+model Location {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  region    String? // e.g., "Asia", "Europe"
+  createdAt DateTime @default(now())
+  projects  Project[]
+
+  @@map("locations")
 }
