@@ -10,7 +10,8 @@ import freelancerRoutes from './routes/freelancer.routes'
 import proposalRoutes from './routes/proposal.routes'
 import tokenRoutes from './routes/token.routes'
 import metadataRoutes from './routes/metadata.routes'
-
+import browseRouter from "./modules/browse/browse.routes";
+import trackingRouter from "./routes/tracking.routes";
 const app = express()
 
 // ── Middlewares ───────────────────────────────────────────────
@@ -42,7 +43,8 @@ app.use('/api/projects', projectRoutes)
 
 // freelancer routes
 app.use('/api/freelancers', freelancerRoutes)
-
+app.use("/api/browse", browseRouter); // browse project module
+app.use("/api/track", trackingRouter); // browse project / tracking module
 // proposal routes
 app.use('/api/proposals', proposalRoutes)
 
