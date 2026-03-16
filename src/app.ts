@@ -7,6 +7,7 @@ import { requestLogger } from './middlewares/logger.middleware'
 import projectRoutes from './routes/project.routes'
 import categoryRoutes from "./routes/category.routes";
 import freelancerRoutes from './routes/freelancer.routes'
+import proposalRoutes from './routes/proposal.routes'
 
 const app = express()
 
@@ -39,6 +40,9 @@ app.use('/api/projects', projectRoutes)
 
 // freelancer routes
 app.use('/api/freelancers', freelancerRoutes)
+
+// proposal routes
+app.use('/api/proposals', proposalRoutes)
 
 
 
