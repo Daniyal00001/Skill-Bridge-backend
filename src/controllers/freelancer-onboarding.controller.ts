@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
 import { uploadToCloudinary } from '../utils/uploadToCloudinary'
+import { updateProfileCompletion } from '../utils/profileCompletion'
 import { ExperienceLevel, AvailabilityStatus } from '@prisma/client'
 
 // Get Current User Profile
@@ -54,11 +55,11 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
         preferredClientLocation,
         tagline,
         fullName: `${firstName} ${lastName}`.trim(),
-        profileCompletion: { increment: 20 }
       }
     })
 
-    return res.status(200).json({ success: true, data: profile })
+    const newCompletion = await updateProfileCompletion(userId)
+    return res.status(200).json({ success: true, data: { ...profile, profileCompletion: newCompletion } })
   } catch (error) {
     console.error('Update Step 1 error:', error)
     return res.status(500).json({ success: false, message: 'Internal server error' })
@@ -78,11 +79,11 @@ export const updateOnboardingStep2 = async (req: Request, res: Response) => {
         bio,
         availability: availability as AvailabilityStatus,
         experienceLevel: experienceLevel as ExperienceLevel,
-        profileCompletion: { increment: 20 }
       }
     })
 
-    return res.status(200).json({ success: true, data: profile })
+    const newCompletion = await updateProfileCompletion(userId)
+    return res.status(200).json({ success: true, data: { ...profile, profileCompletion: newCompletion } })
   } catch (error) {
     console.error('Update Step 2 error:', error)
     return res.status(500).json({ success: false, message: 'Internal server error' })
@@ -150,11 +151,7 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
        })
     }
 
-    await prisma.freelancerProfile.update({
-      where: { userId },
-      data: { profileCompletion: { increment: 20 } }
-    })
-
+    await updateProfileCompletion(userId)
     return res.status(200).json({ success: true, message: 'Step 3 completed' })
   } catch (error) {
     console.error('Update Step 3 error:', error)
@@ -197,12 +194,9 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
     }
 
     // Increment completion
-    const profile = await prisma.freelancerProfile.update({
-      where: { userId },
-      data: { profileCompletion: { increment: 20 } }
-    })
+    const newCompletion = await updateProfileCompletion(userId)
 
-    return res.status(200).json({ success: true, data: { ...updates, profileCompletion: profile.profileCompletion } })
+    return res.status(200).json({ success: true, data: { ...updates, profileCompletion: newCompletion } })
   } catch (error) {
     console.error('Upload files error:', error)
     return res.status(500).json({ success: false, message: 'Internal server error' })
@@ -221,14 +215,151 @@ export const updateOnboardingStep5 = async (req: Request, res: Response) => {
         github,
         linkedin,
         portfolio,
-        website,
-        profileCompletion: 100 // Final step
+        website
       }
     })
 
-    return res.status(200).json({ success: true, data: profile })
+    const newCompletion = await updateProfileCompletion(userId)
+    return res.status(200).json({ success: true, data: { ...profile, profileCompletion: newCompletion } })
   } catch (error) {
     console.error('Update Step 5 error:', error)
+    return res.status(500).json({ success: false, message: 'Internal server error' })
+  }
+}
+
+// Edit Profile (Phase 5)
+export const updateFreelancerProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' })
+
+    const {
+      firstName, lastName,
+      location, preferredClientLocation, tagline, bio, hourlyRate, experienceLevel, availability,
+      github, linkedin, portfolio, website,
+      skills, education, certifications,
+      idDocumentUrl, profileImage
+    } = req.body
+
+    const profile = await prisma.freelancerProfile.findUnique({ where: { userId } })
+    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' })
+
+    // User level updates
+    const userUpdateData: any = {}
+    if (firstName !== undefined) userUpdateData.firstName = firstName
+    if (lastName !== undefined) userUpdateData.lastName = lastName
+    if (firstName !== undefined && lastName !== undefined) {
+      userUpdateData.name = `${firstName} ${lastName}`.trim()
+    }
+    // Handle File removal (if explicitly passed as empty string or null to delete)
+    if (idDocumentUrl === null || idDocumentUrl === "") {
+      userUpdateData.idDocumentUrl = null
+      userUpdateData.isIdVerified = false
+    }
+    if (profileImage === null || profileImage === "") {
+      userUpdateData.profileImage = null
+    }
+
+    if (Object.keys(userUpdateData).length > 0) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: userUpdateData
+      })
+    }
+
+    // Profile level updates
+    const profileUpdateData: any = {}
+    if (location !== undefined) profileUpdateData.location = location
+    if (preferredClientLocation !== undefined) profileUpdateData.preferredClientLocation = preferredClientLocation
+    if (tagline !== undefined) profileUpdateData.tagline = tagline
+    if (bio !== undefined) profileUpdateData.bio = bio
+    if (hourlyRate !== undefined) profileUpdateData.hourlyRate = Number(hourlyRate)
+    if (experienceLevel !== undefined) profileUpdateData.experienceLevel = experienceLevel
+    if (availability !== undefined) profileUpdateData.availability = availability
+    if (github !== undefined) profileUpdateData.github = github
+    if (linkedin !== undefined) profileUpdateData.linkedin = linkedin
+    if (portfolio !== undefined) profileUpdateData.portfolio = portfolio
+    if (website !== undefined) profileUpdateData.website = website
+    if (firstName !== undefined && lastName !== undefined) {
+      profileUpdateData.fullName = `${firstName} ${lastName}`.trim()
+    }
+
+    if (Object.keys(profileUpdateData).length > 0) {
+      await prisma.freelancerProfile.update({
+        where: { id: profile.id },
+        data: profileUpdateData
+      })
+    }
+
+    // Skills
+    if (skills && Array.isArray(skills)) {
+      await prisma.freelancerSkill.deleteMany({ where: { freelancerProfileId: profile.id } })
+      for (const sk of skills) {
+        const skillName = sk.name || sk
+        const skillObj = await prisma.skill.upsert({
+          where: { name: skillName },
+          update: {},
+          create: { name: skillName, category: "General" }
+        })
+        await prisma.freelancerSkill.upsert({
+          where: { freelancerProfileId_skillId: { freelancerProfileId: profile.id, skillId: skillObj.id } },
+          update: { proficiencyLevel: sk.level || 3 },
+          create: { freelancerProfileId: profile.id, skillId: skillObj.id, proficiencyLevel: sk.level || 3 }
+        })
+      }
+    }
+
+    // Education
+    if (education && Array.isArray(education)) {
+       await prisma.education.deleteMany({ where: { freelancerProfileId: profile.id } })
+       if (education.length > 0) {
+         await prisma.education.createMany({
+           data: education.map((edu: any) => ({
+             freelancerProfileId: profile.id,
+             school: edu.school,
+             degree: edu.degree,
+             year: edu.year
+           }))
+         })
+       }
+    }
+
+    // Certifications
+    if (certifications && Array.isArray(certifications)) {
+       await prisma.certificate.deleteMany({ where: { freelancerProfileId: profile.id } })
+       if (certifications.length > 0) {
+         await prisma.certificate.createMany({
+           data: certifications.map((c: any) => ({
+             freelancerProfileId: profile.id,
+             title: c.title,
+             issuingOrganization: c.issuingOrganization,
+             issueDate: new Date(c.issueDate),
+             expiryDate: c.expiryDate ? new Date(c.expiryDate) : undefined,
+             credentialUrl: c.credentialUrl
+           }))
+         })
+       }
+    }
+
+    const updatedProfile = await prisma.freelancerProfile.findUnique({
+      where: { userId },
+      include: {
+        skills: { include: { skill: true } },
+        portfolioItems: true,
+        certificates: true,
+        educations: true,
+        user: { select: { email: true, firstName: true, lastName: true, profileImage: true, isEmailVerified: true, isIdVerified: true } }
+      }
+    })
+
+    await updateProfileCompletion(userId)
+    
+    // fetch again or just send back updatedProfile + profileCompletion
+    updatedProfile!.profileCompletion = await updateProfileCompletion(userId)
+
+    return res.status(200).json({ success: true, data: updatedProfile })
+  } catch (error) {
+    console.error('Update Freelancer Profile error:', error)
     return res.status(500).json({ success: false, message: 'Internal server error' })
   }
 }
