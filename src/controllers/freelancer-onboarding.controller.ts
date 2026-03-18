@@ -274,8 +274,34 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
         .json({ success: false, message: "No files provided" });
     }
 
-    const profile = await prisma.freelancerProfile.findUnique({ where: { userId } });
-    if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
+    const profile = await prisma.freelancerProfile.findUnique({
+      where: { userId },
+      include: { certificates: true, gigs: true },
+    });
+    if (!profile)
+      return res.status(404).json({ success: false, message: "Profile not found" });
+
+    // Validate Limit
+    const newCerts = files["certFiles"] ? files["certFiles"].length : 0;
+    const newGigs = files["gigFiles"] ? files["gigFiles"].length : 0;
+
+    if (profile.certificates.length + newCerts > 4) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: `Total certificates would exceed limit of 4. Already have ${profile.certificates.length}.`,
+        });
+    }
+
+    if (profile.gigs.length + newGigs > 4) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: `Total gigs would exceed limit of 4. Already have ${profile.gigs.length}.`,
+        });
+    }
 
     const updates: any = {};
 
