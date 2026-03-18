@@ -99,3 +99,77 @@ export const sendPasswordResetEmail = async (
 
   await transporter.sendMail(mailOptions)
 }
+
+// ── Send Signup OTP email ─────────────────────────────────────
+export const sendOtpEmail = async (
+  email: string,
+  name: string,
+  otp: string
+) => {
+  const mailOptions = {
+    from: process.env.EMAIL_FROM,
+    to: email,
+    subject: `Verify Your SkillBridge Account: ${otp}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin:0; padding:0; background-color:#f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+          <div style="max-width:600px; margin:40px auto; background:white; border-radius:16px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+            
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #6366f1, #8b5cf6); padding:40px 32px; text-align:center;">
+              <h1 style="color:white; margin:0; font-size:28px; font-weight:800; letter-spacing:-0.5px;">
+                SkillBridge
+              </h1>
+              <p style="color:rgba(255,255,255,0.8); margin:8px 0 0; font-size:14px;">
+                AI-Powered Freelance Platform
+              </p>
+            </div>
+
+            <!-- Body -->
+            <div style="padding:40px 32px;">
+              <h2 style="color:#111827; font-size:22px; font-weight:700; margin:0 0 8px;">
+                Verify Your Email
+              </h2>
+              <p style="color:#6b7280; font-size:15px; line-height:1.6; margin:0 0 24px;">
+                Hi <strong>${name}</strong>, thanks for joining SkillBridge! 
+                Please use the 6-digit verification code below to complete your signup:
+              </p>
+
+              <!-- OTP Code -->
+              <div style="text-align:center; margin:32px 0;">
+                <div style="display:inline-block; background:#f3f4f6; border:2px dashed #e5e7eb; padding:20px 40px; border-radius:12px;">
+                  <span style="font-family: 'Courier New', Courier, monospace; font-size:36px; font-weight:800; letter-spacing:8px; color:#111827;">
+                    ${otp}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Warning -->
+              <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:16px; margin:24px 0;">
+                <p style="color:#1e40af; font-size:13px; margin:0; line-height:1.5;">
+                  Note: This code will expire in <strong>10 minutes</strong>. 
+                  If you did not request this, please ignore this email.
+                </p>
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div style="background:#f9fafb; padding:24px 32px; text-align:center; border-top:1px solid #e5e7eb;">
+              <p style="color:#9ca3af; font-size:12px; margin:0;">
+                © ${new Date().getFullYear()} SkillBridge. All rights reserved.
+              </p>
+            </div>
+
+          </div>
+        </body>
+      </html>
+    `,
+  }
+
+  await transporter.sendMail(mailOptions)
+}

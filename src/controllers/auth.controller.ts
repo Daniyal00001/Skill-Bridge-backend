@@ -10,7 +10,9 @@ import {
   resetPasswordSchema
 } from '../utils/validators'
 import crypto from 'crypto'
-import { sendPasswordResetEmail } from '../utils/email'
+import { sendPasswordResetEmail, sendOtpEmail } from '../utils/email'
+
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 
 // ── Redis imports ─────────────────────────────────────────────
 import {
@@ -54,25 +56,113 @@ export const signup = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 12)
 
+    const otp = generateOTP()
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+
+    await prisma.emailVerification.upsert({
+      where: { email },
+      update: {
+        otp,
+        name,
+        passwordHash: hashedPassword,
+        role: role.toUpperCase() as 'CLIENT' | 'FREELANCER',
+        expiresAt,
+      },
+      create: {
+        email,
+        otp,
+        name,
+        passwordHash: hashedPassword,
+        role: role.toUpperCase() as 'CLIENT' | 'FREELANCER',
+        expiresAt,
+      },
+    })
+
+    await sendOtpEmail(email, name, otp)
+
+    return res.status(200).json({
+      success: true,
+      message: 'Verification code sent to your email.',
+    })
+
+  } catch (error) {
+    console.error('Signup error:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error. Please try again.',
+    })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// VERIFY OTP
+// ─────────────────────────────────────────────────────────────
+export const verifyOtp = async (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body
+
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required.' })
+    }
+
+    const verificationRecord = await prisma.emailVerification.findUnique({
+      where: { email },
+    })
+
+    if (!verificationRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'No verification request found for this email. Please sign up again.',
+      })
+    }
+
+    if (verificationRecord.otp !== otp) {
+      return res.status(400).json({ success: false, message: 'Invalid verification code.' })
+    }
+
+    if (verificationRecord.expiresAt < new Date()) {
+      await prisma.emailVerification.delete({ where: { email } })
+      return res.status(400).json({
+        success: false,
+        message: 'Verification code has expired. Please sign up again.',
+      })
+    }
+
+    // OTP is valid → Create User
     const user = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
-          name,
-          email,
-          passwordHash: hashedPassword,
-          role: role.toUpperCase() as 'CLIENT' | 'FREELANCER',
+          name: verificationRecord.name,
+          email: verificationRecord.email,
+          passwordHash: verificationRecord.passwordHash,
+          role: verificationRecord.role,
+          isEmailVerified: true,
         },
       })
 
-      if (role === 'client') {
+      if (verificationRecord.role === 'CLIENT') {
         await tx.clientProfile.create({
-          data: { userId: newUser.id, fullName: name },
+          data: { userId: newUser.id, fullName: verificationRecord.name },
         })
       } else {
-        await tx.freelancerProfile.create({
-          data: { userId: newUser.id, fullName: name, languages: [] },
+        const freelancerProfile = await tx.freelancerProfile.create({
+          data: { userId: newUser.id, fullName: verificationRecord.name, languages: [], skillTokenBalance: 30 },
+        })
+        // Grant initial 30 SkillTokens
+        await tx.tokenTransaction.create({
+          data: {
+            freelancerProfileId: freelancerProfile.id,
+            type: 'CREDIT',
+            reason: 'REGISTRATION_BONUS',
+            amount: 30,
+            balanceAfter: 30,
+            description: 'Welcome bonus! 30 SkillTokens granted on registration.',
+          }
         })
       }
+
+      // Cleanup
+      await tx.emailVerification.delete({ where: { email } })
 
       return newUser
     })
@@ -102,7 +192,7 @@ export const signup = async (req: Request, res: Response) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Account created successfully!',
+      message: 'Account created and email verified successfully!',
       data: {
         accessToken,
         user: {
@@ -117,7 +207,7 @@ export const signup = async (req: Request, res: Response) => {
     })
 
   } catch (error) {
-    console.error('Signup error:', error)
+    console.error('Verify OTP error:', error)
     return res.status(500).json({
       success: false,
       message: 'Internal server error. Please try again.',
@@ -489,8 +579,19 @@ export const completeGoogleSignup = async (req: Request, res: Response) => {
           data: { userId: updatedUser.id, fullName: updatedUser.name },
         })
       } else {
-        await tx.freelancerProfile.create({
-          data: { userId: updatedUser.id, fullName: updatedUser.name, languages: [] },
+        const freelancerProfile = await tx.freelancerProfile.create({
+          data: { userId: updatedUser.id, fullName: updatedUser.name, languages: [], skillTokenBalance: 30 },
+        })
+        // Grant initial 30 SkillTokens
+        await tx.tokenTransaction.create({
+          data: {
+            freelancerProfileId: freelancerProfile.id,
+            type: 'CREDIT',
+            reason: 'REGISTRATION_BONUS',
+            amount: 30,
+            balanceAfter: 30,
+            description: 'Welcome bonus! 30 SkillTokens granted on registration.',
+          }
         })
       }
 

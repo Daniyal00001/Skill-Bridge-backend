@@ -36,9 +36,23 @@ enum ProjectSize {
 
 enum ProposalStatus {
   PENDING
+  SHORTLISTED
   ACCEPTED
   REJECTED
   WITHDRAWN
+}
+
+enum TokenWalletTxType {
+  CREDIT
+  DEBIT
+}
+
+enum TokenTxReason {
+  REGISTRATION_BONUS
+  PROPOSAL_SUBMITTED
+  PROPOSAL_WITHDRAWN
+  ADMIN_GRANT
+  ADMIN_DEDUCT
 }
 
 enum ContractStatus {
@@ -88,6 +102,7 @@ enum NotificationType {
   PROPOSAL_RECEIVED
   PROPOSAL_ACCEPTED
   PROPOSAL_REJECTED
+  PROPOSAL_SHORTLISTED
   PROJECT_STARTED
   MILESTONE_SUBMITTED
   MILESTONE_APPROVED
@@ -98,6 +113,8 @@ enum NotificationType {
   DISPUTE_RESOLVED
   SYSTEM_ALERT
   INVITATION_RECEIVED
+  TOKEN_CREDITED
+  TOKEN_DEDUCTED
 }
 
 enum InvitationStatus {
@@ -137,6 +154,7 @@ model User {
   isPaymentVerified Boolean   @default(false)
   isIdVerified      Boolean   @default(false)
   idDocumentUrl     String?
+  phoneNumber       String?
   isBanned          Boolean   @default(false)
   banReason         String?
   profileImage      String?
@@ -211,6 +229,11 @@ model ClientProfile {
   invitations Invitation[]
   chatRooms   ChatRoom[]
 
+  // ── Browse System additions ──
+  averageRating Float?
+  totalHires    Int    @default(0)
+  hireRate      Float?
+
   @@map("client_profiles")
 }
 
@@ -225,14 +248,15 @@ model FreelancerProfile {
   bio                     String?
   tagline                 String?
   location                String?
-  preferredClientLocation String?
+  region                  String?
   timezone                String?
   hourlyRate              Float?
   experienceLevel         ExperienceLevel    @default(ENTRY)
   availability            AvailabilityStatus @default(AVAILABLE)
   responseTime            String? // e.g. "within 2 hours"
-  languages               String[]
+  languages               Json?
   profileCompletion       Int                @default(0)
+  skillTokenBalance       Int                @default(0) // SkillTokens economy
   createdAt               DateTime?          @default(now())
   updatedAt               DateTime?          @updatedAt
 
@@ -242,14 +266,26 @@ model FreelancerProfile {
   portfolio String?
   website   String?
 
-  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills         FreelancerSkill[]
-  portfolioItems PortfolioItem[]
-  proposals      Proposal[]
-  certificates   Certificate[]
-  educations     Education[]
-  invitations    Invitation[]
-  chatRooms      ChatRoom[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills            FreelancerSkill[]
+  portfolioItems    PortfolioItem[]
+  proposals         Proposal[]
+  certificates      Certificate[]
+  educations        Education[]
+  invitations       Invitation[]
+  chatRooms         ChatRoom[]
+  tokenTransactions TokenTransaction[]
+  gigs              Gig[]
+
+  // ── Browse System additions ──
+  lastLoginAt            DateTime?
+  disputeRatio           Float               @default(0)
+  profileCompletionScore Int                 @default(0)
+  preferredBudgetMin     Float?
+  preferredBudgetMax     Float?
+  preferredCategories    String[] // category slugs manually selected by freelancer
+  savedProjects          SavedProject[]
+  browseInteractions     BrowseInteraction[]
 
   @@map("freelancer_profiles")
 }
@@ -326,15 +362,32 @@ model Certificate {
 // ============================================================
 
 model Education {
-  id                  String             @id @default(auto()) @map("_id") @db.ObjectId
-  freelancerProfileId String             @db.ObjectId
+  id                  String  @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String  @db.ObjectId
   school              String
   degree              String
   year                String?
 
-  freelancerProfile   FreelancerProfile  @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
 
   @@map("education")
+}
+
+// ============================================================
+// GIGS (Freelancer pre-packaged services)
+// ============================================================
+
+model Gig {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String            @db.ObjectId
+  title               String
+  description         String?
+  fileUrl             String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  freelancerProfile   FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("gigs")
 }
 
 // ============================================================
@@ -379,6 +432,10 @@ model Project {
   hiringMethod    String        @default("bidding")
   language        String        @default("English")
   locationPref    String        @default("Any location")
+  languageId      String?       @db.ObjectId
+  locationId      String?       @db.ObjectId
+  languageObj     Language?     @relation(fields: [languageId], references: [id])
+  locationObj     Location?     @relation(fields: [locationId], references: [id])
   proposalCount   Int           @default(0)
   viewCount       Int           @default(0)
   isAiScoped      Boolean       @default(false)
@@ -395,6 +452,9 @@ model Project {
   invitations   Invitation[]
   chatRooms     ChatRoom[]
   dispute       Dispute?
+
+  // ── Browse System addition ──
+  savedBy SavedProject[]
 
   @@map("projects")
 }
@@ -466,9 +526,11 @@ model Proposal {
   id                  String         @id @default(auto()) @map("_id") @db.ObjectId
   projectId           String         @db.ObjectId
   freelancerProfileId String         @db.ObjectId
-  proposedPrice       Float
+  proposedPrice       Float // bid amount
   deliveryTime        Int // in days
   coverLetter         String
+  attachments         String[] // optional file URLs
+  tokenCost           Int            @default(0) // SkillTokens spent on this proposal
   status              ProposalStatus @default(PENDING)
   submittedAt         DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
@@ -478,6 +540,26 @@ model Proposal {
 
   @@unique([projectId, freelancerProfileId]) // one proposal per freelancer per project
   @@map("proposals")
+}
+
+// ============================================================
+// TOKEN TRANSACTION (SkillToken economy ledger)
+// ============================================================
+
+model TokenTransaction {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String            @db.ObjectId
+  type                TokenWalletTxType
+  reason              TokenTxReason
+  amount              Int // always positive; type determines direction
+  balanceAfter        Int // snapshot of balance after transaction
+  description         String? // human-readable note
+  relatedProposalId   String?           @db.ObjectId // linked proposal if applicable
+  createdAt           DateTime          @default(now())
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("token_transactions")
 }
 
 // ============================================================
@@ -738,4 +820,76 @@ model AIMessage {
   session   AISession @relation(fields: [sessionId], references: [id])
   sessionId String   @db.ObjectId
   createdAt DateTime @default(now())
+}
+
+model EmailVerification {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  email        String   @unique
+  otp          String
+  name         String
+  passwordHash String
+  role         Role
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@map("email_verifications")
+}
+
+model Language {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String    @unique
+  code      String?   @unique // e.g., "en", "es"
+  createdAt DateTime  @default(now())
+  projects  Project[]
+
+  @@map("languages")
+}
+
+model Location {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  name      String    @unique
+  region    String? // e.g., "Asia", "Europe"
+  phoneCode String? // e.g., "+92"
+  createdAt DateTime  @default(now())
+  projects  Project[]
+
+  @@map("locations")
+}
+
+enum InteractionType {
+  VIEW
+  SAVE
+  UNSAVE
+  APPLY
+  CATEGORY_CLICK
+  QUICK_APPLY
+}
+
+model SavedProject {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String   @db.ObjectId
+  projectId           String   @db.ObjectId
+  savedAt             DateTime @default(now())
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([freelancerProfileId, projectId])
+  @@map("saved_projects")
+}
+
+model BrowseInteraction {
+  id                  String          @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String          @db.ObjectId
+  projectId           String?         @db.ObjectId
+  categorySlug        String?
+  type                InteractionType
+  metadata            Json?
+  createdAt            DateTime        @default(now())
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([freelancerProfileId, type, createdAt])
+  @@map("browse_interactions")
+
 }

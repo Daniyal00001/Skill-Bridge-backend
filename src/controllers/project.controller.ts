@@ -39,6 +39,8 @@ export const createProject = async (req: Request, res: Response) => {
       hiringMethod,
       language,
       locationPref,
+      languageId,
+      locationId,
       status = 'OPEN'
     } = req.body
 
@@ -80,6 +82,8 @@ if (req.files && Array.isArray(req.files)) {
         hiringMethod,
         language,
         locationPref,
+        languageId,
+        locationId,
         status,
       }
     })
@@ -175,7 +179,8 @@ export const updateProject = async (req: Request, res: Response) => {
       title, shortDesc, description, requirements,
       referenceLinks, categoryId, subCategoryId, budget,
       budgetType, projectSize, deadline, skills,
-      experienceLevel, hiringMethod, language, locationPref, status
+      experienceLevel, hiringMethod, language, locationPref, 
+      languageId, locationId, status
     } = req.body
 
     const sizeMap: Record<string, 'SMALL' | 'MEDIUM' | 'LARGE'> = {
@@ -208,6 +213,8 @@ export const updateProject = async (req: Request, res: Response) => {
         ...(hiringMethod && { hiringMethod }),
         ...(language && { language }),
         ...(locationPref && { locationPref }),
+        ...(languageId && { languageId }),
+        ...(locationId && { locationId }),
         ...(status && { status }),
         ...(newAttachments.length > 0 && { attachments: [...(existing.attachments || []), ...newAttachments] }),
       }
@@ -321,6 +328,8 @@ export const getAllProjects = async (req: Request, res: Response) => {
             select: { fullName: true, company: true }
           },
           category: true,
+          languageObj: true,
+          locationObj: true,
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -403,7 +412,9 @@ export const getProjectById = async (req: Request, res: Response) => {
         },
         proposals: { select: { id: true } },
         category: true,
-        subCategory: true
+        subCategory: true,
+        languageObj: true,
+        locationObj: true
       }
     })
 

@@ -13,7 +13,8 @@ import {
   updateOnboardingStep2,
   updateOnboardingStep3,
   updateOnboardingStep5,
-  uploadOnboardingFiles
+  uploadOnboardingFiles,
+  updateFreelancerProfile
 } from '../controllers/freelancer-onboarding.controller'
 import { upload } from '../middlewares/upload.middleware'
 
@@ -69,6 +70,18 @@ router.post('/onboarding/step-5', protect, updateOnboardingStep5)
  * @desc    Upload ID and Profile Picture
  * @access  Private
  */
-router.post('/onboarding/upload', protect, upload.fields([{ name: 'idDocument', maxCount: 1 }, { name: 'profileImage', maxCount: 1 }]), uploadOnboardingFiles)
+router.post('/onboarding/upload', protect, upload.fields([
+  { name: 'idDocument', maxCount: 1 }, 
+  { name: 'profileImage', maxCount: 1 },
+  { name: 'certFiles', maxCount: 4 },
+  { name: 'gigFiles', maxCount: 4 }
+]), uploadOnboardingFiles)
+
+/**
+ * @route   PATCH /api/freelancers/profile
+ * @desc    Edit existing freelancer profile (partial updates)
+ * @access  Private
+ */
+router.patch('/profile', protect, updateFreelancerProfile)
 
 export default router
