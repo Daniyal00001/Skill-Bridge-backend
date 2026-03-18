@@ -14,7 +14,7 @@ import { BrowseFilters, SortOption } from "./browse.types";
 
 export const browseProjects = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     // ── Auth: freelancer ID from JWT middleware ─────────────────
@@ -27,9 +27,17 @@ export const browseProjects = async (
     // ── Parse filters from query string ────────────────────────
     const expLevelArr = ["ENTRY", "MID", "SENIOR", "EXPERT"];
     const sizeArr = ["SMALL", "MEDIUM", "LARGE"];
-    const sortArr = ["best_match", "newest", "lowest_proposals", "highest_budget", "deadline_soon"];
+    const sortArr = [
+      "best_match",
+      "newest",
+      "lowest_proposals",
+      "highest_budget",
+      "deadline_soon",
+    ];
 
-    const experienceLevel = expLevelArr.includes((req.query.experienceLevel as string)?.toUpperCase())
+    const experienceLevel = expLevelArr.includes(
+      (req.query.experienceLevel as string)?.toUpperCase(),
+    )
       ? (req.query.experienceLevel as any).toUpperCase()
       : undefined;
 
@@ -41,19 +49,14 @@ export const browseProjects = async (
       ? (req.query.sort as SortOption)
       : "best_match";
 
-
     const filters: BrowseFilters = {
       search: req.query.search as string | undefined,
       categorySlug: req.query.category as string | undefined,
       skills: req.query.skills
         ? (req.query.skills as string).split(",")
         : undefined,
-      budgetMin: req.query.budgetMin
-        ? Number(req.query.budgetMin)
-        : undefined,
-      budgetMax: req.query.budgetMax
-        ? Number(req.query.budgetMax)
-        : undefined,
+      budgetMin: req.query.budgetMin ? Number(req.query.budgetMin) : undefined,
+      budgetMax: req.query.budgetMax ? Number(req.query.budgetMax) : undefined,
       experienceLevel,
       size,
       clientVerified: req.query.clientVerified === "true" ? true : undefined,
@@ -73,7 +76,7 @@ export const browseProjects = async (
       freelancerId,
       filters,
       sort,
-      cursor
+      cursor,
     );
 
     res.json(result);

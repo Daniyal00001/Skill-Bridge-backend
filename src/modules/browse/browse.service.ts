@@ -41,7 +41,7 @@ export async function getBrowseFeed(
   freelancerId: string,
   filters: BrowseFilters,
   sort: SortOption,
-  cursor?: string // for cursor-based pagination
+  cursor?: string, // for cursor-based pagination
 ): Promise<BrowseResponse> {
   // ── 1. Build cache key ─────────────────────────────────────────
   // Key includes freelancer + filters so each freelancer gets personalized cache.
@@ -102,7 +102,7 @@ export async function getBrowseFeed(
 async function fetchEligibleProjects(
   prisma: PrismaClient,
   freelancer: FreelancerSnapshot,
-  filters: BrowseFilters
+  filters: BrowseFilters,
 ): Promise<RawProject[]> {
   const now = new Date();
 
@@ -156,11 +156,8 @@ async function fetchEligibleProjects(
   if (filters.clientVerified) {
     where.clientProfile = {
       user: {
-        OR: [
-          { isPaymentVerified: true },
-          { isIdVerified: true }
-        ]
-      }
+        OR: [{ isPaymentVerified: true }, { isIdVerified: true }],
+      },
     };
   }
 
@@ -226,7 +223,6 @@ async function fetchEligibleProjects(
   }));
 
   return projects;
-
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -236,7 +232,7 @@ async function fetchEligibleProjects(
 // ─────────────────────────────────────────────────────────────────
 async function getFreelancerSnapshot(
   prisma: PrismaClient,
-  freelancerId: string
+  freelancerId: string,
 ): Promise<FreelancerSnapshot | null> {
   // Bug #6 fix: include savedProjects so savedIds work
   // Bug #5 fix: contracts are on Contract model (no direct relation on FreelancerProfile)
@@ -267,8 +263,6 @@ async function getFreelancerSnapshot(
   // Cast to any so TypeScript doesn't complain about Prisma-included relations
   const f = freelancer as any;
 
-
-
   const completedContractsRows = await prisma.contract.findMany({
     where: { freelancerProfileId: f.id, status: "COMPLETED" },
     select: { id: true },
@@ -280,9 +274,10 @@ async function getFreelancerSnapshot(
     where: { receiverId: freelancer.userId, isRevealed: true },
     select: { rating: true },
   });
-  const averageRating = reviews.length > 0
-    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-    : undefined;
+  const averageRating =
+    reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : undefined;
 
   // Build preferred categories from interaction history
   const categoryClicks: Record<string, number> = {};
@@ -298,8 +293,8 @@ async function getFreelancerSnapshot(
     .map(([slug]) => slug);
 
   const appliedIds = ((f.proposals ?? []) as any[]).map((p) => p.projectId);
-  const savedIds   = ((f.savedProjects ?? []) as any[]).map((p) => p.projectId);
-  const viewedIds  = ((f.browseInteractions ?? []) as any[])
+  const savedIds = ((f.savedProjects ?? []) as any[]).map((p) => p.projectId);
+  const viewedIds = ((f.browseInteractions ?? []) as any[])
     .filter((i) => i.type === "VIEW")
     .map((i) => i.projectId);
 
@@ -313,7 +308,7 @@ async function getFreelancerSnapshot(
     averageRating,
     disputeRatio: f.disputeRatio ?? 0,
     lastLoginAt: f.lastLoginAt ?? new Date(),
-    recentProposalCount: (f.proposals?.length ?? 0),
+    recentProposalCount: f.proposals?.length ?? 0,
     preferredCategories,
     preferredBudgetMin: f.preferredBudgetMin ?? undefined,
     preferredBudgetMax: f.preferredBudgetMax ?? undefined,
@@ -323,13 +318,12 @@ async function getFreelancerSnapshot(
   };
 }
 
-
 // ─────────────────────────────────────────────────────────────────
 // SORT
 // ─────────────────────────────────────────────────────────────────
 function applySorting(
   projects: ScoredProject[],
-  sort: SortOption
+  sort: SortOption,
 ): ScoredProject[] {
   switch (sort) {
     case "best_match":
@@ -337,7 +331,7 @@ function applySorting(
     case "newest":
       return [...projects].sort(
         (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
     case "lowest_proposals":
       return [...projects].sort((a, b) => a.proposalCount - b.proposalCount);
@@ -346,7 +340,7 @@ function applySorting(
     case "deadline_soon":
       return [...projects].sort(
         (a, b) =>
-          new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
+          new Date(a.deadline).getTime() - new Date(b.deadline).getTime(),
       );
     default:
       return projects;
@@ -362,7 +356,7 @@ function applySorting(
 // ─────────────────────────────────────────────────────────────────
 function injectExploration(
   sortedProjects: ScoredProject[],
-  allRaw: RawProject[]
+  allRaw: RawProject[],
 ): ScoredProject[] {
   const result = [...sortedProjects];
   const totalSlots = result.length;
@@ -394,7 +388,7 @@ function injectExploration(
 // ─────────────────────────────────────────────────────────────────
 function buildSections(
   projects: ScoredProject[],
-  freelancer: FreelancerSnapshot
+  freelancer: FreelancerSnapshot,
 ) {
   const SECTION_SIZE = 6;
   const now = Date.now();
@@ -402,9 +396,7 @@ function buildSections(
 
   return {
     // Top-scored personalized projects
-    recommended: projects
-      .filter((p) => p.score >= 60)
-      .slice(0, SECTION_SIZE),
+    recommended: projects.filter((p) => p.score >= 60).slice(0, SECTION_SIZE),
 
     // Posted in last 6 hours
     newProjects: projects
@@ -424,9 +416,7 @@ function buildSections(
 
     // Same category as freelancer's saved/viewed projects
     similarToSaved: projects
-      .filter((p) =>
-        freelancer.preferredCategories.includes(p.category?.slug)
-      )
+      .filter((p) => freelancer.preferredCategories.includes(p.category?.slug))
       .slice(0, SECTION_SIZE),
   };
 }
@@ -439,7 +429,7 @@ function buildSections(
 // ─────────────────────────────────────────────────────────────────
 function paginateResponse(
   response: BrowseResponse,
-  cursor?: string
+  cursor?: string,
 ): BrowseResponse {
   const allProjects = response.projects;
 
@@ -466,7 +456,7 @@ function paginateResponse(
 function buildCacheKey(
   freelancerId: string,
   filters: BrowseFilters,
-  sort: SortOption
+  sort: SortOption,
 ): string {
   const filterHash = JSON.stringify(filters);
   return `browse:v1:${freelancerId}:${sort}:${Buffer.from(filterHash).toString("base64").slice(0, 20)}`;

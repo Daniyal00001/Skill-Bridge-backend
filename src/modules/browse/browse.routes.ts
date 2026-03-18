@@ -14,29 +14,11 @@ import { requireRole } from "../../middlewares/role"; // your existing role midd
 
 const browseRouter = Router();
 
-/**
- * GET /api/browse/projects
- *
- * Query params:
- *   sort          = best_match | newest | lowest_proposals | highest_budget | deadline_soon
- *   cursor        = project ID for pagination
- *   search        = string
- *   category      = category slug
- *   skills        = comma-separated skill names
- *   budgetMin     = number
- *   budgetMax     = number
- *   experienceLevel = ENTRY | MID | SENIOR | EXPERT
- *   size          = SMALL | MEDIUM | LARGE
- *   clientVerified = true | false
- *   isAiScoped    = true | false
- *   proposalCountMax = number
- *   location      = string
- */
 browseRouter.get(
   "/projects",
   requireAuth,
   requireRole("FREELANCER"),
-  browseProjects
+  browseProjects,
 );
 
 export default browseRouter;

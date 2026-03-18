@@ -1,9 +1,6 @@
 /**
  * browse.cache.ts
- * ─────────────────────────────────────────────────────────────────
- * WHY SEPARATE FILE: Cache logic is infrastructure concern.
- * Keeping it separate means we can swap Redis for Memcached or even
- * in-memory Map() for local dev without touching browse.service.ts
+
  *
  * TTL = 60 seconds by default.
  * WHY 60s: At ~100 freelancers, cache provides ~100x DB call reduction.
@@ -16,7 +13,7 @@ import redis from "../../config/redis";
 import { BrowseResponse } from "./browse.types";
 
 export async function getCachedFeed(
-  key: string
+  key: string,
 ): Promise<BrowseResponse | null> {
   try {
     const raw = await redis.get(key);
@@ -32,7 +29,7 @@ export async function getCachedFeed(
 export async function setCachedFeed(
   key: string,
   response: BrowseResponse,
-  ttlSeconds: number
+  ttlSeconds: number,
 ): Promise<void> {
   try {
     await redis.setEx(key, ttlSeconds, JSON.stringify(response));
@@ -51,7 +48,7 @@ export async function setCachedFeed(
 // and wants freelancers to see it NOW — 60s delay matters here.
 // ─────────────────────────────────────────────────────────────────
 export async function invalidateBrowseCache(
-  freelancerId?: string
+  freelancerId?: string,
 ): Promise<void> {
   try {
     const pattern = freelancerId
@@ -60,7 +57,10 @@ export async function invalidateBrowseCache(
 
     // SCAN is non-blocking unlike KEYS — safe for production
     const keys: string[] = [];
-    for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    for await (const key of redis.scanIterator({
+      MATCH: pattern,
+      COUNT: 100,
+    })) {
       keys.push(key);
     }
 
