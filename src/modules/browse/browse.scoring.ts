@@ -277,10 +277,8 @@ export function scoreProject(
   logKV("deadline", project.deadline);
   logKV("createdAt", project.createdAt);
   logKV("proposalCount", project.proposalCount);
-  logKV("maxProposals", project.maxProposals ?? "—");
   logKV("experienceLevel", project.experienceLevel);
   logKV("size", project.size);
-  logKV("isAiScoped", project.isAiScoped ?? false);
   logKV("category", project.category);
   logKV(
     "skills",

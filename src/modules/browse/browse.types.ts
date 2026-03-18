@@ -18,11 +18,9 @@ export interface RawProject {
   deadline: Date;
   createdAt: Date;
   proposalCount: number;
-  maxProposals?: number;
   experienceLevel: "ENTRY" | "MID" | "SENIOR" | "EXPERT";
   size: "SMALL" | "MEDIUM" | "LARGE";
   locationPref?: string;
-  isAiScoped?: boolean;
 
   category: { id: string; name: string; slug: string };
   skills: Array<{ skill: { id: string; name: string } }>;
@@ -86,7 +84,6 @@ export interface BrowseFilters {
   experienceLevel?: "ENTRY" | "MID" | "SENIOR" | "EXPERT";
   size?: "SMALL" | "MEDIUM" | "LARGE";
   clientVerified?: boolean;
-  isAiScoped?: boolean;
   proposalCountMax?: number;
   locationPref?: string;
 }

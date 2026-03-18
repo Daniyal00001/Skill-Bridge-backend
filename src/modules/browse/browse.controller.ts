@@ -60,7 +60,6 @@ export const browseProjects = async (
       experienceLevel,
       size,
       clientVerified: req.query.clientVerified === "true" ? true : undefined,
-      isAiScoped: req.query.isAiScoped === "true" ? true : undefined,
       proposalCountMax: req.query.proposalCountMax
         ? Number(req.query.proposalCountMax)
         : undefined,

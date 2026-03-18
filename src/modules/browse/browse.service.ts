@@ -161,10 +161,6 @@ async function fetchEligibleProjects(
     };
   }
 
-  if (filters.isAiScoped) {
-    where.isAiScoped = true;
-  }
-
   if (filters.locationPref) {
     where.locationPref = filters.locationPref;
   }
