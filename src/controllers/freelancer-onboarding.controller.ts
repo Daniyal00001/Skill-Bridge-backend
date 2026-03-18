@@ -379,7 +379,11 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 export const updateOnboardingStep5 = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
-    const { github, linkedin, portfolio, website } = req.body;
+    const { github, linkedin, portfolio, website, preferredCategories } = req.body;
+
+    if (preferredCategories && Array.isArray(preferredCategories) && preferredCategories.length > 4) {
+      return res.status(400).json({ success: false, message: "You can select a maximum of 4 preferred categories." });
+    }
 
     const profile = await prisma.freelancerProfile.update({
       where: { userId },
@@ -388,6 +392,7 @@ export const updateOnboardingStep5 = async (req: Request, res: Response) => {
         linkedin,
         portfolio,
         website,
+        preferredCategories,
       },
     });
 
@@ -427,6 +432,7 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       linkedin,
       portfolio,
       website,
+      preferredCategories,
       skills,
       education,
       certifications,
@@ -434,7 +440,12 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       gigs,
       idDocumentUrl,
       profileImage,
+      region,
     } = req.body;
+
+    if (preferredCategories && Array.isArray(preferredCategories) && preferredCategories.length > 4) {
+      return res.status(400).json({ success: false, message: "You can select a maximum of 4 preferred categories." });
+    }
 
     const profile = await prisma.freelancerProfile.findUnique({
       where: { userId },
@@ -484,6 +495,8 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
     if (portfolio !== undefined) profileUpdateData.portfolio = portfolio;
     if (website !== undefined) profileUpdateData.website = website;
     if (languages !== undefined) profileUpdateData.languages = languages;
+    if (preferredCategories !== undefined)
+      profileUpdateData.preferredCategories = preferredCategories;
     if (firstName !== undefined && lastName !== undefined) {
       profileUpdateData.fullName = `${firstName} ${lastName}`.trim();
     }

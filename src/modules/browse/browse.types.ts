@@ -72,6 +72,7 @@ export interface ScoredProject extends RawProject {
   };
   matchPercentage: number; // shown on UI card
   isExploration: boolean; // true = injected low-visibility project
+  isSaved?: boolean; // whether current freelancer has saved this
 }
 
 // ── Filter options accepted from frontend ─────────────────────────
@@ -128,3 +129,11 @@ export const SCORING_WEIGHTS = {
 export const EXPLORATION_RATIO = 0.1; // 10% of feed = random/low-visibility
 export const NEW_PROJECT_BOOST_HOURS = 6; // boost projects < 6 hours old
 export const CACHE_TTL_SECONDS = 60;
+
+export type InteractionType =
+  | "VIEW"
+  | "SAVE"
+  | "UNSAVE"
+  | "APPLY"
+  | "CATEGORY_CLICK"
+  | "QUICK_APPLY";

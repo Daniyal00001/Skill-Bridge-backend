@@ -8,17 +8,45 @@
  */
 
 import { Router } from "express";
-import { browseProjects } from "./browse.controller";
-import { requireAuth } from "../../middlewares/auth"; // your existing auth middleware
-import { requireRole } from "../../middlewares/role"; // your existing role middleware
+import { 
+  browseProjects, 
+  toggleSaveProject, 
+  getSavedProjects, 
+  recordProjectView 
+} from "./browse.controller";
+import { protect, requireRole } from "../../middlewares/auth.middleware"; 
 
 const browseRouter = Router();
 
+// Feed
 browseRouter.get(
   "/projects",
-  requireAuth,
+  protect,
   requireRole("FREELANCER"),
   browseProjects,
+);
+
+// Saved Projects
+browseRouter.get(
+  "/projects/saved",
+  protect,
+  requireRole("FREELANCER"),
+  getSavedProjects
+);
+
+browseRouter.post(
+  "/projects/:projectId/save",
+  protect,
+  requireRole("FREELANCER"),
+  toggleSaveProject
+);
+
+// View Tracking
+browseRouter.post(
+  "/projects/:projectId/view",
+  protect,
+  requireRole("FREELANCER"),
+  recordProjectView
 );
 
 export default browseRouter;

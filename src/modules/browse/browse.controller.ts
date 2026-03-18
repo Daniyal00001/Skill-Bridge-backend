@@ -9,8 +9,13 @@
 
 import { Request, Response } from "express";
 import { prisma } from "../../config/prisma"; // your existing Prisma instance
-import { getBrowseFeed } from "./browse.service";
-import { BrowseFilters, SortOption } from "./browse.types";
+import { 
+  getBrowseFeed, 
+  toggleSaveProject as toggleSaveService,
+  getSavedProjects as getSavedService,
+  recordProjectInteraction
+} from "./browse.service";
+import { BrowseFilters, SortOption, InteractionType } from "./browse.types";
 
 export const browseProjects = async (
   req: Request,
@@ -82,5 +87,51 @@ export const browseProjects = async (
   } catch (err) {
     console.error("[BrowseController] Error:", err);
     res.status(500).json({ message: "Failed to fetch projects" });
+  }
+};
+
+// ── Toggle Save Project ──────────────────────────────────────
+export const toggleSaveProject = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { projectId } = req.params;
+
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const result = await toggleSaveService(prisma, userId, projectId);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    console.error("[BrowseController] ToggleSave Error:", error);
+    return res.status(500).json({ message: error.message || "Internal server error" });
+  }
+};
+
+// ── Get Saved Projects ──────────────────────────────────────
+export const getSavedProjects = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const projects = await getSavedService(prisma, userId);
+    return res.status(200).json(projects);
+  } catch (error: any) {
+    console.error("[BrowseController] GetSaved Error:", error);
+    return res.status(500).json({ message: error.message || "Internal server error" });
+  }
+};
+
+// ── Record Project View ─────────────────────────────────────
+export const recordProjectView = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { projectId } = req.params;
+
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    await recordProjectInteraction(prisma, userId, projectId, "VIEW");
+    return res.status(200).json({ success: true });
+  } catch (error: any) {
+    console.error("[BrowseController] RecordView Error:", error);
+    return res.status(500).json({ message: error.message || "Internal server error" });
   }
 };

@@ -284,6 +284,7 @@ model FreelancerProfile {
   profileCompletionScore Int                 @default(0)
   preferredBudgetMin     Float?
   preferredBudgetMax     Float?
+  preferredCategories    String[] // category slugs manually selected by freelancer
   savedProjects          SavedProject[]
   browseInteractions     BrowseInteraction[]
 

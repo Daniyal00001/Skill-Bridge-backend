@@ -23,6 +23,7 @@ import {
   SortOption,
   EXPLORATION_RATIO,
   CACHE_TTL_SECONDS,
+  InteractionType,
 } from "./browse.types";
 import { scoreProject } from "./browse.scoring";
 import { getCachedFeed, setCachedFeed } from "./browse.cache";
@@ -249,7 +250,7 @@ async function getFreelancerSnapshot(
       browseInteractions: {
         orderBy: { createdAt: "desc" },
         take: 100,
-        select: { projectId: true, type: true, categorySlug: true },
+        select: { projectId: true, type: true, categorySlug: true, createdAt: true },
       },
     },
   });
@@ -305,12 +306,25 @@ async function getFreelancerSnapshot(
     disputeRatio: f.disputeRatio ?? 0,
     lastLoginAt: f.lastLoginAt ?? new Date(),
     recentProposalCount: f.proposals?.length ?? 0,
-    preferredCategories,
+    preferredCategories: [
+      ...(f.preferredCategories || []), // Manual preferences from DB
+      ...Object.entries(categoryClicks)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([slug]) => slug),
+    ],
     preferredBudgetMin: f.preferredBudgetMin ?? undefined,
     preferredBudgetMax: f.preferredBudgetMax ?? undefined,
     appliedProjectIds: appliedIds,
     savedProjectIds: savedIds,
-    viewedProjectIds: viewedIds,
+    viewedProjectIds: ((f.browseInteractions ?? []) as any[])
+      .filter((i) => {
+        const isView = i.type === "VIEW";
+        const isRecent =
+          new Date(i.createdAt).getTime() >= Date.now() - 7 * 86_400_000;
+        return isView && isRecent;
+      })
+      .map((i) => i.projectId),
   };
 }
 
@@ -456,4 +470,98 @@ function buildCacheKey(
 ): string {
   const filterHash = JSON.stringify(filters);
   return `browse:v1:${freelancerId}:${sort}:${Buffer.from(filterHash).toString("base64").slice(0, 20)}`;
+}
+
+// ── 11. Toggle Save Project ──────────────────────────────────
+export async function toggleSaveProject(
+  prisma: PrismaClient,
+  freelancerId: string,
+  projectId: string,
+) {
+  const freelancer = await prisma.freelancerProfile.findUnique({
+    where: { userId: freelancerId },
+    select: { id: true },
+  });
+  if (!freelancer) throw new Error("Freelancer not found");
+
+  const existing = await prisma.savedProject.findUnique({
+    where: {
+      freelancerProfileId_projectId: {
+        freelancerProfileId: freelancer.id,
+        projectId,
+      },
+    },
+  });
+
+  if (existing) {
+    await prisma.savedProject.delete({ where: { id: existing.id } });
+    return { saved: false };
+  } else {
+    await prisma.savedProject.create({
+      data: { freelancerProfileId: freelancer.id, projectId },
+    });
+    return { saved: true };
+  }
+}
+
+// ── 12. Get Saved Projects ──────────────────────────────────
+export async function getSavedProjects(
+  prisma: PrismaClient,
+  freelancerId: string,
+) {
+  const freelancer = await prisma.freelancerProfile.findUnique({
+    where: { userId: freelancerId },
+    select: { id: true },
+  });
+  if (!freelancer) throw new Error("Freelancer not found");
+
+  const saved = await prisma.savedProject.findMany({
+    where: { freelancerProfileId: freelancer.id },
+    include: {
+      project: {
+        include: {
+          category: true,
+          skills: { include: { skill: true } },
+          clientProfile: true,
+        },
+      },
+    },
+    orderBy: { savedAt: "desc" },
+  });
+
+  // Map to RawProject-like shape
+  return saved.map((s) => ({
+    ...s.project,
+    isSaved: true,
+    client: s.project.clientProfile
+      ? {
+          id: s.project.clientProfile.id,
+          fullName: s.project.clientProfile.fullName,
+          isVerified: false,
+        }
+      : { id: "", fullName: "Unknown", isVerified: false },
+  }));
+}
+
+// ── 13. Record Project Interaction ──────────────────────────
+export async function recordProjectInteraction(
+  prisma: PrismaClient,
+  freelancerId: string,
+  projectId: string,
+  type: InteractionType,
+) {
+  const freelancer = await prisma.freelancerProfile.findUnique({
+    where: { userId: freelancerId },
+    select: { id: true },
+  });
+  if (!freelancer) throw new Error("Freelancer not found");
+
+  // Record it
+  return await prisma.browseInteraction.create({
+    data: {
+      freelancerProfileId: freelancer.id,
+      projectId,
+      type: type as any,
+    },
+  });
 }
