@@ -8,25 +8,25 @@ const prisma = new PrismaClient();
 // CATEGORIES (must match your existing seeded categories)
 // ============================================================
 const CATEGORY_SKILLS: Record<string, string[]> = {
-  "web-development":      ["React", "Next.js", "TypeScript", "Node.js", "Vue.js", "Angular", "Tailwind CSS", "PostgreSQL", "MongoDB", "GraphQL", "REST API", "PHP", "Laravel", "Django", "Express.js"],
-  "mobile-development":   ["React Native", "Flutter", "Swift", "Kotlin", "Dart", "Firebase", "Expo", "iOS", "Android", "Redux"],
-  "ui-ux-design":         ["Figma", "Adobe XD", "Sketch", "Prototyping", "Wireframing", "User Research", "Design Systems", "Framer", "Zeplin", "InVision"],
-  "graphic-design":       ["Adobe Illustrator", "Adobe Photoshop", "Canva", "Logo Design", "Brand Identity", "Typography", "InDesign", "Procreate", "CorelDRAW", "After Effects"],
-  "ai-machine-learning":  ["Python", "TensorFlow", "PyTorch", "scikit-learn", "NLP", "Computer Vision", "LangChain", "OpenAI API", "Hugging Face", "MLflow"],
-  "data-science":         ["Python", "R", "SQL", "Tableau", "Power BI", "Pandas", "NumPy", "Apache Spark", "dbt", "Looker"],
-  "devops-cloud":         ["AWS", "Docker", "Kubernetes", "Terraform", "CI/CD", "GitHub Actions", "Azure", "GCP", "Linux", "Nginx"],
-  "cybersecurity":        ["Penetration Testing", "Burp Suite", "Metasploit", "OWASP", "Wireshark", "Nmap", "Network Security", "SIEM", "Kali Linux", "ISO 27001"],
-  "blockchain-web3":      ["Solidity", "Ethereum", "Web3.js", "ethers.js", "Hardhat", "NFT", "DeFi", "Smart Contracts", "IPFS", "Rust"],
-  "game-development":     ["Unity", "Unreal Engine", "C#", "C++", "Blender", "Game Design", "Godot", "3D Modeling", "Multiplayer", "VR/AR"],
+  "web-development": ["React", "Next.js", "TypeScript", "Node.js", "Vue.js", "Angular", "Tailwind CSS", "PostgreSQL", "MongoDB", "GraphQL", "REST API", "PHP", "Laravel", "Django", "Express.js"],
+  "mobile-development": ["React Native", "Flutter", "Swift", "Kotlin", "Dart", "Firebase", "Expo", "iOS", "Android", "Redux"],
+  "ui-ux-design": ["Figma", "Adobe XD", "Sketch", "Prototyping", "Wireframing", "User Research", "Design Systems", "Framer", "Zeplin", "InVision"],
+  "graphic-design": ["Adobe Illustrator", "Adobe Photoshop", "Canva", "Logo Design", "Brand Identity", "Typography", "InDesign", "Procreate", "CorelDRAW", "After Effects"],
+  "ai-machine-learning": ["Python", "TensorFlow", "PyTorch", "scikit-learn", "NLP", "Computer Vision", "LangChain", "OpenAI API", "Hugging Face", "MLflow"],
+  "data-science": ["Python", "R", "SQL", "Tableau", "Power BI", "Pandas", "NumPy", "Apache Spark", "dbt", "Looker"],
+  "devops-cloud": ["AWS", "Docker", "Kubernetes", "Terraform", "CI/CD", "GitHub Actions", "Azure", "GCP", "Linux", "Nginx"],
+  "cybersecurity": ["Penetration Testing", "Burp Suite", "Metasploit", "OWASP", "Wireshark", "Nmap", "Network Security", "SIEM", "Kali Linux", "ISO 27001"],
+  "blockchain-web3": ["Solidity", "Ethereum", "Web3.js", "ethers.js", "Hardhat", "NFT", "DeFi", "Smart Contracts", "IPFS", "Rust"],
+  "game-development": ["Unity", "Unreal Engine", "C#", "C++", "Blender", "Game Design", "Godot", "3D Modeling", "Multiplayer", "VR/AR"],
   "software-development": ["Java", "C#", ".NET", "Python", "Go", "Rust", "Microservices", "gRPC", "RabbitMQ", "Redis"],
-  "embedded-iot":         ["C", "C++", "Arduino", "Raspberry Pi", "MQTT", "Embedded Linux", "RTOS", "PCB Design", "ESP32", "IoT"],
-  "writing-content":      ["SEO Writing", "Copywriting", "Technical Writing", "Ghost Writing", "Proofreading", "Blog Writing", "UX Writing", "Content Strategy", "Research", "Editing"],
-  "digital-marketing":    ["SEO", "Google Ads", "Facebook Ads", "Email Marketing", "HubSpot", "Analytics", "Mailchimp", "Ahrefs", "Social Media", "CRO"],
-  "video-animation":      ["Adobe Premiere Pro", "After Effects", "Final Cut Pro", "DaVinci Resolve", "Motion Graphics", "2D Animation", "3D Animation", "Video Editing", "Color Grading", "VFX"],
-  "audio-music":          ["Pro Tools", "Logic Pro", "Ableton Live", "Sound Design", "Mixing", "Mastering", "Voice Over", "Podcast Editing", "FL Studio", "Audacity"],
-  "3d-ar-vr":             ["Blender", "Cinema 4D", "Maya", "3ds Max", "ZBrush", "Unity AR", "ARKit", "ARCore", "Substance Painter", "KeyShot"],
-  "business-consulting":  ["Business Strategy", "Market Research", "Financial Modeling", "Excel", "PowerPoint", "Project Management", "Agile", "Scrum", "Lean", "Business Plan"],
-  "translation-languages":["English", "Urdu", "Arabic", "French", "Spanish", "German", "Mandarin", "Translation", "Localization", "Subtitling"],
+  "embedded-iot": ["C", "C++", "Arduino", "Raspberry Pi", "MQTT", "Embedded Linux", "RTOS", "PCB Design", "ESP32", "IoT"],
+  "writing-content": ["SEO Writing", "Copywriting", "Technical Writing", "Ghost Writing", "Proofreading", "Blog Writing", "UX Writing", "Content Strategy", "Research", "Editing"],
+  "digital-marketing": ["SEO", "Google Ads", "Facebook Ads", "Email Marketing", "HubSpot", "Analytics", "Mailchimp", "Ahrefs", "Social Media", "CRO"],
+  "video-animation": ["Adobe Premiere Pro", "After Effects", "Final Cut Pro", "DaVinci Resolve", "Motion Graphics", "2D Animation", "3D Animation", "Video Editing", "Color Grading", "VFX"],
+  "audio-music": ["Pro Tools", "Logic Pro", "Ableton Live", "Sound Design", "Mixing", "Mastering", "Voice Over", "Podcast Editing", "FL Studio", "Audacity"],
+  "3d-ar-vr": ["Blender", "Cinema 4D", "Maya", "3ds Max", "ZBrush", "Unity AR", "ARKit", "ARCore", "Substance Painter", "KeyShot"],
+  "business-consulting": ["Business Strategy", "Market Research", "Financial Modeling", "Excel", "PowerPoint", "Project Management", "Agile", "Scrum", "Lean", "Business Plan"],
+  "translation-languages": ["English", "Urdu", "Arabic", "French", "Spanish", "German", "Mandarin", "Translation", "Localization", "Subtitling"],
   "admin-virtual-assistance": ["Virtual Assistance", "Data Entry", "Customer Support", "CRM", "Scheduling", "Research", "Shopify", "WordPress", "Email Management", "Lead Generation"],
 };
 
@@ -1264,7 +1264,7 @@ export async function seedFreelancers() {
           github: freelancer.github ?? null,
           linkedin: freelancer.linkedin ?? null,
           portfolio: freelancer.portfolio ?? null,
-          website: freelancer.website ?? null,
+          website: (freelancer as any).website ?? null,
           profileCompletion: 85,
         },
       });
@@ -1321,13 +1321,11 @@ async function main() {
   await seedFreelancers();
 }
 
-if (require.main === module) {
-  main()
-    .catch((e) => {
-      console.error("❌ Seed failed:", e);
-      process.exit(1);
-    })
-    .finally(async () => {
-      await prisma.$disconnect();
-    });
-}
+main()
+  .catch((e) => {
+    console.error("❌ Seed failed:", e);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
+

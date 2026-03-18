@@ -48,3 +48,10 @@ data/
 .env.development
 .env.production
 /src/generated/prisma
+
+
+.vscode/
+node_modules/
+dist/
+build/
+.env

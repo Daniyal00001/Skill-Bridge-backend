@@ -801,6 +801,28 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+// ============================================================
+// AI SESSION & MESSAGES
+// ============================================================
+
+model AISession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?
+  createdAt DateTime @default(now())
+  messages  AIMessage[]
+
+  @@map("ai_sessions")
+}
+
+model AIMessage {
+  id        String   @id @default(uuid()) @map("_id")
+  role      String
+  content   String
+  session   AISession @relation(fields: [sessionId], references: [id])
+  sessionId String   @db.ObjectId
+  createdAt DateTime @default(now())
+}
+
 model EmailVerification {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   email        String   @unique
@@ -864,10 +886,11 @@ model BrowseInteraction {
   categorySlug        String?
   type                InteractionType
   metadata            Json?
-  createdAt           DateTime        @default(now())
+  createdAt            DateTime        @default(now())
 
   freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
 
   @@index([freelancerProfileId, type, createdAt])
   @@map("browse_interactions")
+
 }
