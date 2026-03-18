@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/prisma";
-import { uploadToCloudinary } from "../utils/uploadToCloudinary";
+import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary";
 import { updateProfileCompletion } from "../utils/profileCompletion";
 import { ExperienceLevel, AvailabilityStatus } from "@prisma/client";
 
@@ -205,7 +205,14 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
 
     // Add Certs
     if (certifications && Array.isArray(certifications)) {
-      // Clear old records first
+      // Clear old records & assets first
+      const oldCerts = await prisma.certificate.findMany({
+        where: { freelancerProfileId: profile.id },
+      });
+      for (const c of oldCerts) {
+        if (c.credentialUrl) await deleteFromCloudinary(c.credentialUrl);
+      }
+      
       await prisma.certificate.deleteMany({
         where: { freelancerProfileId: profile.id },
       });
@@ -234,6 +241,14 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
 
     // Gigs
     if (gigs && Array.isArray(gigs)) {
+      // Clear old records & assets first
+      const oldGigs = await prisma.gig.findMany({
+        where: { freelancerProfileId: profile.id },
+      });
+      for (const g of oldGigs) {
+        if (g.fileUrl) await deleteFromCloudinary(g.fileUrl);
+      }
+
       await prisma.gig.deleteMany({
         where: { freelancerProfileId: profile.id },
       });
@@ -277,7 +292,11 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 
     const profile = await prisma.freelancerProfile.findUnique({
       where: { userId },
-      include: { certificates: true, gigs: true },
+      include: { 
+        certificates: true, 
+        gigs: true,
+        user: { select: { profileImage: true, idDocumentUrl: true } }
+      },
     });
     if (!profile)
       return res.status(404).json({ success: false, message: "Profile not found" });
@@ -308,6 +327,11 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 
     // Upload ID
     if (files["idDocument"] && files["idDocument"][0]) {
+      // Delete old one if exists
+      if (profile.user.idDocumentUrl) {
+        await deleteFromCloudinary(profile.user.idDocumentUrl);
+      }
+      
       const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer);
       await prisma.user.update({
         where: { id: userId },
@@ -318,6 +342,11 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 
     // Profile Pic
     if (files["profileImage"] && files["profileImage"][0]) {
+      // Delete old one if exists
+      if (profile.user.profileImage) {
+        await deleteFromCloudinary(profile.user.profileImage);
+      }
+
       const picUrl = await uploadToCloudinary(files["profileImage"][0].buffer);
       await prisma.user.update({
         where: { id: userId },
@@ -556,6 +585,14 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
 
     // Gigs
     if (gigs && Array.isArray(gigs)) {
+      // Clean up old gigs first
+      const oldGigs = await prisma.gig.findMany({
+        where: { freelancerProfileId: profile.id },
+      });
+      for (const g of oldGigs) {
+        if (g.fileUrl) await deleteFromCloudinary(g.fileUrl);
+      }
+
       await prisma.gig.deleteMany({
         where: { freelancerProfileId: profile.id },
       });

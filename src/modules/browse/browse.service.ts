@@ -26,7 +26,7 @@ import {
   InteractionType,
 } from "./browse.types";
 import { scoreProject } from "./browse.scoring";
-import { getCachedFeed, setCachedFeed } from "./browse.cache";
+import { getCachedFeed, setCachedFeed, invalidateBrowseCache } from "./browse.cache";
 
 // ── How many projects to fetch from DB before ranking ─────────────
 // We fetch MORE than page size so ranking has a good pool to work with.
@@ -66,6 +66,7 @@ export async function getBrowseFeed(
   let scoredProjects: ScoredProject[] = rawProjects.map((project) => ({
     ...project,
     ...scoreProject(project, freelancer),
+    isSaved: freelancer.savedProjectIds.includes(project.id),
   }));
 
   // ── 6. Sort ───────────────────────────────────────────────────
@@ -495,11 +496,13 @@ export async function toggleSaveProject(
 
   if (existing) {
     await prisma.savedProject.delete({ where: { id: existing.id } });
+    await invalidateBrowseCache(freelancerId);
     return { saved: false };
   } else {
     await prisma.savedProject.create({
       data: { freelancerProfileId: freelancer.id, projectId },
     });
+    await invalidateBrowseCache(freelancerId);
     return { saved: true };
   }
 }

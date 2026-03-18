@@ -35,3 +35,29 @@ export const uploadMultipleToCloudinary = async (files: Express.Multer.File[]): 
     throw new Error('File upload failed');
   }
 }
+
+export const deleteFromCloudinary = async (url: string | null | undefined): Promise<void> => {
+  if (!url) return;
+  try {
+    // Extract public_id from URL
+    // Format: .../upload/v12345678/folder/public_id.ext
+    const parts = url.split("/");
+    const fileWithExt = parts.pop();
+    if (!fileWithExt) return;
+    
+    const filePart = fileWithExt.split(".")[0]; // remove extension
+    const folderPart = parts.pop();
+    
+    if (filePart && folderPart && folderPart !== 'upload' && folderPart !== 'image' && folderPart !== 'raw') {
+      const publicId = `${folderPart}/${filePart}`;
+      await cloudinary.uploader.destroy(publicId);
+      console.log(`[Cloudinary] Deleted asset: ${publicId}`);
+    } else if (filePart) {
+      // No folder or folder is 'upload'/'image'
+      await cloudinary.uploader.destroy(filePart);
+      console.log(`[Cloudinary] Deleted asset: ${filePart}`);
+    }
+  } catch (error) {
+    console.warn("[Cloudinary] Delete failed (non-fatal):", error);
+  }
+};
