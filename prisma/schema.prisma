@@ -155,6 +155,7 @@ model User {
   isPaymentVerified Boolean   @default(false)
   isIdVerified      Boolean   @default(false)
   idDocumentUrl     String?
+  phoneNumber       String?
   isBanned          Boolean   @default(false)
   banReason         String?
   profileImage      String?
@@ -248,13 +249,13 @@ model FreelancerProfile {
   bio                     String?
   tagline                 String?
   location                String?
-  preferredClientLocation String?
+  region                  String?
   timezone                String?
   hourlyRate              Float?
   experienceLevel         ExperienceLevel    @default(ENTRY)
   availability            AvailabilityStatus @default(AVAILABLE)
   responseTime            String? // e.g. "within 2 hours"
-  languages               String[]
+  languages               Json?
   profileCompletion       Int                @default(0)
   skillTokenBalance       Int                @default(0) // SkillTokens economy
   createdAt               DateTime?          @default(now())
@@ -275,6 +276,7 @@ model FreelancerProfile {
   invitations       Invitation[]
   chatRooms         ChatRoom[]
   tokenTransactions TokenTransaction[]
+  gigs              Gig[]
 
   // ── Browse System additions ──
   lastLoginAt            DateTime?
@@ -369,6 +371,23 @@ model Education {
   freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
 
   @@map("education")
+}
+
+// ============================================================
+// GIGS (Freelancer pre-packaged services)
+// ============================================================
+
+model Gig {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String            @db.ObjectId
+  title               String
+  description         String?
+  fileUrl             String
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  freelancerProfile   FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("gigs")
 }
 
 // ============================================================
@@ -808,6 +827,7 @@ model Location {
   id        String    @id @default(auto()) @map("_id") @db.ObjectId
   name      String    @unique
   region    String? // e.g., "Asia", "Europe"
+  phoneCode String? // e.g., "+92"
   createdAt DateTime  @default(now())
   projects  Project[]
 

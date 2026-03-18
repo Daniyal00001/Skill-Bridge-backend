@@ -10,9 +10,11 @@ export const updateProfileCompletion = async (userId: string): Promise<number> =
     include: {
       skills: true,
       educations: true,
+      certificates: true,
+      gigs: true,
       user: true,
-    }
-  })
+    } as any
+  }) as any
 
   if (!profile || !profile.user) return 0
 
@@ -22,6 +24,7 @@ export const updateProfileCompletion = async (userId: string): Promise<number> =
     !!profile.user.firstName?.trim(),
     !!profile.user.lastName?.trim(),
     !!profile.location?.trim(),
+    !!profile.region?.trim(),
     !!profile.tagline?.trim(),
 
     // Step 2: Professional Details
@@ -32,13 +35,15 @@ export const updateProfileCompletion = async (userId: string): Promise<number> =
 
     // Step 3: Skills & Education
     Array.isArray(profile.skills) && profile.skills.length > 0,
-    Array.isArray(profile.educations) && profile.educations.length > 0 && !!profile.educations[0].school?.trim(),
-    Array.isArray(profile.educations) && profile.educations.length > 0 && !!profile.educations[0].degree?.trim(),
-    Array.isArray(profile.educations) && profile.educations.length > 0 && !!profile.educations[0].year?.trim(),
+    Array.isArray(profile.educations) && profile.educations.length > 0,
+    
+    // Languages
+    Array.isArray(profile.languages) && profile.languages.length > 0,
 
-    // Step 4: Verification & Identity Files (Cloudinary URLs)
+    // Step 4: Verification, Certificates & Gigs
     !!profile.user.profileImage?.trim(),
     !!profile.user.idDocumentUrl?.trim() || profile.user.isIdVerified,
+    (Array.isArray(profile.certificates) && profile.certificates.length > 0) || (Array.isArray(profile.gigs) && profile.gigs.length > 0),
 
     // Step 5: Links (Require at least one professional link)
     !!(profile.github?.trim() || profile.linkedin?.trim() || profile.portfolio?.trim() || profile.website?.trim())

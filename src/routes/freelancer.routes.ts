@@ -70,7 +70,12 @@ router.post('/onboarding/step-5', protect, updateOnboardingStep5)
  * @desc    Upload ID and Profile Picture
  * @access  Private
  */
-router.post('/onboarding/upload', protect, upload.fields([{ name: 'idDocument', maxCount: 1 }, { name: 'profileImage', maxCount: 1 }]), uploadOnboardingFiles)
+router.post('/onboarding/upload', protect, upload.fields([
+  { name: 'idDocument', maxCount: 1 }, 
+  { name: 'profileImage', maxCount: 1 },
+  { name: 'certFiles', maxCount: 4 },
+  { name: 'gigFiles', maxCount: 4 }
+]), uploadOnboardingFiles)
 
 /**
  * @route   PATCH /api/freelancers/profile
