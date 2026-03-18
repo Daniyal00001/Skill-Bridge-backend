@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "mongodb"
-  url      = env("DATABASE_URL")
 }
 
 // ============================================================
@@ -50,6 +49,7 @@ enum TokenWalletTxType {
 
 enum TokenTxReason {
   REGISTRATION_BONUS
+  MONTHLY_AWARD
   PROPOSAL_SUBMITTED
   PROPOSAL_WITHDRAWN
   ADMIN_GRANT
