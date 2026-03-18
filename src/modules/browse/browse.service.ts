@@ -164,7 +164,10 @@ async function fetchEligibleProjects(
   }
 
   if (filters.locationPref) {
-    where.locationPref = filters.locationPref;
+    where.OR = [
+      { locationPref: filters.locationPref },
+      { locationId: filters.locationPref }, // In case an ID was passed
+    ];
   }
 
   if (filters.proposalCountMax != null) {
