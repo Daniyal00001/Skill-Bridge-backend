@@ -156,6 +156,7 @@ export const getFreelancerById = async (req: Request, res: Response) => {
         },
         portfolioItems: true,
         certificates: true,
+        gigs: true,
         proposals: {
           take: 5,
           where: { status: 'ACCEPTED' },

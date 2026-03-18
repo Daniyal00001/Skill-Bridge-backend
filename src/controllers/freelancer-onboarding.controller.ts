@@ -17,6 +17,7 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
         skills: { include: { skill: true } },
         portfolioItems: true,
         certificates: true,
+        gigs: true,
         educations: true,
         user: {
           select: {
