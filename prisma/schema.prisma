@@ -97,6 +97,14 @@ enum NotificationType {
   DISPUTE_OPENED
   DISPUTE_RESOLVED
   SYSTEM_ALERT
+  INVITATION_RECEIVED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
 }
 
 enum ExperienceLevel {
@@ -119,12 +127,16 @@ enum AvailabilityStatus {
 model User {
   id                String    @id @default(auto()) @map("_id") @db.ObjectId
   name              String
+  firstName         String?
+  lastName          String?
   email             String    @unique
   passwordHash      String? // null if Google OAuth only
   googleId          String?
   role              Role?
   isEmailVerified   Boolean   @default(false)
   isPaymentVerified Boolean   @default(false)
+  isIdVerified      Boolean   @default(false)
+  idDocumentUrl     String?
   isBanned          Boolean   @default(false)
   banReason         String?
   profileImage      String?
@@ -191,9 +203,13 @@ model ClientProfile {
   commMethod        String? // "Slack", "Email", "Chat"
   availability      String? // "Full-time", "Part-time"
   profileCompletion Int              @default(0)
+  createdAt         DateTime?        @default(now())
+  updatedAt         DateTime?        @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projects Project[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projects    Project[]
+  invitations Invitation[]
+  chatRooms   ChatRoom[]
 
   @@map("client_profiles")
 }
@@ -203,19 +219,22 @@ model ClientProfile {
 // ============================================================
 
 model FreelancerProfile {
-  id                String             @id @default(auto()) @map("_id") @db.ObjectId
-  userId            String             @unique @db.ObjectId
-  fullName          String
-  bio               String?
-  tagline           String?
-  location          String?
-  timezone          String?
-  hourlyRate        Float?
-  experienceLevel   ExperienceLevel    @default(ENTRY)
-  availability      AvailabilityStatus @default(AVAILABLE)
-  responseTime      String? // e.g. "within 2 hours"
-  languages         String[]
-  profileCompletion Int                @default(0)
+  id                      String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId                  String             @unique @db.ObjectId
+  fullName                String
+  bio                     String?
+  tagline                 String?
+  location                String?
+  preferredClientLocation String?
+  timezone                String?
+  hourlyRate              Float?
+  experienceLevel         ExperienceLevel    @default(ENTRY)
+  availability            AvailabilityStatus @default(AVAILABLE)
+  responseTime            String? // e.g. "within 2 hours"
+  languages               String[]
+  profileCompletion       Int                @default(0)
+  createdAt               DateTime?          @default(now())
+  updatedAt               DateTime?          @updatedAt
 
   // Social / portfolio links
   github    String?
@@ -228,6 +247,9 @@ model FreelancerProfile {
   portfolioItems PortfolioItem[]
   proposals      Proposal[]
   certificates   Certificate[]
+  educations     Education[]
+  invitations    Invitation[]
+  chatRooms      ChatRoom[]
 
   @@map("freelancer_profiles")
 }
@@ -300,6 +322,22 @@ model Certificate {
 }
 
 // ============================================================
+// EDUCATION (Freelancer education)
+// ============================================================
+
+model Education {
+  id                  String             @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String             @db.ObjectId
+  school              String
+  degree              String
+  year                String?
+
+  freelancerProfile   FreelancerProfile  @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("education")
+}
+
+// ============================================================
 // ADMIN PROFILE
 // ============================================================
 
@@ -325,25 +363,37 @@ model Project {
   id              String        @id @default(auto()) @map("_id") @db.ObjectId
   clientProfileId String        @db.ObjectId
   title           String
+  shortDesc       String?
   description     String
+  requirements    String?
+  referenceLinks  String?
+  budgetType      String        @default("fixed")
+  budget          Float
   size            ProjectSize
   status          ProjectStatus @default(OPEN)
-  budgetMin       Float
-  budgetMax       Float
   deadline        DateTime?
-  category        String // e.g. "Web Development", "Graphic Design"
-  attachments     String[] // file URLs
-  isAiScoped      Boolean       @default(false) // was this scoped by AI?
-  aiScopeSummary  String? // AI-generated scope summary
+  categoryId      String?       @db.ObjectId
+  subCategoryId   String?       @db.ObjectId
+  attachments     String[]
+  experienceLevel String        @default("intermediate")
+  hiringMethod    String        @default("bidding")
+  language        String        @default("English")
+  locationPref    String        @default("Any location")
   proposalCount   Int           @default(0)
   viewCount       Int           @default(0)
+  isAiScoped      Boolean       @default(false)
+  aiScopeSummary  String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   clientProfile ClientProfile  @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  category      Category?      @relation(fields: [categoryId], references: [id])
+  subCategory   SubCategory?   @relation(fields: [subCategoryId], references: [id])
   skills        ProjectSkill[]
   proposals     Proposal[]
   contract      Contract?
+  invitations   Invitation[]
+  chatRooms     ChatRoom[]
   dispute       Dispute?
 
   @@map("projects")
@@ -363,6 +413,34 @@ model ProjectSkill {
 
   @@unique([projectId, skillId])
   @@map("project_skills")
+}
+
+// projecvt category
+model Category {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique // "Web Development"
+  slug      String   @unique // "web"
+  icon      String? // store icon name as string e.g. "Layout"
+  createdAt DateTime @default(now())
+
+  subCategories SubCategory[]
+  projects      Project[]
+
+  @@map("categories")
+}
+
+// project subcategory
+model SubCategory {
+  id         String @id @default(auto()) @map("_id") @db.ObjectId
+  name       String // "Frontend"
+  slug       String // "frontend"
+  categoryId String @db.ObjectId
+
+  category Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  projects Project[]
+
+  @@unique([categoryId, slug])
+  @@map("sub_categories")
 }
 
 // ============================================================
@@ -400,6 +478,27 @@ model Proposal {
 
   @@unique([projectId, freelancerProfileId]) // one proposal per freelancer per project
   @@map("proposals")
+}
+
+// ============================================================
+// INVITATION (Client invites freelancer to a project)
+// ============================================================
+
+model Invitation {
+  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
+  projectId           String           @db.ObjectId
+  freelancerProfileId String           @db.ObjectId
+  clientProfileId     String           @db.ObjectId
+  message             String?
+  status              InvitationStatus @default(PENDING)
+  createdAt           DateTime         @default(now())
+
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  clientProfile     ClientProfile     @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, freelancerProfileId]) // one invitation per freelancer per project
+  @@map("invitations")
 }
 
 // ============================================================
@@ -470,16 +569,22 @@ model Payment {
 }
 
 // ============================================================
-// CHAT ROOM (One per contract)
+// CHAT ROOM (One per contract or for recruitment)
 // ============================================================
 
 model ChatRoom {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  contractId String   @unique @db.ObjectId
-  createdAt  DateTime @default(now())
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  contractId          String?  @unique @db.ObjectId
+  projectId           String?  @db.ObjectId
+  freelancerProfileId String?  @db.ObjectId
+  clientProfileId     String?  @db.ObjectId
+  createdAt           DateTime @default(now())
 
-  contract Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  messages Message[]
+  contract          Contract?          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile? @relation(fields: [freelancerProfileId], references: [id])
+  clientProfile     ClientProfile?     @relation(fields: [clientProfileId], references: [id])
+  messages          Message[]
 
   @@map("chat_rooms")
 }

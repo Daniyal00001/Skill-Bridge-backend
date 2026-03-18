@@ -1,34 +1,25 @@
-// ============================================================
-// PATH: backend/src/ai/shared/agent.types.ts
-// PURPOSE: All TypeScript interfaces and types used across
-//          every AI module in the agent pipeline
-// ============================================================
-
 import { AgentStage, ExpertiseLevel } from './constants'
 
-// ── LLM ──────────────────────────────────────────────────────
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
 
-// ── Session / Memory ─────────────────────────────────────────
 export interface AgentSession {
   sessionId: string
-  clientId?: string                        // logged-in user ID (optional)
+  clientId?: string
   clientName?: string
   stage: AgentStage
   expertiseLevel?: ExpertiseLevel
-  history: LLMMessage[]                   // full conversation so far
-  project?: Partial<ProjectRequirements>  // extracted project data
-  matches?: MatchedFreelancer[]           // matched freelancers
+  history: LLMMessage[]
+  project?: Partial<ProjectRequirements>
+  matches?: MatchedFreelancer[]
   negotiationState?: NegotiationState
   contractText?: string
   createdAt: string
   updatedAt: string
 }
 
-// ── Project Requirements ─────────────────────────────────────
 export interface ProjectRequirements {
   projectType: string | null
   platform: string | null
@@ -41,14 +32,13 @@ export interface ProjectRequirements {
   additionalNotes: string | null
 }
 
-// ── Freelancer ───────────────────────────────────────────────
 export interface FreelancerProfile {
   id: string
   name: string
   location: string
   skills: string[]
-  rating: number               // 0.0 – 5.0
-  hourlyRate: number           // USD per hour
+  rating: number
+  hourlyRate: number
   completedProjects: number
   bio: string
   availability: boolean
@@ -56,16 +46,15 @@ export interface FreelancerProfile {
 }
 
 export interface MatchedFreelancer extends FreelancerProfile {
-  matchScore: number           // 0–100
-  estimatedTotal: number       // USD (hourly * estimated hours)
-  matchReason: string          // why this freelancer was selected
+  matchScore: number
+  estimatedTotal: number
+  matchReason: string
 }
 
-// ── Negotiation ──────────────────────────────────────────────
 export interface FreelancerResponse {
   freelancerId: string
   freelancerName: string
-  replyText: string            // raw text of their reply
+  replyText: string
   proposedPrice?: number
   isAvailable?: boolean
 }
@@ -75,7 +64,7 @@ export interface NegotiationResult {
   freelancerName: string
   status: 'ACCEPTED' | 'PENDING' | 'DECLINED' | 'COUNTERED' | 'NO_REPLY'
   finalPrice?: number
-  aiReply?: string             // what the AI sent back to freelancer
+  aiReply?: string
   notes: string
 }
 
@@ -86,13 +75,12 @@ export interface NegotiationState {
   round: number
 }
 
-// ── Orchestrator I/O ─────────────────────────────────────────
 export interface AgentInput {
   sessionId: string
   message: string
   clientName?: string
-  // Injected at specific stages:
   freelancerResponses?: FreelancerResponse[]
+  selectedFreelancerId?: string  // ← NEW
 }
 
 export interface AgentOutput {

@@ -8,9 +8,9 @@ import { AgentSession } from '../shared/agent.types'
 
 export function buildExtractionPrompt(session: AgentSession): string {
   return `
-You are a project data extractor for a freelance platform called SkillBridge.
+You are a senior software architect and project analyst for SkillBridge freelance platform.
 
-Your job is to analyze the conversation below and extract structured project information.
+Analyze the conversation below and extract structured project information.
 
 CONVERSATION HISTORY:
 ${session.history.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}
@@ -21,7 +21,14 @@ INSTRUCTIONS:
 3. For features, extract every feature mentioned as an array of strings.
 4. For budget, extract min and max as numbers in USD. If only one number mentioned, use it for both.
 5. For timeline, extract as a human readable string e.g. "2 months", "8 weeks".
-6. For techPreferences, extract any tech stack mentioned e.g. ["Flutter", "Firebase"].
+6. For techPreferences - ANALYZE the project deeply as a senior architect:
+   - Look at projectType, platform, features, and complexity
+   - Recommend the BEST tech stack for this specific project
+   - Example: Ramadan mobile app (iOS + Android) → ["Flutter", "Firebase", "Dart", "React Native"]
+   - Example: E-commerce web app → ["React", "Node.js", "Stripe", "MongoDB", "Redux"]
+   - Example: AI chatbot → ["Python", "LangChain", "OpenAI API", "FastAPI"]
+   - Example: REST API with auth → ["Node.js", "Express", "JWT", "PostgreSQL"]
+   - NEVER leave techPreferences empty — always infer from project context
 7. For expertiseNeeded, infer from project complexity: "entry", "intermediate", or "senior".
 8. For platform, extract e.g. "iOS", "Android", "iOS + Android", "Web", "Cross-platform".
 9. For projectType, extract e.g. "Mobile App", "Web App", "REST API", "E-commerce", etc.
@@ -62,7 +69,7 @@ RETURN STRICT JSON ONLY:
 {
   "isComplete": true | false,
   "missingFields": string[],
-  "confidence": number (0-100, how confident you are the project is well defined)
+  "confidence": number
 }
 `.trim()
 }
