@@ -495,7 +495,7 @@ export const withdrawProposal = async (req: Request, res: Response) => {
 
     const proposal = await prisma.proposal.findFirst({
       where: { id: req.params.id, freelancerProfileId: freelancerProfile.id },
-      include: { project: { select: { title: true } } }
+      include: { project: { select: { title: true, clientProfile: { select: { userId: true } } } } }
     })
 
     if (!proposal) {
@@ -540,6 +540,19 @@ export const withdrawProposal = async (req: Request, res: Response) => {
         where: { id: proposal.projectId },
         data: { proposalCount: { decrement: 1 } }
       })
+
+      // Notify the client
+      if (proposal.project.clientProfile?.userId) {
+        await tx.notification.create({
+          data: {
+            userId: proposal.project.clientProfile.userId,
+            type: 'PROPOSAL_WITHDRAWN',
+            title: 'Proposal Withdrawn',
+            body: `A freelancer has withdrawn their proposal for "${proposal.project.title}".`,
+            link: `/client/projects/${proposal.projectId}/proposals`,
+          }
+        })
+      }
     })
 
     return res.status(200).json({
