@@ -1,0 +1,138 @@
+% Chapter 2 — Literature Review
+
+\chapter{Literature Review}
+\label{Chapter2}
+\lhead{Chapter 2. \emph{Literature Review}}
+
+%----------------------------------------------------------------------------------------
+\section{Introduction}
+
+This chapter reviews the existing body of knowledge relevant to the SkillBridge platform,
+covering: \textit{(i)} digital freelance marketplace platforms, \textit{(ii)} the role of
+Artificial Intelligence in hiring tools, \textit{(iii)} token and gamification economies,
+and \textit{(iv)} trust, reputation, and blind review mechanisms.
+
+%----------------------------------------------------------------------------------------
+\section{Existing Freelance Marketplace Platforms}
+
+\subsection{Upwork}
+
+Upwork is the world's largest freelance platform, connecting over 18 million registered
+freelancers with clients in 180+ countries~\citep{Upwork2023}. It supports hourly
+contracts (monitored via Work Diary screenshots) and fixed-price milestones. Despite its
+scale, Upwork is criticised for its high service fees (up to 20\%), an opaque Job Success
+Score algorithm, and the ``Connects'' credit system which disproportionately affects new
+freelancers.
+
+\subsection{Fiverr}
+
+Fiverr operates on a Gig-based model where freelancers define pre-packaged services at fixed
+price points~\citep{Fiverr2023}. Its strength is low-friction purchasing, but this model
+commoditises professional services. The 20\% platform fee and the absence of AI-assisted
+project definition are notable gaps.
+
+\subsection{Freelancer.com}
+
+Freelancer.com pioneered competitive bidding. While this promotes market-driven pricing, it
+generates significant volumes of low-quality, template-driven proposals and has weak dispute
+and credential-verification mechanisms.
+
+\subsection{Comparative Analysis}
+
+\begin{table}[h]
+\centering
+\caption{Comparative Analysis of Freelance Platforms}
+\label{tab:platform_comparison}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{3.5cm}|p{2cm}|p{2cm}|p{2cm}|>{\bfseries\color{sbblue}}p{2.5cm}|}
+\hline
+\rowcolor{sblight}
+\textbf{Feature} & \textbf{Upwork} & \textbf{Fiverr} & \textbf{Freelancer.com} & \textbf{SkillBridge} \\ \hline
+AI Project Scoping       & \texttimes & \texttimes & \texttimes & \checkmark\ Gemini \\ \hline
+Token Economy            & Partial    & \texttimes & \texttimes & \checkmark \\ \hline
+Blind Review System      & \texttimes & \texttimes & \texttimes & \checkmark \\ \hline
+Milestone Contracts      & \checkmark & \checkmark & \checkmark & \checkmark \\ \hline
+Real-time Chat           & \checkmark & \checkmark & \checkmark & \checkmark \\ \hline
+Platform Fee             & up to 20\% & 20\%       & 10--20\%   & Configurable \\ \hline
+Dispute Resolution       & Basic      & Basic      & Basic      & Admin-managed \\ \hline
+Gig / Package Support    & \texttimes & \checkmark & \texttimes & \checkmark \\ \hline
+\end{tabularx}
+\end{table}
+
+%----------------------------------------------------------------------------------------
+\section{Artificial Intelligence in Hiring Platforms}
+
+\subsection{AI-Assisted Matching and Recommendation}
+
+Machine learning has been applied to talent platforms extensively.
+\citeauthor{Kenthapadi2017}~(\citeyear{Kenthapadi2017}) described LinkedIn's use of ML for
+job-candidate matching, showing that AI-driven recommendations significantly improve
+engagement. \citeauthor{Almalis2015}~(\citeyear{Almalis2015}) proposed content-based
+filtering using semantic analysis of job descriptions and candidate profiles.
+
+\subsection{Large Language Models for Requirement Engineering}
+
+\begin{infobox}[Key Insight — LLMs for Project Scoping]
+Large Language Models (LLMs) can assist non-technical stakeholders in articulating
+software requirements through guided conversational prompts, significantly reducing
+ambiguity in project definitions~\citep{Ahmed2023}.
+\end{infobox}
+
+SkillBridge directly operationalises this insight: the AI scoping module sends a structured
+system prompt to the Google Gemini API, instructing it to return a JSON object with
+\textit{category}, \textit{subCategory}, \textit{size}, \textit{budgetRange},
+\textit{requiredSkills}, and \textit{scopeSummary}.
+
+\subsection{AI for Fraud and Quality Control}
+
+\citeauthor{Rawal2021}~(\citeyear{Rawal2021}) explored ML-based detection of fraudulent
+profiles on freelance platforms. SkillBridge addresses this preventively through the
+SkillToken economy rather than post-hoc detection.
+
+%----------------------------------------------------------------------------------------
+\section{Token Economies and Gamification}
+
+\subsection{Token-Based Incentive Systems}
+
+Token economies use virtual currency to incentivise desirable behaviours and penalise
+undesirable ones~\citep{Skinner1938}. In digital platforms, Upwork's ``Connects'' system
+is a direct precedent, although it is criticised for opacity.
+
+SkillBridge's SkillToken economy improves on this by providing a \textbf{transparent,
+auditable ledger} (\texttt{TokenTransaction} model) with descriptive reason codes, partial
+refunds on withdrawal, and admin-controlled adjustments — creating a richer behavioural
+signal than Connects.
+
+\subsection{Gamification in Digital Platforms}
+
+\citeauthor{Deterding2011}~(\citeyear{Deterding2011}) defined gamification as ``the use of
+game design elements in non-game contexts.'' Profile completion tracking, skill badges, and
+reputation scores are gamification elements that SkillBridge implements natively through the
+\texttt{profileCompletion} field and the SkillToken balance display in the Freelancer
+dashboard.
+
+%----------------------------------------------------------------------------------------
+\section{Trust, Reputation, and Blind Review Systems}
+
+\subsection{Online Reputation Systems}
+
+Reputation reduces information asymmetry in online markets~\citep{Resnick2000,
+DellarocasStar2003}. A persistent problem is \textit{reciprocal rating inflation} — both
+parties give high ratings to avoid retaliation~\citep{Fradkin2015}.
+
+\subsection{Blind Review Mechanisms}
+
+\citeauthor{Fradkin2015}~(\citeyear{Fradkin2015}) empirically demonstrated that Airbnb's
+simultaneous-reveal review system significantly improved review honesty. SkillBridge adopts
+this pattern: the \texttt{Review.isRevealed} flag remains \texttt{false} until both parties
+submit, or a 14-day window elapses.
+
+%----------------------------------------------------------------------------------------
+\section{Summary}
+
+\begin{featurebox}
+The literature review confirms a clear market gap: no existing commercial platform
+integrates \textbf{AI-assisted project scoping}, a \textbf{transparent token economy},
+and a \textbf{blind review system} simultaneously. SkillBridge addresses this gap by
+synthesising academic research and industry practice into a unified, modern platform.
+\end{featurebox}
