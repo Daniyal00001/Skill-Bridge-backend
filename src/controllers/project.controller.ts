@@ -330,6 +330,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
           category: true,
           languageObj: true,
           locationObj: true,
+          _count: { select: { proposals: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -380,7 +381,8 @@ export const getMyProjects = async (req: Request, res: Response) => {
       },
       include: {
         skills: { include: { skill: true } },
-        proposals: { select: { id: true } }
+        proposals: { select: { id: true } },
+        _count: { select: { proposals: true } }
       },
       orderBy: { createdAt: 'desc' }
     })
@@ -414,7 +416,8 @@ export const getProjectById = async (req: Request, res: Response) => {
         category: true,
         subCategory: true,
         languageObj: true,
-        locationObj: true
+        locationObj: true,
+        _count: { select: { proposals: true } }
       }
     })
 
