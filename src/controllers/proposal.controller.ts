@@ -14,7 +14,7 @@ export const getProjectTokenCost = async (req: Request, res: Response) => {
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { budget: true, experienceLevel: true, proposalCount: true, size: true }
+      select: { budget: true, budgetType: true, experienceLevel: true, proposalCount: true, size: true }
     })
 
     if (!project) {
@@ -23,6 +23,7 @@ export const getProjectTokenCost = async (req: Request, res: Response) => {
 
     const breakdown = calculateTokenCostWithBreakdown({
       budget: project.budget,
+      budgetType: project.budgetType,
       experienceLevel: project.experienceLevel,
       proposalCount: project.proposalCount,
       projectSize: project.size,
@@ -100,6 +101,7 @@ export const submitProposal = async (req: Request, res: Response) => {
       select: {
         id: true,
         budget: true,
+        budgetType: true,
         experienceLevel: true,
         proposalCount: true,
         size: true,
@@ -137,6 +139,7 @@ export const submitProposal = async (req: Request, res: Response) => {
     // Calculate token cost
     const tokenCost = calculateTokenCost({
       budget: project.budget,
+      budgetType: project.budgetType,
       experienceLevel: project.experienceLevel,
       proposalCount: project.proposalCount,
       projectSize: project.size,
