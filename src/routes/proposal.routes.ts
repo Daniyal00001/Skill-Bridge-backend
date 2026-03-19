@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { protect, requireRole } from '../middlewares/auth.middleware'
+import { upload } from '../middlewares/upload.middleware'
 import {
   submitProposal,
   getMyProposals,
@@ -26,6 +27,7 @@ router.post(
   '/project/:projectId',
   protect,
   requireRole('FREELANCER'),
+  upload.array('files', 5),
   submitProposal
 )
 

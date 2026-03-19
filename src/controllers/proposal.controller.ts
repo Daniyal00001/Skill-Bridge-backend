@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
+import { uploadToCloudinary } from '../utils/uploadToCloudinary'
 import { calculateTokenCost, calculateTokenCostWithBreakdown } from '../utils/tokenCalculator'
 
 // ─────────────────────────────────────────────────────────────
@@ -58,7 +59,16 @@ export const submitProposal = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId
     const { projectId } = req.params
-    const { bidAmount, deliveryDays, coverLetter, attachments = [] } = req.body
+    const { bidAmount, deliveryDays, coverLetter } = req.body
+
+    // Handle uploaded files
+    const attachments: string[] = []
+    if (req.files && Array.isArray(req.files)) {
+      for (const file of req.files as Express.Multer.File[]) {
+        const url = await uploadToCloudinary(file.buffer)
+        attachments.push(url)
+      }
+    }
 
     if (!bidAmount || !deliveryDays || !coverLetter) {
       return res.status(400).json({
