@@ -106,6 +106,10 @@ export const submitProposal = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'This project is no longer accepting proposals.' })
     }
 
+    if (project.proposalCount >= 50) {
+      return res.status(400).json({ success: false, message: 'This project has reached the maximum limit of 50 proposals.' })
+    }
+
     // Check for duplicate proposal
     const existing = await prisma.proposal.findUnique({
       where: {

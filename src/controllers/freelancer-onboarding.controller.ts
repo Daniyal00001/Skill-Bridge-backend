@@ -22,6 +22,7 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
         user: {
           select: {
             email: true,
+            name: true,
             firstName: true,
             lastName: true,
             profileImage: true,
@@ -49,14 +50,13 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
 export const updateOnboardingStep1 = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
-    const { firstName, lastName, phoneNumber, location, region, tagline } =
+    const { fullName, phoneNumber, location, region, tagline } =
       req.body;
 
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    if (!firstName || firstName.length < 2) return res.status(400).json({ success: false, message: "First name must be at least 2 characters." });
-    if (!lastName || lastName.length < 2) return res.status(400).json({ success: false, message: "Last name must be at least 2 characters." });
+    if (!fullName || fullName.length < 3) return res.status(400).json({ success: false, message: "Full name must be at least 3 characters." });
     if (!tagline || tagline.length < 10) return res.status(400).json({ success: false, message: "Tagline must be at least 10 characters." });
     if (!phoneNumber || !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/\s/g, ""))) {
       return res.status(400).json({ success: false, message: "Invalid phone number format. Must start with '+'." });
@@ -67,10 +67,8 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
     const user = await prisma.user.update({
       where: { id: userId },
       data: {
-        firstName,
-        lastName,
+        name: fullName,
         phoneNumber,
-        name: `${firstName} ${lastName}`.trim(),
       },
     });
 
@@ -81,7 +79,7 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
         location,
         region,
         tagline,
-        fullName: `${firstName} ${lastName}`.trim(),
+        fullName,
       },
     });
 
@@ -448,8 +446,7 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const {
-      firstName,
-      lastName,
+      fullName,
       location,
       preferredClientLocation,
       tagline,
@@ -486,11 +483,7 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
 
     // User level updates
     const userUpdateData: any = {};
-    if (firstName !== undefined) userUpdateData.firstName = firstName;
-    if (lastName !== undefined) userUpdateData.lastName = lastName;
-    if (firstName !== undefined && lastName !== undefined) {
-      userUpdateData.name = `${firstName} ${lastName}`.trim();
-    }
+    if (fullName !== undefined) userUpdateData.name = fullName;
     // Handle File removal (if explicitly passed as empty string or null to delete)
     if (idDocumentUrl === null || idDocumentUrl === "") {
       userUpdateData.idDocumentUrl = null;
@@ -526,8 +519,8 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
     if (languages !== undefined) profileUpdateData.languages = languages;
     if (preferredCategories !== undefined)
       profileUpdateData.preferredCategories = preferredCategories;
-    if (firstName !== undefined && lastName !== undefined) {
-      profileUpdateData.fullName = `${firstName} ${lastName}`.trim();
+    if (fullName !== undefined) {
+      profileUpdateData.fullName = fullName;
     }
 
     if (Object.keys(profileUpdateData).length > 0) {
@@ -619,6 +612,7 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
         user: {
           select: {
             email: true,
+            name: true,
             firstName: true,
             lastName: true,
             profileImage: true,
