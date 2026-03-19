@@ -1,0 +1,212 @@
+%============================================================
+%  Chapter 6 – Backend Implementation
+%============================================================
+\chapter{Backend Implementation}
+
+\section{Overview}
+
+The \projectname{} backend is a Node.js/Express REST API written entirely in TypeScript. The entry point is \texttt{src/server.ts}, which bootstraps the HTTP server on a configurable port. The Express application is assembled in \texttt{src/app.ts}, where all global middleware and route groups are registered.
+
+\section{API Route Groups}
+
+The API is versioned under the \texttt{/api} prefix. Table~\ref{tab:routes} summarises all registered route groups.
+
+\begin{table}[H]
+\centering
+\caption{API Route Groups}
+\label{tab:routes}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Prefix} & \textbf{File} & \textbf{Responsibility} \\
+\midrule
+\texttt{/api/auth}        & \texttt{auth.routes.ts}        & Registration, OTP, login, logout, OAuth, password reset. \\
+\texttt{/api/projects}    & \texttt{project.routes.ts}     & CRUD for project listings; status transitions. \\
+\texttt{/api/freelancers} & \texttt{freelancer.routes.ts}  & Freelancer onboarding, profile management, gigs. \\
+\texttt{/api/proposals}   & \texttt{proposal.routes.ts}    & Submit, withdraw, shortlist, accept, reject proposals. \\
+\texttt{/api/browse}      & \texttt{browse.routes.ts}      & Search/filter freelancers and projects with scoring. \\
+\texttt{/api/track}       & \texttt{tracking.routes.ts}    & Record browse interactions, save/unsave projects. \\
+\texttt{/api/tokens}      & \texttt{token.routes.ts}       & Token balance, history, admin grant/deduct. \\
+\texttt{/api/categories}  & \texttt{category.routes.ts}    & Read-only category and subcategory lists. \\
+\texttt{/api/metadata}    & \texttt{metadata.routes.ts}    & Languages and locations reference data. \\
+\texttt{/api/ai}          & \texttt{ai.routes.ts}          & AI project scoping assistant endpoint. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Authentication Controller}
+
+The \texttt{auth.controller.ts} file implements the following endpoints:
+
+\begin{description}
+  \item[\texttt{POST /api/auth/signup}] Accepts \texttt{\{name, email, password\}}. Hashes the password with bcrypt, creates a \texttt{User} document with \texttt{isEmailVerified: false}, generates a 6-digit OTP, stores it in Redis with a 10-minute TTL, and sends it via Nodemailer.
+
+  \item[\texttt{POST /api/auth/verify-otp}] Accepts \texttt{\{email, otp\}}. Looks up the OTP in Redis, compares it, sets \texttt{isEmailVerified: true}, deletes the OTP key, and returns JWT tokens.
+
+  \item[\texttt{POST /api/auth/login}] Validates credentials, checks for ban status, generates an access token and refresh token, stores the refresh token as an HttpOnly cookie in a \texttt{Session} document.
+
+  \item[\texttt{POST /api/auth/refresh}] Reads the refresh token from the HttpOnly cookie, validates it against the database, rotates the token (delete old, issue new), and returns a new access token.
+
+  \item[\texttt{POST /api/auth/logout}] Deletes the session document and clears the cookie.
+
+  \item[\texttt{POST /api/auth/forgot-password}] Generates a UUID-based reset token stored in \texttt{PasswordResetToken}, sends an email with a link containing the token. Token expires in 1 hour.
+
+  \item[\texttt{POST /api/auth/reset-password}] Validates the reset token, hashes and updates the password, marks the token as used.
+
+  \item[\texttt{GET /api/auth/google}] Redirects to Google's OAuth consent screen via Passport.js.
+
+  \item[\texttt{GET /api/auth/google/callback}] Handles the OAuth callback. Uses Passport's Google strategy to find or create a \texttt{User}, then issues JWT tokens and redirects to the frontend.
+\end{description}
+
+\section{Freelancer Onboarding Controller}
+
+\texttt{freelancer-onboarding.controller.ts} handles the multi-step onboarding flow. Key design points:
+
+\begin{itemize}
+  \item All onboarding steps are \texttt{PATCH} requests to step-specific endpoints (e.g., \texttt{/api/freelancers/onboarding/basic-info}, \texttt{/api/freelancers/onboarding/skills}).
+  \item After each step, the \texttt{profileCompletion} score is recalculated using the \texttt{calculateProfileCompletion()} utility, which evaluates the number of filled mandatory fields as a fraction of total mandatory fields, multiplied by 100.
+  \item A ``Save Draft'' mode accepts partial data without triggering mandatory field validation.
+  \item File uploads (ID document, portfolio images) are handled by Multer in memory storage mode, then streamed to Cloudinary via \texttt{streamifier}.
+\end{itemize}
+
+\section{Project Controller}
+
+\texttt{project.controller.ts} manages the full project lifecycle:
+
+\begin{lstlisting}[language=TypeScript, caption={Project Routes Example}]
+router.post('/', protect, requireRole('CLIENT'), createProject);
+router.get('/', getAllProjects);
+router.get('/:id', getProjectById);
+router.patch('/:id', protect, requireRole('CLIENT'), updateProject);
+router.delete('/:id', protect, requireRole('CLIENT'), deleteProject);
+router.patch('/:id/publish', protect, requireRole('CLIENT'), publishProject);
+\end{lstlisting}
+
+The \texttt{createProject} handler accepts the full project specification, creates a \texttt{Project} document in \texttt{DRAFT} status, and optionally links \texttt{ProjectSkill} join documents for each required skill. The \texttt{publishProject} handler transitions status from \texttt{DRAFT} to \texttt{OPEN}.
+
+\section{Proposal Controller}
+
+The proposal workflow enforces the SkillToken economy:
+
+\begin{enumerate}
+  \item \textbf{Submit}: Validate the freelancer has sufficient token balance. Deduct tokens atomically. Create \texttt{Proposal} document in \texttt{PENDING} status. Create a \texttt{TokenTransaction} record.
+  \item \textbf{Withdraw}: Only allowed if \texttt{status === PENDING}. Refund the original \texttt{tokenCost}. Update proposal status to \texttt{WITHDRAWN}. Create a \texttt{CREDIT} \texttt{TokenTransaction}.
+  \item \textbf{Accept}: Transition proposal to \texttt{ACCEPTED}, create a \texttt{Contract}, transition project to \texttt{IN\_PROGRESS}, reject all other proposals.
+\end{enumerate}
+
+\section{Middleware Chain}
+
+\subsection{Authentication Middleware}
+
+\begin{lstlisting}[language=TypeScript, caption={JWT Authentication Middleware (simplified)}]
+export const protect = async (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'Unauthorised' });
+  const decoded = verifyAccessToken(token);
+  req.user = decoded;
+  next();
+};
+\end{lstlisting}
+
+\subsection{Role Middleware}
+
+\begin{lstlisting}[language=TypeScript, caption={Role Guard Middleware}]
+export const requireRole = (role: Role) => (req, res, next) => {
+  if (req.user?.role !== role)
+    return res.status(403).json({ message: 'Forbidden' });
+  next();
+};
+\end{lstlisting}
+
+\subsection{Upload Middleware}
+
+The \texttt{upload.middleware.ts} configures Multer with in-memory storage (\texttt{memoryStorage()}) and a 10MB file size limit. Files are stored as \texttt{Buffer} objects on \texttt{req.file}, which are then piped to Cloudinary via \texttt{streamifier.createReadStream()}.
+
+\subsection{Request Logger}
+
+The custom \texttt{requestLogger} middleware logs the HTTP method, URL, response status code, and response time in milliseconds to stdout for every request, aiding development debugging.
+
+\section{Backend Directory Structure}
+
+\begin{lstlisting}[caption={Backend Directory Structure (ASCII)}]
+src/
+  app.ts               -- Express app: middleware + route registration
+  server.ts            -- HTTP server bootstrap + port binding
+  config/
+    cloudinary.ts      -- Cloudinary SDK init
+    passport.ts        -- Google OAuth strategy definition
+    prisma.ts          -- Prisma client singleton
+    redis.ts           -- Redis client configuration
+  controllers/         -- Route handler functions (thin layer)
+    auth.controller.ts
+    freelancer-onboarding.controller.ts
+    freelancer.controller.ts
+    project.controller.ts
+    proposal.controller.ts
+    token.controller.ts
+    tracking.controller.ts
+    contract.controller.ts
+    metadata.controller.ts
+  routes/              -- Express Router definitions
+    auth.routes.ts
+    freelancer.routes.ts
+    project.routes.ts
+    proposal.routes.ts
+    token.routes.ts
+    tracking.routes.ts
+    category.routes.ts
+    metadata.routes.ts
+    ai.routes.ts
+  middlewares/
+    auth.middleware.ts      -- JWT verification
+    role.ts                 -- Role-based access guard
+    upload.middleware.ts    -- Multer file handling
+    logger.middleware.ts    -- Request logging
+  services/
+    token.service.ts
+    tracking.service.ts
+  modules/
+    browse/             -- Browse & discovery module
+  utils/
+    email.ts            -- Email templates
+    jwt.ts              -- Token signing/verification helpers
+    redis.ts            -- Redis helper wrappers
+    uploadToCloudinary.ts
+    profileCompletion.ts
+    tokenCalculator.ts
+    validators.ts
+  ai/                   -- AI assistant module
+\end{lstlisting}
+
+\section{Utility Modules}
+
+\begin{table}[H]
+\centering
+\caption{Utility Module Responsibilities}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Utility} & \textbf{Responsibility} \\
+\midrule
+\texttt{jwt.ts}               & Wraps \texttt{jsonwebtoken} sign/verify. Access token: 15 min. Refresh token: 7 days. \\
+\texttt{email.ts}             & HTML email templates for OTP, password reset, welcome, and notification emails. \\
+\texttt{redis.ts}             & Helper wrappers: \texttt{setEx}, \texttt{get}, \texttt{del} for Redis OTP and cache storage. \\
+\texttt{uploadToCloudinary.ts} & Uploads a Buffer to a specified Cloudinary folder and returns the secure URL. \\
+\texttt{profileCompletion.ts} & Counts non-null mandatory fields to compute the 0--100 completion score. \\
+\texttt{tokenCalculator.ts}   & Determines the SkillToken cost for a proposal based on project budget tiers. \\
+\texttt{validators.ts}        & Zod schemas for request body validation across multiple controllers. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Browse Module}
+
+The \texttt{modules/browse/} directory contains a self-contained browse and discovery feature. It implements:
+
+\begin{itemize}
+  \item \textbf{Freelancer search}: Filter by skills, experience level, availability, minimum rating, hourly rate range, and location. Results are sorted by a composite \textit{relevance score} incorporating profile completeness, rating, dispute ratio, and recent login activity.
+  \item \textbf{Project browse}: Filter by category, budget range, project size, experience level, and skills. Records are sorted by recency and proposal count.
+  \item \textbf{Interaction tracking}: \texttt{BrowseInteraction} records are created when a freelancer views a project, feeding back into personalised recommendations.
+\end{itemize}
+
+\section{Cron Jobs}
+
+A monthly cron job (scheduled via \texttt{node-cron}) awards SkillTokens to qualifying active freelancers. A freelancer qualifies if they have been active (\texttt{lastLoginAt} within the last 30 days) and have a validated profile. The job creates a \texttt{MONTHLY\_AWARD} \texttt{TokenTransaction} for each qualifying freelancer and updates their \texttt{skillTokenBalance}.

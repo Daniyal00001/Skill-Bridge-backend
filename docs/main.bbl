@@ -1,0 +1,75 @@
+\begin{thebibliography}{11}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[{Upwork Inc.}(2024)]{upwork2024}
+{Upwork Inc.}
+\newblock Upwork – the world's work marketplace.
+\newblock \url{https://www.upwork.com}, 2024.
+\newblock Accessed: March 2025.
+
+\bibitem[{Fiverr International Ltd.}(2024)]{fiverr2024}
+{Fiverr International Ltd.}
+\newblock Fiverr – freelance services marketplace.
+\newblock \url{https://www.fiverr.com}, 2024.
+\newblock Accessed: March 2025.
+
+\bibitem[{Freelancer.com Limited}(2024)]{freelancer2024}
+{Freelancer.com Limited}.
+\newblock Freelancer – hire and find jobs online.
+\newblock \url{https://www.freelancer.com}, 2024.
+\newblock Accessed: March 2025.
+
+\bibitem[{Toptal LLC}(2024)]{toptal2024}
+{Toptal LLC}.
+\newblock Toptal – hire expert software developers.
+\newblock \url{https://www.toptal.com}, 2024.
+\newblock Accessed: March 2025.
+
+\bibitem[Kessler(2023)]{freelanceEconomy2023}
+Sarah Kessler.
+\newblock The gig economy and the future of work.
+\newblock \emph{Journal of Economic Perspectives}, 37\penalty0 (1):\penalty0
+  45--62, 2023.
+
+\bibitem[Gamma et~al.(1994)Gamma, Helm, Johnson, and Vlissides]{designPatterns}
+Erich Gamma, Richard Helm, Ralph Johnson, and John Vlissides.
+\newblock \emph{Design Patterns: Elements of Reusable Object-Oriented
+  Software}.
+\newblock Addison-Wesley, Boston, MA, 1994.
+
+\bibitem[{OpenAI}(2024)]{openai2024}
+{OpenAI}.
+\newblock Openai api documentation.
+\newblock \url{https://platform.openai.com/docs}, 2024.
+\newblock Accessed: March 2025.
+
+\bibitem[Fielding(2000)]{restApi}
+Roy~T. Fielding.
+\newblock Architectural styles and the design of network-based software
+  architectures.
+\newblock \emph{University of California, Irvine – Doctoral Dissertation},
+  2000.
+
+\bibitem[dcode()]{bcryptjs}
+dcode.
+\newblock bcrypt.js – optimised bcrypt in javascript.
+\newblock \url{https://github.com/dcodeIO/bcrypt.js}.
+\newblock Accessed: March 2025.
+
+\bibitem[Hanson()]{passport2024}
+Jared Hanson.
+\newblock Passport.js – simple, unobtrusive authentication for node.js.
+\newblock \url{https://www.passportjs.org}.
+\newblock Accessed: March 2025.
+
+\bibitem[Hardt(2012)]{oauth2}
+D.~Hardt.
+\newblock {The OAuth 2.0 Authorization Framework – RFC 6749}.
+\newblock \url{https://tools.ietf.org/html/rfc6749}, 2012.
+\newblock Internet Engineering Task Force (IETF).
+
+\end{thebibliography}

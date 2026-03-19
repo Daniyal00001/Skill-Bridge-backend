@@ -1,0 +1,95 @@
+%============================================================
+%  Appendix B – Environment Variables
+%============================================================
+\chapter{Environment Variables Reference}
+\label{app:env}
+
+The \projectname{} backend is configured entirely through environment variables loaded from a \texttt{.env} file in the project root. \textbf{This file must never be committed to version control.} The following table documents all required and optional variables.
+
+\begin{longtable}{p{5.5cm} p{3cm} p{6cm}}
+\toprule
+\textbf{Variable} & \textbf{Required} & \textbf{Description} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+\multicolumn{3}{l}{\textbf{Server}} \\[4pt]
+\texttt{PORT}                    & Optional  & HTTP server port. Default: \texttt{5000}. \\
+\texttt{NODE\_ENV}               & Optional  & Environment mode. \texttt{development} or \texttt{production}. \\[8pt]
+
+\multicolumn{3}{l}{\textbf{Database}} \\[4pt]
+\texttt{DATABASE\_URL}           & Required  & Full MongoDB connection string (Atlas or local). Example: \texttt{mongodb+srv://user:pass@cluster.mongodb.net/skillbridge}. \\[8pt]
+
+\multicolumn{3}{l}{\textbf{JWT}} \\[4pt]
+\texttt{JWT\_ACCESS\_SECRET}     & Required  & Secret key for signing access tokens. Use a long, random string. \\
+\texttt{JWT\_REFRESH\_SECRET}    & Required  & Secret key for signing refresh tokens. Must be different from access secret. \\[8pt]
+
+\multicolumn{3}{l}{\textbf{Google OAuth}} \\[4pt]
+\texttt{GOOGLE\_CLIENT\_ID}      & Required  & Google OAuth 2.0 client ID from Google Cloud Console. \\
+\texttt{GOOGLE\_CLIENT\_SECRET}  & Required  & Google OAuth 2.0 client secret. \\
+\texttt{GOOGLE\_CALLBACK\_URL}   & Required  & OAuth redirect URI. Example: \texttt{http://localhost:5000/api/auth/google/callback}. \\[8pt]
+
+\multicolumn{3}{l}{\textbf{Redis}} \\[4pt]
+\texttt{REDIS\_URL}              & Required  & Redis connection URL. Example: \texttt{redis://localhost:6379}. \\[8pt]
+
+\multicolumn{3}{l}{\textbf{Cloudinary}} \\[4pt]
+\texttt{CLOUDINARY\_CLOUD\_NAME} & Required  & Cloudinary account cloud name. \\
+\texttt{CLOUDINARY\_API\_KEY}    & Required  & Cloudinary API key. \\
+\texttt{CLOUDINARY\_API\_SECRET} & Required  & Cloudinary API secret. \\[8pt]
+
+\multicolumn{3}{l}{\textbf{Nodemailer (SMTP)}} \\[4pt]
+\texttt{SMTP\_HOST}              & Required  & SMTP server hostname. Example: \texttt{smtp.gmail.com}. \\
+\texttt{SMTP\_PORT}              & Required  & SMTP port. Typically \texttt{587} (TLS) or \texttt{465} (SSL). \\
+\texttt{SMTP\_USER}              & Required  & SMTP authentication email address. \\
+\texttt{SMTP\_PASS}              & Required  & SMTP authentication password or App Password. \\
+\texttt{EMAIL\_FROM}             & Required  & Sender display address. Example: \texttt{"SkillBridge" <no-reply@skillbridge.com>}. \\[8pt]
+
+\multicolumn{3}{l}{\textbf{OpenAI}} \\[4pt]
+\texttt{OPENAI\_API\_KEY}        & Required  & OpenAI API secret key (starts with \texttt{sk-}). \\[8pt]
+
+\multicolumn{3}{l}{\textbf{Frontend}} \\[4pt]
+\texttt{FRONTEND\_URL}           & Required  & Base URL of the frontend app. Example: \texttt{http://localhost:5173}. Used for CORS and OAuth redirect fallback URLs. \\[8pt]
+
+\end{longtable}
+
+\section*{Sample \texttt{.env} File}
+
+\begin{lstlisting}[language=bash, caption={Sample .env Configuration}]
+# Server
+PORT=5000
+NODE_ENV=development
+
+# Database (MongoDB Atlas)
+DATABASE_URL="mongodb+srv://username:password@cluster.mongodb.net/skillbridge"
+
+# JWT
+JWT_ACCESS_SECRET="your-very-long-random-access-secret-here"
+JWT_REFRESH_SECRET="another-very-long-random-refresh-secret-here"
+
+# Google OAuth
+GOOGLE_CLIENT_ID="123456789-abc.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="GOCSPX-your-client-secret"
+GOOGLE_CALLBACK_URL="http://localhost:5000/api/auth/google/callback"
+
+# Redis
+REDIS_URL="redis://localhost:6379"
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME="your-cloud-name"
+CLOUDINARY_API_KEY="123456789012345"
+CLOUDINARY_API_SECRET="your-api-secret"
+
+# Email (SMTP)
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT=587
+SMTP_USER="your-email@gmail.com"
+SMTP_PASS="your-16-char-app-password"
+EMAIL_FROM='"SkillBridge" <no-reply@skillbridge.com>'
+
+# OpenAI
+OPENAI_API_KEY="sk-proj-your-openai-key-here"
+
+# Frontend
+FRONTEND_URL="http://localhost:5173"
+\end{lstlisting}

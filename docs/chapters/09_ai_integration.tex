@@ -1,0 +1,89 @@
+%============================================================
+%  Chapter 9 – AI Integration
+%============================================================
+\chapter{AI Integration}
+
+\section{Overview}
+
+\projectname{} integrates the \textbf{OpenAI API} \cite{openai2024} to provide an AI-powered project scoping assistant. The assistant is accessible to clients from their dashboard under the route \texttt{/client/ai-assistant}. Its primary purpose is to help non-technical clients who know what they want but lack the technical vocabulary to specify it in a form understandable to developers.
+
+\section{System Design}
+
+The AI assistant operates as a \textbf{structured-output chat interface}. The client types a natural language description of their project (e.g., \textit{``I need a mobile-friendly website for my bakery that lets customers order cakes online''}), and the assistant returns a structured response that can directly populate a new project posting.
+
+\subsection{Request Flow}
+
+\begin{enumerate}
+  \item The client sends their project description to \texttt{POST /api/ai/scope}.
+  \item The backend \texttt{ai.controller.ts} constructs a system prompt and user message, then calls \texttt{openai.chat.completions.create()} with the \texttt{gpt-4o} model.
+  \item The OpenAI response is parsed and the structured output is returned as JSON.
+  \item An \texttt{AiScopingSession} document is created in the database storing both the raw input and structured output.
+  \item If the client proceeds to post the project, the session is linked to the resulting \texttt{Project} via \texttt{projectId} and the project is flagged \texttt{isAiScoped: true} with an \texttt{aiScopeSummary} text.
+\end{enumerate}
+
+\subsection{System Prompt Design}
+
+The system prompt instructs the model to behave as a freelance project scoping expert and to respond only with a valid JSON object conforming to a specific schema:
+
+\begin{lstlisting}[language=TypeScript, caption={AI System Prompt Structure}]
+const systemPrompt = `
+You are an expert freelance project scoping assistant.
+Given a client's project description, return a JSON object with:
+{
+  "category": string,         // e.g. "Web Development"
+  "subCategory": string,      // e.g. "Frontend"
+  "budgetRange": {
+    "min": number,
+    "max": number
+  },
+  "projectSize": "SMALL" | "MEDIUM" | "LARGE",
+  "skills": string[],         // recommended skills
+  "summary": string,          // 2-3 sentence project overview
+  "estimatedTimeline": string // e.g. "2-4 weeks"
+}
+Only respond with the JSON object. No explanations.
+`;
+\end{lstlisting}
+
+\section{AiScopingSession Model}
+
+\begin{table}[H]
+\centering
+\caption{AiScopingSession Model Fields}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{id}        & ObjectId & Primary key. \\
+\texttt{userId}    & ObjectId & The client who initiated the session. \\
+\texttt{input}     & String   & The raw natural language description provided by the client. \\
+\texttt{output}    & Json     & The structured JSON response from the OpenAI API. \\
+\texttt{projectId} & ObjectId? & Linked to the resulting \texttt{Project} if the client proceeded to post. \\
+\texttt{createdAt} & DateTime & Session timestamp. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Frontend AI Assistant Page}
+
+The \texttt{AIAssistant.tsx} page provides a conversational chat-like UI for submitting project descriptions. Key UI elements:
+
+\begin{itemize}
+  \item A large \textbf{text area} for the project description.
+  \item A \textbf{``Scope My Project''} submit button that triggers the API call.
+  \item While loading: an animated spinner and a motivational message (``Analysing your project...'').
+  \item On success: a structured results panel showing the recommended category, budget range, skills, and project size as readable cards.
+  \item A \textbf{``Post This Project''} button that pre-fills the \texttt{PostProject} multi-step form with the AI-generated data.
+\end{itemize}
+
+\section{Error Handling and Edge Cases}
+
+\begin{itemize}
+  \item If the OpenAI API returns a non-JSON response (e.g., a refusal or safety filter trigger), the controller catches the parse error and returns a 422 status with a user-friendly message.
+  \item API rate limits are handled with exponential back-off retries (up to 3 attempts).
+  \item The OpenAI API key is stored as an environment variable (\texttt{OPENAI\_API\_KEY}) and never exposed to the frontend.
+\end{itemize}
+
+\section{Use of GPT-4o Model}
+
+The \texttt{gpt-4o} model was selected for this use case due to its superior instruction-following capabilities and lower latency compared to GPT-4 Turbo. Its ability to reliably produce valid JSON from complex natural-language inputs was a critical selection criterion.

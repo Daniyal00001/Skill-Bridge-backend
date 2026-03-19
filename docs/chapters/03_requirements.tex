@@ -1,0 +1,156 @@
+%============================================================
+%  Chapter 3 – System Requirements
+%============================================================
+\chapter{System Requirements}
+
+\section{Overview}
+
+This chapter presents the complete set of functional and non-functional requirements for the \projectname{} system. Requirements were elicited through analysis of the problem domain, study of competing platforms, and iterative design sessions.
+
+\section{Stakeholders}
+
+\begin{table}[H]
+\centering
+\caption{System Stakeholders}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Stakeholder} & \textbf{Description} \\
+\midrule
+Client    & A registered user who posts projects, reviews proposals, manages contracts, and leaves reviews. \\
+Freelancer & A registered user who submits proposals, performs contracted work, and receives payment. \\
+Admin     & A platform operator who moderates content, resolves disputes, and manages platform settings. \\
+System    & Automated processes including cron jobs, email notifications, and the AI assistant. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Functional Requirements}
+
+\subsection{Authentication and User Management}
+
+\begin{enumerate}[label=FR-AUTH-\arabic*]
+  \item The system shall allow users to register with an email address and password.
+  \item The system shall send a One-Time Password (OTP) to the user's email upon registration for verification.
+  \item The system shall allow users to log in using verified email and password credentials.
+  \item The system shall support Google OAuth 2.0 for social login.
+  \item The system shall issue JWT access tokens (short-lived) and refresh tokens (long-lived) upon authentication.
+  \item The system shall rotate refresh tokens on each use, invalidating the previous token.
+  \item The system shall allow users to reset their password via an email-based secure token link.
+  \item The system shall allow users to select a role (CLIENT or FREELANCER) after initial registration.
+  \item The system shall enforce role-based access control on all protected routes.
+  \item The system shall allow admins to ban users and provide a ban reason.
+  \item The system shall allow users to log out, invalidating their current session.
+\end{enumerate}
+
+\subsection{Client Features}
+
+\begin{enumerate}[label=FR-CLIENT-\arabic*]
+  \item The system shall allow clients to create, edit, save as draft, and publish project listings.
+  \item A project listing shall include: title, description, category/subcategory, budget (fixed or hourly), size, deadline, required skills, experience level, language preference, location preference, hiring method, and optional attachments.
+  \item The system shall allow clients to view all proposals submitted for their projects.
+  \item The system shall allow clients to shortlist, accept, or reject proposals.
+  \item The system shall allow clients to browse freelancer profiles with filtering by skills, experience level, rating, availability, and location.
+  \item The system shall allow clients to invite specific freelancers to their projects.
+  \item The system shall allow clients to manage active contracts, view milestones, and approve or request revision of submitted milestone work.
+  \item The system shall allow clients to open a dispute for any active contract.
+  \item The system shall allow clients to leave a review after contract completion.
+  \item The system shall allow clients to access an AI assistant for project scoping.
+  \item The system shall allow clients to manage their profile (company, industry, bio, location, preferences).
+\end{enumerate}
+
+\subsection{Freelancer Features}
+
+\begin{enumerate}[label=FR-FRLNC-\arabic*]
+  \item The system shall provide a multi-step onboarding flow for freelancers to complete their profile.
+  \item Onboarding steps shall include: basic info, skills, portfolio, certificates, education, availability, social links, and verification document upload.
+  \item The system shall calculate a profile completion percentage as a ratio of filled mandatory fields.
+  \item The system shall allow freelancers to save an onboarding draft without completing all mandatory fields.
+  \item The system shall allow freelancers to browse open project listings with filtering and search.
+  \item The system shall allow freelancers to save/bookmark projects of interest.
+  \item The system shall allow freelancers to submit a proposal (cover letter, price, delivery time) to a project, deducting SkillTokens.
+  \item The system shall allow freelancers to withdraw a pending proposal, refunding SkillTokens.
+  \item The system shall allow freelancers to view all active contracts and submit milestone deliveries.
+  \item The system shall allow freelancers to view their SkillToken balance and full transaction history.
+  \item The system shall allow freelancers to create Gig listings (pre-packaged services).
+  \item The system shall allow freelancers to leave a review after contract completion.
+\end{enumerate}
+
+\subsection{Admin Features}
+
+\begin{enumerate}[label=FR-ADMIN-\arabic*]
+  \item The system shall provide an admin dashboard with platform analytics.
+  \item The system shall allow admins to view, search, and ban/unban users.
+  \item The system shall allow admins to moderate project listings (view, flag, remove).
+  \item The system shall allow admins to manage disputes: assign, review, resolve with a resolution note and decision.
+  \item The system shall allow admins to grant or deduct SkillTokens from any freelancer.
+  \item The system shall log all admin actions with the target entity, action type, and timestamp.
+\end{enumerate}
+
+\subsection{SkillToken Economy}
+
+\begin{enumerate}[label=FR-TOKEN-\arabic*]
+  \item Each new freelancer shall receive a registration bonus in SkillTokens.
+  \item Submitting a proposal shall deduct a fixed quantity of SkillTokens from the freelancer's balance.
+  \item Withdrawing a pending proposal shall refund the SkillTokens.
+  \item A cron job shall award monthly SkillTokens to active freelancers.
+  \item Every token transaction shall be recorded in an immutable ledger with the balance snapshot.
+\end{enumerate}
+
+\subsection{AI Features}
+
+\begin{enumerate}[label=FR-AI-\arabic*]
+  \item The system shall provide an AI chat assistant accessible from the client dashboard.
+  \item The client shall be able to input an informal project description in natural language.
+  \item The AI assistant shall return a structured response including: recommended category/subcategory, estimated budget range, recommended project size, and a list of suggested skills.
+  \item The AI scoping session shall be stored in the database and optionally linked to the resulting project.
+\end{enumerate}
+
+\section{Non-Functional Requirements}
+
+\begin{table}[H]
+\centering
+\caption{Non-Functional Requirements}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{ID} & \textbf{Category} & \textbf{Requirement} \\
+\midrule
+NFR-01 & Security    & All passwords shall be hashed using bcrypt before storage. \\
+NFR-02 & Security    & All API routes (except public) shall require a valid JWT. \\
+NFR-03 & Security    & Sensitive environment variables (keys, secrets) shall never be committed to version control. \\
+NFR-04 & Performance & API endpoints shall respond within 500ms for standard CRUD operations under normal load. \\
+NFR-05 & Performance & Redis shall be used to cache frequently accessed, rarely mutated data. \\
+NFR-06 & Scalability & The database design shall support horizontal scaling via MongoDB Atlas sharding. \\
+NFR-07 & Usability   & The frontend shall be fully responsive and functional on viewports from 375px to 1920px wide. \\
+NFR-08 & Usability   & The frontend shall support both light and dark themes. \\
+NFR-09 & Reliability & File uploads shall be stored in Cloudinary CDN, not on the application server filesystem. \\
+NFR-10 & Maintainability & All source code shall be written in TypeScript with strict type checking enabled. \\
+NFR-11 & Maintainability & The database schema shall be managed via Prisma migrations. \\
+NFR-12 & Availability & Transactional emails shall be delivered via Nodemailer with a retry mechanism. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Use Case Summary}
+
+\begin{table}[H]
+\centering
+\caption{Primary Use Cases}
+\begin{tabularx}{\textwidth}{lllX}
+\toprule
+\textbf{UC-ID} & \textbf{Actor} & \textbf{Use Case} & \textbf{Brief Description} \\
+\midrule
+UC-01 & Client     & Post Project         & Client creates and publishes a project listing. \\
+UC-02 & Client     & Review Proposals     & Client views, shortlists, accepts proposals. \\
+UC-03 & Client     & Manage Contract      & Client tracks milestones and approves deliveries. \\
+UC-04 & Client     & AI Scope Project     & Client describes project; AI generates spec. \\
+UC-05 & Client     & Browse Freelancers   & Client filters and views freelancer profiles. \\
+UC-06 & Freelancer & Complete Onboarding  & Freelancer fills multi-step profile form. \\
+UC-07 & Freelancer & Submit Proposal      & Freelancer bids on a project, spending tokens. \\
+UC-08 & Freelancer & Submit Milestone     & Freelancer submits deliverable with attachments. \\
+UC-09 & Freelancer & View Tokens          & Freelancer views balance and transaction history. \\
+UC-10 & Admin      & Resolve Dispute      & Admin reviews evidence and issues resolution. \\
+UC-11 & Both       & Leave Review         & Both parties submit post-contract blind reviews. \\
+UC-12 & Both       & Message via Chat     & Parties communicate through contract chat room. \\
+\bottomrule
+\end{tabularx}
+\end{table}

@@ -1,0 +1,68 @@
+%============================================================
+%  Chapter 1 – Introduction
+%============================================================
+\chapter{Introduction}
+
+\section{Background and Motivation}
+
+The global freelance economy has experienced exponential growth over the past decade. Platforms such as Upwork \cite{upwork2024}, Fiverr \cite{fiverr2024}, Freelancer.com \cite{freelancer2024}, and Toptal \cite{toptal2024} have collectively processed billions of dollars in project payments, demonstrating the commercial viability and societal demand for online talent marketplaces. According to recent economic studies \cite{freelanceEconomy2023}, the proportion of the workforce engaging in freelance or contract work has risen significantly, driven by globalisation of the talent pool, the widespread adoption of remote work, and the increasing demand for specialised, on-demand skills.
+
+Despite the maturity of existing platforms, significant pain-points persist for both clients and freelancers. These include opaque matching algorithms, lack of verified skill credentials, exploitative commission models, one-sided review systems, and limited support for project scoping --- particularly for non-technical clients who struggle to articulate requirements in a form legible to software developers.
+
+\textbf{\projectname{}} was conceived to address these limitations within a controlled, demonstrable academic context. It is a full-stack freelance marketplace that integrates a custom \textit{SkillToken} economy to incentivise quality participation, an AI-powered project scoping assistant to lower the barriers for non-technical clients, and a blind peer-review system that ensures rating integrity.
+
+\section{Problem Statement}
+
+The core problem this project addresses can be stated as follows:
+
+\begin{quote}
+\textit{Existing freelance marketplace platforms do not adequately (a) support non-technical clients in scoping and posting structured project requirements, (b) provide freelancers with transparent and gamified incentive mechanisms, or (c) ensure integrity in the mutual review process between clients and service providers.}
+\end{quote}
+
+\projectname{} proposes an integrated solution encompassing all three dimensions through modern web technologies, a well-designed database schema, and machine-learning-assisted tooling.
+
+\section{Objectives}
+
+The primary objectives of this project are:
+
+\begin{enumerate}
+  \item Design and develop a secure, multi-role RESTful API capable of managing user authentication, project lifecycle management, proposal submission, contract execution, and dispute resolution.
+  \item Build a responsive, role-aware single-page application providing distinct, intuitive dashboards for Clients, Freelancers, and Administrators.
+  \item Implement an internal \textbf{SkillToken} economy that controls proposal submission costs, awards participation bonuses, and maintains a full transaction ledger.
+  \item Integrate the \textbf{OpenAI API} to provide an AI project-scoping assistant that translates informal client descriptions into structured project specifications.
+  \item Design and implement a \textbf{blind review system} that reveals ratings only after both parties have submitted their reviews or a timeout has elapsed.
+  \item Implement \textbf{role-based access control (RBAC)} ensuring that all actions are authorised for the correct role.
+  \item Provide a \textbf{multi-step onboarding flow} for freelancers with profile completion scoring and draft-saving support.
+\end{enumerate}
+
+\section{Scope}
+
+The scope of \projectname{} encompasses:
+
+\begin{itemize}
+  \item \textbf{Backend}: A Node.js/Express REST API written in TypeScript, backed by MongoDB via the Prisma ORM, with Redis-based caching and session management.
+  \item \textbf{Frontend}: A React/Vite single-page application with full routing, context-based state management, and a Shadcn/Radix UI component library.
+  \item \textbf{Authentication}: Email/password with OTP email verification, Google OAuth 2.0, JWT access/refresh token rotation, and password reset flows.
+  \item \textbf{Core Features}: Project posting, proposal bidding, contract management, milestone tracking, payment status simulation, messaging, disputes, reviews, and admin moderation.
+  \item \textbf{Advanced Features}: AI project scoping, SkillToken economy, browse/search with interaction tracking, and freelancer gig listings.
+\end{itemize}
+
+Out of scope for this project are live payment gateway integration (simulated via status fields), mobile applications, and infrastructure deployment (the system is documented as a locally-run development setup).
+
+\section{Report Organisation}
+
+The remainder of this report is structured as follows:
+
+\begin{description}
+  \item[Chapter 2] reviews related work and existing freelance marketplace platforms.
+  \item[Chapter 3] presents the functional and non-functional requirements of the system.
+  \item[Chapter 4] describes the overall system architecture, technology stack, and component design.
+  \item[Chapter 5] documents the database design including all data models and their relationships.
+  \item[Chapter 6] covers the backend API implementation in detail.
+  \item[Chapter 7] covers the frontend React application implementation.
+  \item[Chapter 8] explains the SkillToken economy design and implementation.
+  \item[Chapter 9] documents the AI integration module.
+  \item[Chapter 10] addresses security mechanisms, authentication, and authorisation.
+  \item[Chapter 11] describes the testing approach and results.
+  \item[Chapter 12] concludes with a summary, limitations, and future work.
+\end{description}
