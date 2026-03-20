@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
 import { uploadToCloudinary } from '../utils/uploadToCloudinary'
+import { scheduleMilestoneAutoRelease } from '../queues/milestoneRelease.queue'
 
 // ─────────────────────────────────────────────────────────────
 // HELPER: Check if user has access to a contract
@@ -420,6 +421,11 @@ export const submitMilestone = async (req: Request, res: Response) => {
         }
       })
     })
+
+    // ── Schedule 72-hour auto-release job ──────────────────────
+    // If the client doesn't act within 72h, payment is auto-released.
+    // Guard checks inside the job prevent double-release.
+    await scheduleMilestoneAutoRelease(milestoneId, contractId)
 
     return res.status(200).json({ success: true, message: 'Milestone submitted for review.' })
   } catch (error) {
