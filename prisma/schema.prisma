@@ -5,6 +5,7 @@ generator client {
 
 datasource db {
   provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 // ============================================================
@@ -20,6 +21,7 @@ enum Role {
 enum ProjectStatus {
   DRAFT
   OPEN
+  HIRED_PENDING
   IN_PROGRESS
   UNDER_REVIEW
   REVISION_REQUESTED
@@ -58,6 +60,7 @@ enum TokenTxReason {
 
 enum ContractStatus {
   ACTIVE
+  OFFER_PENDING
   COMPLETED
   CANCELLED
   DISPUTED
@@ -65,9 +68,11 @@ enum ContractStatus {
 
 enum MilestoneStatus {
   PENDING
+  FUNDED
   IN_PROGRESS
   SUBMITTED
   APPROVED
+  REVISION_REQUESTED
   REJECTED
 }
 
@@ -271,6 +276,7 @@ model FreelancerProfile {
   skills            FreelancerSkill[]
   portfolioItems    PortfolioItem[]
   proposals         Proposal[]
+  contracts         Contract[]
   certificates      Certificate[]
   educations        Education[]
   invitations       Invitation[]
@@ -532,8 +538,12 @@ model Proposal {
   coverLetter         String
   attachments         String[] // optional file URLs
   tokenCost           Int            @default(0) // SkillTokens spent on this proposal
-  status              ProposalStatus @default(PENDING)
-  submittedAt         DateTime       @default(now())
+  status               ProposalStatus     @default(PENDING)
+  proposalMilestones   Json?              // optional milestone plan submitted by freelancer
+  clientRequestedMilestones Json?         // modified milestones proposed by client
+  negotiationStatus     String?            // CLIENT_PROPOSED, FREELANCER_ACCEPTED, FREELANCER_REJECTED
+  generalRevisionLimit Int                @default(3) // default revisions if no milestones provided
+  submittedAt          DateTime           @default(now())
   updatedAt           DateTime       @updatedAt
 
   project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -596,12 +606,14 @@ model Contract {
   startDate           DateTime       @default(now())
   endDate             DateTime?
   status              ContractStatus @default(ACTIVE)
+  milestonesModifiedByClient Boolean @default(false)
   termsAccepted       Boolean        @default(false)
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  milestones Milestone[]
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  milestones        Milestone[]
   payments   Payment[]
   chatRoom   ChatRoom?
 
@@ -613,16 +625,21 @@ model Contract {
 // ============================================================
 
 model Milestone {
-  id          String          @id @default(auto()) @map("_id") @db.ObjectId
-  contractId  String          @db.ObjectId
-  title       String
-  description String?
-  amount      Float // payment for this milestone
-  dueDate     DateTime?
-  status      MilestoneStatus @default(PENDING)
-  submittedAt DateTime?
-  approvedAt  DateTime?
-  attachments String[] // submitted file URLs
+  id           String          @id @default(auto()) @map("_id") @db.ObjectId
+  contractId   String          @db.ObjectId
+  order        Int             @default(0) // display order
+  title        String
+  description  String?
+  amount       Float // payment for this milestone
+  dueDate      DateTime?
+  status           MilestoneStatus @default(PENDING)
+  deliverables     String?         // freelancer's submission note
+  revisionNote     String?         // client's feedback for revision
+  allowedRevisions Int             @default(3) // -1 for unlimited
+  revisionsUsed    Int             @default(0)
+  submittedAt      DateTime?
+  approvedAt       DateTime?
+  attachments  String[] // submitted file URLs
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   payment  Payment?
