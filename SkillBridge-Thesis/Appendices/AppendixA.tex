@@ -1,0 +1,149 @@
+% Appendix A
+
+\chapter{API Reference}
+
+\label{AppendixA}
+
+\lhead{Appendix A. \emph{API Reference}}
+
+This appendix provides a concise reference for the primary SkillBridge REST API endpoints.
+All endpoints are prefixed with \texttt{/api}. Protected endpoints require a valid
+\texttt{Authorization: Bearer <access\_token>} header unless otherwise noted.
+
+%----------------------------------------------------------------------------------------
+\section{Authentication Routes (\texttt{/api/auth})}
+
+\begin{longtable}{|p{2.5cm}|p{4cm}|p{2cm}|p{5cm}|}
+\hline
+\textbf{Method} & \textbf{Endpoint} & \textbf{Auth} & \textbf{Description} \\ \hline
+\endhead
+POST & /signup & Public & Register a new user account \\ \hline
+POST & /verify-otp & Public & Verify email OTP after signup \\ \hline
+POST & /login & Public & Authenticate and receive access token \\ \hline
+POST & /logout & Public & Invalidate the refresh token session \\ \hline
+POST & /refresh & Public & Obtain a new access token via cookie refresh \\ \hline
+POST & /forgot-password & Public & Send password reset email \\ \hline
+POST & /reset-password & Public & Reset password using token \\ \hline
+GET & /google & Public & Initiate Google OAuth 2.0 flow \\ \hline
+GET & /google/callback & Public & Google OAuth callback handler \\ \hline
+POST & /complete-google-signup & Protected & Complete role selection after Google OAuth \\ \hline
+\end{longtable}
+
+%----------------------------------------------------------------------------------------
+\section{Project Routes (\texttt{/api/projects})}
+
+\begin{longtable}{|p{2.5cm}|p{4cm}|p{2cm}|p{5cm}|}
+\hline
+\textbf{Method} & \textbf{Endpoint} & \textbf{Auth} & \textbf{Description} \\ \hline
+\endhead
+POST & / & CLIENT & Create a new project (supports file upload) \\ \hline
+PATCH & /:id & CLIENT & Update an existing project \\ \hline
+GET & / & Protected & List all open projects \\ \hline
+GET & /client/my & CLIENT & List authenticated client's projects \\ \hline
+GET & /:id & Protected & Get project details by ID \\ \hline
+DELETE & /:id & CLIENT & Delete a project \\ \hline
+\end{longtable}
+
+%----------------------------------------------------------------------------------------
+\section{Proposal Routes (\texttt{/api/proposals})}
+
+\begin{longtable}{|p{2.5cm}|p{4.5cm}|p{2cm}|p{5cm}|}
+\hline
+\textbf{Method} & \textbf{Endpoint} & \textbf{Auth} & \textbf{Description} \\ \hline
+\endhead
+POST & / & FREELANCER & Submit a proposal (deducts SkillTokens) \\ \hline
+GET & /project/:projectId & CLIENT & List all proposals for a project \\ \hline
+GET & /my & FREELANCER & List authenticated freelancer's proposals \\ \hline
+PATCH & /:id/withdraw & FREELANCER & Withdraw a proposal (partial token refund) \\ \hline
+PATCH & /:id/shortlist & CLIENT & Shortlist a proposal \\ \hline
+PATCH & /:id/accept & CLIENT & Accept a proposal (creates Contract) \\ \hline
+PATCH & /:id/reject & CLIENT & Reject a proposal \\ \hline
+\end{longtable}
+
+%----------------------------------------------------------------------------------------
+\section{Token Routes (\texttt{/api/tokens})}
+
+\begin{longtable}{|p{2.5cm}|p{4.5cm}|p{2cm}|p{5cm}|}
+\hline
+\textbf{Method} & \textbf{Endpoint} & \textbf{Auth} & \textbf{Description} \\ \hline
+\endhead
+GET & /balance & FREELANCER & Get current SkillToken balance \\ \hline
+GET & /history & FREELANCER & Get full transaction history \\ \hline
+POST & /admin/grant & ADMIN & Admin grant tokens to a freelancer \\ \hline
+POST & /admin/deduct & ADMIN & Admin deduct tokens from a freelancer \\ \hline
+\end{longtable}
+
+%----------------------------------------------------------------------------------------
+\section{Freelancer Profile Routes (\texttt{/api/freelancers})}
+
+\begin{longtable}{|p{2.5cm}|p{4.5cm}|p{2cm}|p{5cm}|}
+\hline
+\textbf{Method} & \textbf{Endpoint} & \textbf{Auth} & \textbf{Description} \\ \hline
+\endhead
+GET & /me & FREELANCER & Get authenticated freelancer's profile \\ \hline
+PATCH & /me & FREELANCER & Update authenticated freelancer's profile \\ \hline
+GET & /:id & Protected & Get a freelancer's public profile by ID \\ \hline
+POST & /me/skills & FREELANCER & Add skills to profile \\ \hline
+DELETE & /me/skills/:skillId & FREELANCER & Remove a skill from profile \\ \hline
+POST & /me/portfolio & FREELANCER & Add a portfolio item \\ \hline
+DELETE & /me/portfolio/:id & FREELANCER & Remove a portfolio item \\ \hline
+POST & /me/gigs & FREELANCER & Upload a gig document \\ \hline
+DELETE & /me/gigs/:id & FREELANCER & Remove a gig \\ \hline
+\end{longtable}
+
+%----------------------------------------------------------------------------------------
+\section{AI Scoping Route (\texttt{/api/ai})}
+
+\begin{longtable}{|p{2.5cm}|p{4.5cm}|p{2cm}|p{5cm}|}
+\hline
+\textbf{Method} & \textbf{Endpoint} & \textbf{Auth} & \textbf{Description} \\ \hline
+\endhead
+POST & /scope & CLIENT & Submit a natural language project description; returns structured scoping JSON from Gemini \\ \hline
+\end{longtable}
+
+%----------------------------------------------------------------------------------------
+\section{Prisma Schema Entity Summary}
+
+\begin{table}[h]
+\centering
+\caption{SkillBridge Prisma Schema Models}
+\label{tab:schema_models}
+\begin{tabular}{|p{4cm}|p{9.5cm}|}
+\hline
+\textbf{Model} & \textbf{Purpose} \\ \hline
+User & Unified auth record for all roles \\ \hline
+Session & JWT refresh token tracking per device \\ \hline
+ClientProfile & Extended profile for CLIENT users \\ \hline
+FreelancerProfile & Extended profile for FREELANCER users \\ \hline
+AdminProfile & Extended profile for ADMIN users \\ \hline
+Skill & Master list of available skills \\ \hline
+FreelancerSkill & Joins FreelancerProfile to Skill with proficiency level \\ \hline
+PortfolioItem & Freelancer past work showcase items \\ \hline
+Certificate & Freelancer credentials and certifications \\ \hline
+Education & Freelancer education records \\ \hline
+Gig & Freelancer pre-packaged service documents \\ \hline
+Category & Project top-level category \\ \hline
+SubCategory & Project sub-category under a Category \\ \hline
+Project & Core marketplace project entity \\ \hline
+ProjectSkill & Joins Project to Skill \\ \hline
+AiScopingSession & Stores AI scoping request/response pairs \\ \hline
+Proposal & Freelancer bid on a project \\ \hline
+TokenTransaction & Immutable SkillToken ledger entries \\ \hline
+Invitation & Client invitation to freelancer \\ \hline
+Contract & Agreement upon proposal acceptance \\ \hline
+Milestone & Deliverable checkpoint within a contract \\ \hline
+Payment & Escrow and release record per milestone \\ \hline
+ChatRoom & Message thread per contract/inquiry \\ \hline
+Message & Chat message within a ChatRoom \\ \hline
+Review & Blind review post-contract \\ \hline
+Dispute & Disagreement record managed by Admin \\ \hline
+Notification & Per-user activity notification feed \\ \hline
+AdminLog & Audit trail for admin actions \\ \hline
+PlatformSetting & Admin-controlled key-value settings store \\ \hline
+PasswordResetToken & Time-limited token for password reset \\ \hline
+SavedProject & Freelancer bookmarked projects \\ \hline
+BrowseInteraction & Browse system interaction logs \\ \hline
+Language & Language reference data (metadata) \\ \hline
+Location & Location reference data (metadata) \\ \hline
+\end{tabular}
+\end{table}

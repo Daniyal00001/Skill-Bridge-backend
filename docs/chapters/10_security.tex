@@ -1,0 +1,134 @@
+%============================================================
+%  Chapter 10 – Security and Authentication
+%============================================================
+\chapter{Security and Authentication}
+
+\section{Overview}
+
+Security was a primary design consideration throughout the development of \projectname{}. This chapter documents all authentication mechanisms, authorisation controls, and security-relevant implementation decisions.
+
+\section{Password Security}
+
+All user passwords are hashed using \textbf{bcrypt.js} \cite{bcryptjs} before storage. bcrypt incorporates a configurable work factor (cost factor), which is set to \textbf{12} in \projectname{}, making brute-force attacks computationally expensive. The library automatically generates and embeds a cryptographically random salt in each hash, preventing rainbow table attacks.
+
+\begin{lstlisting}[language=TypeScript, caption={Password Hashing During Signup}]
+const SALT_ROUNDS = 12;
+const passwordHash = await bcrypt.hash(plainTextPassword, SALT_ROUNDS);
+\end{lstlisting}
+
+Plain-text passwords are never stored, logged, or transmitted after the initial POST request body.
+
+\section{JWT Authentication}
+
+\projectname{} uses a \textbf{dual-token} JWT authentication scheme:
+
+\begin{table}[H]
+\centering
+\caption{JWT Token Properties}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Token Type} & \textbf{Lifetime} & \textbf{Storage Location} \\
+\midrule
+Access Token  & 15 minutes & JavaScript memory (React context). Never \texttt{localStorage}. \\
+Refresh Token & 7 days     & HttpOnly cookie (inaccessible to JavaScript; sent automatically by the browser). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Both tokens are signed with separate secrets (\texttt{JWT\_ACCESS\_SECRET} and \texttt{JWT\_REFRESH\_SECRET}) stored as environment variables.
+
+\subsection{Token Rotation}
+
+On each call to \texttt{POST /api/auth/refresh}, the backend:
+
+\begin{enumerate}
+  \item Reads the refresh token from the HttpOnly cookie.
+  \item Looks up the corresponding \texttt{Session} document.
+  \item If found and not expired: deletes the old session, generates a new refresh token, creates a new \texttt{Session}, sets a new HttpOnly cookie, and returns a new access token.
+  \item If the refresh token is reused (already deleted from the DB), a replay attack is detected and all sessions for the user are revoked immediately.
+\end{enumerate}
+
+\section{Google OAuth 2.0}
+
+Google authentication is implemented using \textbf{Passport.js} \cite{passport2024} with the \texttt{passport-google-oauth20} strategy \cite{oauth2}. The flow proceeds as follows:
+
+\begin{enumerate}
+  \item User clicks ``Continue with Google'' on the frontend.
+  \item Browser is redirected to \texttt{GET /api/auth/google}, which triggers the Passport redirect to Google's authentication servers.
+  \item User authenticates with Google; Google redirects back to \texttt{GET /api/auth/google/callback} with an authorisation code.
+  \item Passport exchanges the code for a Google profile, using the \texttt{googleId} to find or create a \texttt{User} document.
+  \item JWT tokens are generated and the browser is redirected to \texttt{/auth/google/success?token=...} with the access token as a URL parameter for a brief handshake (then removed from URL).
+\end{enumerate}
+
+The client credentials (\texttt{GOOGLE\_CLIENT\_ID} and \texttt{GOOGLE\_CLIENT\_SECRET}) are stored as environment variables only.
+
+\section{OTP Email Verification}
+
+Upon registration, a 6-digit OTP is generated using \texttt{crypto.randomInt(100000, 999999)}. It is:
+
+\begin{itemize}
+  \item Stored in Redis with a 10-minute TTL under the key \texttt{otp:\{email\}}.
+  \item Sent via Nodemailer to the user's email as an HTML-formatted message.
+  \item Deleted from Redis upon successful verification.
+\end{itemize}
+
+Failed OTP attempts are not currently rate-limited (planned future enhancement), but the short TTL limits the attack window.
+
+\section{Role-Based Access Control (RBAC)}
+
+All protected API routes are guarded by two layers of middleware:
+
+\begin{enumerate}
+  \item \textbf{\texttt{protect}} — verifies the JWT access token and attaches the decoded \texttt{\{userId, role\}} to \texttt{req.user}.
+  \item \textbf{\texttt{requireRole(role)}} — checks that \texttt{req.user.role === role}; returns 403 if not.
+\end{enumerate}
+
+The frontend enforces the same constraints via \texttt{RoleRoute} components that render a 403 screen or redirect if the user's role does not match.
+
+\section{Environment Variable Security}
+
+All secrets and configuration values are stored in a \texttt{.env} file:
+
+\begin{itemize}
+  \item \texttt{.env} is listed in \texttt{.gitignore} to prevent accidental commitment.
+  \item Environment variables are accessed exclusively via \texttt{process.env.*} after calling \texttt{dotenv.config()}.
+  \item The \texttt{.env} file is never exposed to the frontend (Vite/React receives only \texttt{VITE\_*} prefixed variables, and none of the backend secrets carry this prefix).
+\end{itemize}
+
+See Appendix~\ref{app:env} for a full list of required environment variables.
+
+\section{CORS Configuration}
+
+Cross-Origin Resource Sharing is configured to allow requests only from the specific frontend origins. The current development configuration allows:
+
+\begin{itemize}
+  \item \texttt{http://localhost:5173} (Vite dev server)
+  \item \texttt{http://localhost:3000}
+  \item \texttt{http://localhost:8080}
+\end{itemize}
+
+\texttt{credentials: true} is enabled to allow the browser to send HttpOnly cookies with cross-origin requests.
+
+\section{File Upload Security}
+
+\begin{itemize}
+  \item Multer enforces a \textbf{10MB} maximum file size.
+  \item Files are stored in Cloudinary, not on the application server. The server never stores files on its filesystem.
+  \item Uploaded file types are not explicitly validated in the current version (planned future enhancement).
+\end{itemize}
+
+\section{XSS and Injection Prevention}
+
+\begin{itemize}
+  \item The access token is stored in JavaScript memory, not \texttt{localStorage}, preventing XSS token theft.
+  \item All request body data is validated via \textbf{Zod} schemas before database operations.
+  \item Prisma's parameterised query model prevents SQL/NoSQL injection at the ORM level.
+\end{itemize}
+
+\section{Account Security Features}
+
+\begin{itemize}
+  \item \textbf{Account ban}: Admins can ban accounts. Banned users receive a 403 response on login with the ban reason.
+  \item \textbf{ID verification}: A boolean \texttt{isIdVerified} field is set by admins after reviewing the uploaded ID document.
+  \item \textbf{Password reset}: A UUID-based reset token (stored hashed in \texttt{PasswordResetToken}) with a 1-hour expiry. Tokens are single-use (marked \texttt{used: true} on consumption).
+\end{itemize}

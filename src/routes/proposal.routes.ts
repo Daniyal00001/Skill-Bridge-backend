@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { protect, requireRole } from '../middlewares/auth.middleware'
+import { upload } from '../middlewares/upload.middleware'
 import {
   submitProposal,
   getMyProposals,
@@ -7,6 +8,9 @@ import {
   updateProposalStatus,
   withdrawProposal,
   getProjectTokenCost,
+  proposeMilestoneChanges,
+  acceptMilestoneChanges,
+  requestRevisionChanges,
 } from '../controllers/proposal.controller'
 
 const router = Router()
@@ -26,6 +30,7 @@ router.post(
   '/project/:projectId',
   protect,
   requireRole('FREELANCER'),
+  upload.array('files', 5),
   submitProposal
 )
 
@@ -52,5 +57,14 @@ router.patch(
   requireRole('CLIENT'),
   updateProposalStatus
 )
+
+// Propose milestone changes (Negotiate)
+router.post('/:id/negotiate', protect, requireRole('CLIENT'), proposeMilestoneChanges)
+
+// Request revision-only changes (Client — no milestones needed)
+router.post('/:id/request-revisions', protect, requireRole('CLIENT'), requestRevisionChanges)
+
+// Accept milestone/revision changes
+router.post('/:id/accept-changes', protect, requireRole('FREELANCER'), acceptMilestoneChanges)
 
 export default router

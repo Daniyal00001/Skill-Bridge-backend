@@ -1,0 +1,19 @@
+%============================================================
+%  Abstract
+%============================================================
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+\projectname{} is a full-stack freelance marketplace platform developed as a Final Year Project. It bridges the gap between clients who have project requirements and skilled freelancers who can fulfil those requirements, operating within a university context to demonstrate the end-to-end design and implementation of a modern, production-grade web application.
+
+The platform supports three distinct user roles --- \textbf{Client}, \textbf{Freelancer}, and \textbf{Admin} --- each with a bespoke dashboard, workflow, and set of features. Clients can post projects (with optional AI-assisted scoping), browse freelancer profiles, review proposals, manage contracts through milestone-based delivery, and participate in a blind peer-review system. Freelancers can onboard with a multi-step profile setup, browse and save project listings, submit proposals funded by the platform's internal \textit{SkillToken} economy, track active contracts, and view earnings.
+
+The system is built upon a modern technology stack: a \textbf{Node.js / Express.js} REST API written in \textbf{TypeScript}, a \textbf{MongoDB} database accessed via the \textbf{Prisma ORM}, \textbf{Redis} for caching and rate-limiting, \textbf{Cloudinary} for media storage, \textbf{Nodemailer} for transactional emails, and the \textbf{OpenAI API} for the AI project-scoping assistant. The frontend is a single-page application built with \textbf{React}, \textbf{Vite}, and \textbf{TypeScript}, featuring role-based route guards, a responsive design, dark/light theme support, and real-time-capable chat infrastructure.
+
+Key contributions include: a token-economy incentive mechanism for proposal submission, an AI-powered project discovery assistant, a multi-step onboarding flow with profile completion scoring, a dispute resolution module with admin oversight, and a blind review system that reveals ratings only once both parties have submitted.
+
+This report documents the complete requirements, design, architecture, implementation, and testing of the \projectname{} system across both the backend API and the React-based frontend application.
+
+\textbf{Keywords:} Freelance Marketplace, REST API, Node.js, TypeScript, React, MongoDB, Prisma, Token Economy, AI Scoping, Role-Based Access Control.
+
+\clearpage

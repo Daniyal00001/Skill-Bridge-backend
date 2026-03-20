@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
+import { uploadToCloudinary } from '../utils/uploadToCloudinary'
 import { calculateTokenCost, calculateTokenCostWithBreakdown } from '../utils/tokenCalculator'
 
 // ─────────────────────────────────────────────────────────────
@@ -13,7 +14,7 @@ export const getProjectTokenCost = async (req: Request, res: Response) => {
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: { budget: true, experienceLevel: true, proposalCount: true, size: true }
+      select: { budget: true, budgetType: true, experienceLevel: true, proposalCount: true, size: true }
     })
 
     if (!project) {
@@ -22,6 +23,7 @@ export const getProjectTokenCost = async (req: Request, res: Response) => {
 
     const breakdown = calculateTokenCostWithBreakdown({
       budget: project.budget,
+      budgetType: project.budgetType,
       experienceLevel: project.experienceLevel,
       proposalCount: project.proposalCount,
       projectSize: project.size,
@@ -58,7 +60,16 @@ export const submitProposal = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId
     const { projectId } = req.params
-    const { bidAmount, deliveryDays, coverLetter, attachments = [] } = req.body
+    const { bidAmount, deliveryDays, coverLetter, milestones, generalRevisionLimit } = req.body
+
+    // Handle uploaded files
+    const attachments: string[] = []
+    if (req.files && Array.isArray(req.files)) {
+      for (const file of req.files as Express.Multer.File[]) {
+        const url = await uploadToCloudinary(file.buffer)
+        attachments.push(url)
+      }
+    }
 
     if (!bidAmount || !deliveryDays || !coverLetter) {
       return res.status(400).json({
@@ -90,6 +101,7 @@ export const submitProposal = async (req: Request, res: Response) => {
       select: {
         id: true,
         budget: true,
+        budgetType: true,
         experienceLevel: true,
         proposalCount: true,
         size: true,
@@ -104,6 +116,10 @@ export const submitProposal = async (req: Request, res: Response) => {
 
     if (project.status !== 'OPEN') {
       return res.status(400).json({ success: false, message: 'This project is no longer accepting proposals.' })
+    }
+
+    if (project.proposalCount >= 50) {
+      return res.status(400).json({ success: false, message: 'This project has reached the maximum limit of 50 proposals.' })
     }
 
     // Check for duplicate proposal
@@ -123,6 +139,7 @@ export const submitProposal = async (req: Request, res: Response) => {
     // Calculate token cost
     const tokenCost = calculateTokenCost({
       budget: project.budget,
+      budgetType: project.budgetType,
       experienceLevel: project.experienceLevel,
       proposalCount: project.proposalCount,
       projectSize: project.size,
@@ -160,6 +177,8 @@ export const submitProposal = async (req: Request, res: Response) => {
           attachments: Array.isArray(attachments) ? attachments : [],
           tokenCost,
           status: 'PENDING',
+          proposalMilestones: milestones ? JSON.parse(typeof milestones === 'string' ? milestones : JSON.stringify(milestones)) : null,
+          generalRevisionLimit: generalRevisionLimit ? Number(generalRevisionLimit) : 3,
         },
         include: {
           project: {
@@ -249,7 +268,8 @@ export const getMyProposals = async (req: Request, res: Response) => {
             category: true,
             clientProfile: {
               select: { fullName: true, userId: true }
-            }
+            },
+            contract: { select: { id: true, createdAt: true } }
           }
         }
       },
@@ -264,8 +284,14 @@ export const getMyProposals = async (req: Request, res: Response) => {
       attachments: p.attachments,
       tokenCost: p.tokenCost,
       status: p.status,
+      proposalMilestones: p.proposalMilestones || null,
+      clientRequestedMilestones: p.clientRequestedMilestones || null,
+      negotiationStatus: p.negotiationStatus || null,
+      generalRevisionLimit: p.generalRevisionLimit || null,
+      clientRequestedRevisions: (p as any).clientRequestedRevisions ?? null,
       createdAt: p.submittedAt,
       updatedAt: p.updatedAt,
+      contract: p.project.contract,
       project: {
         id: p.project.id,
         title: p.project.title,
@@ -320,6 +346,9 @@ export const getProjectProposals = async (req: Request, res: Response) => {
             user: { select: { name: true, profileImage: true } },
             skills: { include: { skill: true }, take: 5 },
           }
+        },
+        project: {
+          include: { contract: { select: { id: true, createdAt: true } } }
         }
       },
       orderBy: { submittedAt: 'asc' }
@@ -333,7 +362,13 @@ export const getProjectProposals = async (req: Request, res: Response) => {
       attachments: p.attachments,
       tokenCost: p.tokenCost,
       status: p.status,
+      proposalMilestones: p.proposalMilestones || null,
+      clientRequestedMilestones: p.clientRequestedMilestones || null,
+      negotiationStatus: p.negotiationStatus || null,
+      generalRevisionLimit: p.generalRevisionLimit || null,
+      clientRequestedRevisions: (p as any).clientRequestedRevisions ?? null,
       createdAt: p.submittedAt,
+      contract: p.project?.contract || null,
       freelancer: {
         id: p.freelancerProfile.id,
         name: p.freelancerProfile.user?.name,
@@ -389,6 +424,13 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Not authorized.' })
     }
 
+    if (status === 'ACCEPTED' && proposal.negotiationStatus === 'CLIENT_PROPOSED') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot hire until freelancer accepts your proposed milestone changes.' 
+      })
+    }
+
     if (status === 'ACCEPTED') {
       // Atomic: accept this, reject others, create contract
       await prisma.$transaction(async (tx) => {
@@ -405,29 +447,110 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
           data: { status: 'REJECTED' }
         })
 
-        // Update project status to IN_PROGRESS
+        // ── Determine milestones to use ──
+        const { clientMilestones } = req.body
+        const proposalMilestones = proposal.proposalMilestones as any[] | null
+        const requestedMilestones = proposal.clientRequestedMilestones as any[] | null
+        
+        let rawMilestones: any[] = []
+        let milestonesModifiedByClient = false
+
+        if (clientMilestones) {
+          rawMilestones = typeof clientMilestones === 'string' ? JSON.parse(clientMilestones) : clientMilestones
+          milestonesModifiedByClient = true 
+        } else if (proposal.negotiationStatus === 'FREELANCER_ACCEPTED' && requestedMilestones && requestedMilestones.length > 0) {
+          // Freelancer accepted client's milestone proposal
+          rawMilestones = requestedMilestones
+          milestonesModifiedByClient = false
+        } else {
+          // Use freelancer's original milestones (if any) — milestones are optional now
+          rawMilestones = proposalMilestones || []
+        }
+
+        // Determine agreed revision limit
+        // If client requested more revisions and freelancer accepted, use that
+        let agreedRevisionLimit = (proposal as any).generalRevisionLimit ?? 3
+        if (
+          proposal.negotiationStatus === 'FREELANCER_ACCEPTED' &&
+          (proposal as any).clientRequestedRevisions != null
+        ) {
+          agreedRevisionLimit = (proposal as any).clientRequestedRevisions
+        }
+
+        // No milestones = direct hire, always ACTIVE
+        const contractStatus = milestonesModifiedByClient ? 'OFFER_PENDING' : 'ACTIVE'
+        const projectStatus = milestonesModifiedByClient ? 'HIRED_PENDING' : 'IN_PROGRESS'
+
+        // Update project status
         await tx.project.update({
           where: { id: proposal.projectId },
-          data: { status: 'IN_PROGRESS' }
+          data: { status: projectStatus }
         })
 
         // Create contract
-        await tx.contract.create({
+        const contract = await tx.contract.create({
           data: {
             projectId: proposal.projectId,
             freelancerProfileId: proposal.freelancerProfileId,
-            agreedPrice: proposal.proposedPrice,
+            agreedPrice: rawMilestones.length > 0
+              ? rawMilestones.reduce((s: number, m: any) => s + Number(m.amount), 0)
+              : proposal.proposedPrice,
+            status: contractStatus,
+            milestonesModifiedByClient,
           }
         })
 
-        // Notify the accepted freelancer
+        if (rawMilestones.length > 0) {
+          // Create each defined milestone
+          for (let i = 0; i < rawMilestones.length; i++) {
+            const m = rawMilestones[i]
+            await tx.milestone.create({
+              data: {
+                contractId: contract.id,
+                order: i,
+                title: m.title,
+                description: m.description || null,
+                amount: Number(m.amount),
+                dueDate: m.dueDate ? new Date(m.dueDate) : null,
+                status: 'PENDING',
+                allowedRevisions: m.allowedRevisions !== undefined ? Number(m.allowedRevisions) : agreedRevisionLimit,
+                attachments: [],
+              }
+            })
+          }
+        } else {
+          // No milestones defined by either party — create a single default deliverable
+          // covering the full agreed price so the contract is immediately actionable.
+          await tx.milestone.create({
+            data: {
+              contractId: contract.id,
+              order: 0,
+              title: 'Full Project Deliverable',
+              description: 'Complete the project as described in the proposal and deliver all agreed-upon work.',
+              amount: proposal.proposedPrice,
+              status: 'PENDING',
+              allowedRevisions: agreedRevisionLimit,
+              attachments: [],
+            }
+          })
+        }
+
+        const notificationTitle = milestonesModifiedByClient 
+          ? '🎁 You have a new contract offer!' 
+          : '🎉 Your Proposal Was Accepted!'
+        const notificationBody = milestonesModifiedByClient
+          ? `Client hired you for "${proposal.project.title}" but modified the milestones. Review and approve to start work.`
+          : rawMilestones.length === 0
+            ? `Congratulations! Your proposal for "${proposal.project.title}" was accepted. Work can begin immediately.`
+            : `Congratulations! Your proposal for "${proposal.project.title}" was accepted. A contract has been created.`
+
         await tx.notification.create({
           data: {
             userId: proposal.freelancerProfile.userId,
             type: 'PROPOSAL_ACCEPTED',
-            title: '🎉 Your Proposal Was Accepted!',
-            body: `Congratulations! Your proposal for "${proposal.project.title}" was accepted. A contract has been created.`,
-            link: `/freelancer/proposals`,
+            title: notificationTitle,
+            body: notificationBody,
+            link: `/freelancer/contracts/${contract.id}`,
           }
         })
       })
@@ -491,7 +614,7 @@ export const withdrawProposal = async (req: Request, res: Response) => {
 
     const proposal = await prisma.proposal.findFirst({
       where: { id: req.params.id, freelancerProfileId: freelancerProfile.id },
-      include: { project: { select: { title: true } } }
+      include: { project: { select: { title: true, clientProfile: { select: { userId: true } } } } }
     })
 
     if (!proposal) {
@@ -536,6 +659,19 @@ export const withdrawProposal = async (req: Request, res: Response) => {
         where: { id: proposal.projectId },
         data: { proposalCount: { decrement: 1 } }
       })
+
+      // Notify the client
+      if (proposal.project.clientProfile?.userId) {
+        await tx.notification.create({
+          data: {
+            userId: proposal.project.clientProfile.userId,
+            type: 'SYSTEM_ALERT',
+            title: 'Proposal Withdrawn',
+            body: `A freelancer has withdrawn their proposal for "${(proposal as any).project?.title || 'the project'}".`,
+            link: `/client/projects/${proposal.projectId}/proposals`,
+          }
+        })
+      }
     })
 
     return res.status(200).json({
@@ -547,6 +683,179 @@ export const withdrawProposal = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Withdraw proposal error:', error)
+    return res.status(500).json({ success: false, message: 'Internal server error.' })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PROPOSE MILESTONE CHANGES (Client)
+// POST /api/proposals/:proposalId/negotiate
+// ─────────────────────────────────────────────────────────────
+export const proposeMilestoneChanges = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).user?.userId
+    const id = req.params.id as string
+    const { milestones } = req.body
+
+    const proposal = await prisma.proposal.findUnique({
+      where: { id },
+      include: {
+        project: {
+          include: { clientProfile: { select: { userId: true } } }
+        }
+      }
+    })
+
+    if (!proposal || (proposal as any).project?.clientProfile?.userId !== userId) {
+      return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
+    }
+
+    await prisma.proposal.update({
+      where: { id },
+      data: {
+        clientRequestedMilestones: milestones,
+        negotiationStatus: 'CLIENT_PROPOSED'
+      }
+    })
+
+    // I need to fetch the freelancer's userId first.
+    
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { id: proposal.freelancerProfileId },
+      select: { userId: true }
+    })
+
+    if (freelancer) {
+      await prisma.notification.create({
+        data: {
+          userId: freelancer.userId,
+          type: 'SYSTEM_ALERT',
+          title: '🤝 Milestone Changes Proposed',
+          body: `Client has proposed changes to your milestone plan for "${(proposal as any).project?.title || 'the project'}". Please review and accept to move forward.`,
+          link: `/freelancer/proposals/${id}`,
+        }
+      })
+    }
+
+    return res.status(200).json({ success: true, message: 'Changes proposed to freelancer.' })
+  } catch (error) {
+    console.error('Propose changes error:', error)
+    return res.status(500).json({ success: false, message: 'Internal server error.' })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ACCEPT MILESTONE / REVISION CHANGES (Freelancer)
+// POST /api/proposals/:proposalId/accept-changes
+// ─────────────────────────────────────────────────────────────
+export const acceptMilestoneChanges = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).user?.userId
+    const id = req.params.id as string
+
+    const proposal = await prisma.proposal.findUnique({
+      where: { id },
+      include: {
+        freelancerProfile: { select: { userId: true } },
+        project: { include: { clientProfile: { select: { userId: true } } } }
+      }
+    })
+
+    if (!proposal || (proposal as any).freelancerProfile?.userId !== userId) {
+      return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
+    }
+
+    const isRevisionOnly = (proposal as any).negotiationStatus === 'CLIENT_PROPOSED_REVISIONS'
+
+    await prisma.proposal.update({
+      where: { id },
+      data: { negotiationStatus: 'FREELANCER_ACCEPTED' }
+    })
+
+    const notificationTitle = isRevisionOnly
+      ? '✅ Revision Request Accepted!'
+      : '✅ Milestone Changes Accepted!'
+    const notificationBody = isRevisionOnly
+      ? `Freelancer accepted your revision request for "${(proposal as any).project?.title || 'the project'}". You can now hire them.`
+      : `Freelancer has accepted your proposed milestone plan for "${(proposal as any).project?.title || 'the project'}". You can now finalize the hire.`
+
+    // Notify client
+    await prisma.notification.create({
+      data: {
+        userId: (proposal as any).project?.clientProfile?.userId,
+        type: 'SYSTEM_ALERT',
+        title: notificationTitle,
+        body: notificationBody,
+        link: `/client/projects/${proposal.projectId}/proposals`,
+      }
+    })
+
+    return res.status(200).json({ success: true, message: 'Changes accepted. Client has been notified.' })
+  } catch (error) {
+    console.error('Accept changes error:', error)
+    return res.status(500).json({ success: false, message: 'Internal server error.' })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// REQUEST REVISION CHANGES (Client — revisions only, no milestones)
+// POST /api/proposals/:id/request-revisions
+// ─────────────────────────────────────────────────────────────
+export const requestRevisionChanges = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).user?.userId
+    const id = req.params.id as string
+    const { requestedRevisions } = req.body
+
+    if (requestedRevisions == null || Number(requestedRevisions) < -1) {
+      return res.status(400).json({ success: false, message: 'requestedRevisions is required.' })
+    }
+
+    const proposal = await prisma.proposal.findUnique({
+      where: { id },
+      include: {
+        project: { include: { clientProfile: { select: { userId: true } } } }
+      }
+    })
+
+    if (!proposal || (proposal as any).project?.clientProfile?.userId !== userId) {
+      return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
+    }
+
+    if (!['PENDING', 'SHORTLISTED'].includes(proposal.status)) {
+      return res.status(400).json({ success: false, message: 'Can only negotiate on pending or shortlisted proposals.' })
+    }
+
+    await prisma.proposal.update({
+      where: { id },
+      data: {
+        clientRequestedRevisions: Number(requestedRevisions),
+        negotiationStatus: 'CLIENT_PROPOSED_REVISIONS',
+      } as any
+    })
+
+    // Notify freelancer
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { id: proposal.freelancerProfileId },
+      select: { userId: true }
+    })
+
+    if (freelancer) {
+      const revLabel = Number(requestedRevisions) === -1 ? 'unlimited' : String(requestedRevisions)
+      await prisma.notification.create({
+        data: {
+          userId: freelancer.userId,
+          type: 'SYSTEM_ALERT',
+          title: '🔄 Revision Request from Client',
+          body: `Client has requested ${revLabel} revisions for "${(proposal as any).project?.title || 'the project'}". Review and accept to proceed.`,
+          link: `/freelancer/proposals`,
+        }
+      })
+    }
+
+    return res.status(200).json({ success: true, message: 'Revision request sent to freelancer.' })
+  } catch (error) {
+    console.error('Request revision changes error:', error)
     return res.status(500).json({ success: false, message: 'Internal server error.' })
   }
 }

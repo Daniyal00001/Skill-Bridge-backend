@@ -1,0 +1,219 @@
+%============================================================
+%  SkillBridge – Final Year Project Documentation
+%  Master File: main.tex
+%  Compile with: pdflatex → biber → pdflatex → pdflatex
+%============================================================
+
+\documentclass[12pt, a4paper, oneside]{report}
+
+%------------------------------------------------------------
+% PACKAGES
+%------------------------------------------------------------
+\usepackage[top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\setlength{\headheight}{14.5pt}   % fix fancyhdr headheight warning
+\usepackage{graphicx}
+\usepackage[hidelinks, colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black, urlcolor=blue]{hyperref}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{setspace}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tocloft}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{pdfpages}
+\usepackage[nottoc]{tocbibind}
+\usepackage[numbers,sort&compress]{natbib}
+
+%------------------------------------------------------------
+% COLOURS
+%------------------------------------------------------------
+\definecolor{primaryblue}{RGB}{37, 99, 235}
+\definecolor{darkgray}{RGB}{55, 65, 81}
+\definecolor{lightgray}{RGB}{243, 244, 246}
+\definecolor{codebg}{RGB}{248, 250, 252}
+\definecolor{codegreen}{RGB}{22, 163, 74}
+\definecolor{codepurple}{RGB}{124, 58, 237}
+\definecolor{codeorange}{RGB}{234, 88, 12}
+\definecolor{codeblue}{RGB}{37, 99, 235}
+
+%------------------------------------------------------------
+% CODE LISTINGS SETUP
+%------------------------------------------------------------
+\lstdefinelanguage{TypeScript}{
+  keywords={
+    break, case, catch, continue, debugger, default, delete, do, else,
+    finally, for, function, if, in, instanceof, new, return, switch,
+    this, throw, try, typeof, var, void, while, with, const, let,
+    class, enum, extends, super, export, import, null, true, false,
+    interface, type, async, await, from, of, static, public, private,
+    protected, readonly, implements, abstract
+  },
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]",
+  morestring=[b]',
+  morestring=[b]`
+}
+
+\lstdefinestyle{codeStyle}{
+  backgroundcolor=\color{codebg},
+  commentstyle=\color{codegreen}\itshape,
+  keywordstyle=\color{codeblue}\bfseries,
+  numberstyle=\tiny\color{darkgray},
+  stringstyle=\color{codeorange},
+  basicstyle=\ttfamily\footnotesize,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=left,
+  numbersep=8pt,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=2,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{lightgray},
+  xleftmargin=12pt,
+  xrightmargin=4pt
+}
+
+\lstset{style=codeStyle}
+
+%------------------------------------------------------------
+% PAGE STYLE
+%------------------------------------------------------------
+\onehalfspacing
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\nouppercase{\leftmark}}
+\fancyhead[R]{\textit{SkillBridge}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+%------------------------------------------------------------
+% CHAPTER & SECTION FORMATTING
+%------------------------------------------------------------
+\titleformat{\chapter}[display]
+  {\normalfont\Huge\bfseries\color{primaryblue}}
+  {\chaptertitlename\ \thechapter}{18pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{40pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{darkgray}}
+  {\thesection}{1em}{}
+
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}
+  {\thesubsection}{1em}{}
+
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries}
+  {\thesubsubsection}{1em}{}
+
+%------------------------------------------------------------
+% TABLE OF CONTENTS FORMATTING
+%------------------------------------------------------------
+\renewcommand{\cftchapleader}{\cftdotfill{\cftdotsep}}
+\setlength{\cftchapindent}{0em}
+\setlength{\cftsecindent}{1.5em}
+
+%------------------------------------------------------------
+% CUSTOM COMMANDS
+%------------------------------------------------------------
+\newcommand{\projectname}{SkillBridge}
+\newcommand{\university}{[University Name]}
+\newcommand{\department}{Department of Computer Science}
+\newcommand{\supervisor}{[Supervisor Name]}
+\newcommand{\authorA}{[Author 1 Name]}
+\newcommand{\authorB}{[Author 2 Name]}
+\newcommand{\academicyear}{2024--2025}
+
+%------------------------------------------------------------
+% DOCUMENT BEGIN
+%------------------------------------------------------------
+\begin{document}
+
+%------------------------------------------------------------
+%  FRONT MATTER
+%------------------------------------------------------------
+\pagenumbering{roman}
+
+% ── Title Page ──────────────────────────────────────────
+\input{chapters/00_titlepage}
+
+% ── Declaration ─────────────────────────────────────────
+\input{chapters/00_declaration}
+
+% ── Abstract ──────────────────────────────────────────
+\input{chapters/00_abstract}
+
+% ── Acknowledgements ──────────────────────────────────
+\input{chapters/00_acknowledgements}
+
+% ── Table of Contents ─────────────────────────────────
+\tableofcontents
+\newpage
+
+% ── List of Figures ───────────────────────────────────
+\listoffigures
+\newpage
+
+% ── List of Tables ────────────────────────────────────
+\listoftables
+\newpage
+
+% ── Abbreviations ─────────────────────────────────────
+\input{chapters/00_abbreviations}
+
+%------------------------------------------------------------
+%  MAIN MATTER
+%------------------------------------------------------------
+\pagenumbering{arabic}
+\pagestyle{fancy}
+
+\input{chapters/01_introduction}
+\input{chapters/02_literature_review}
+\input{chapters/03_requirements}
+\input{chapters/04_architecture}
+\input{chapters/05_database_design}
+\input{chapters/06_backend_implementation}
+\input{chapters/07_frontend_implementation}
+\input{chapters/08_skilltokens}
+\input{chapters/09_ai_integration}
+\input{chapters/10_security}
+\input{chapters/11_testing}
+\input{chapters/12_conclusion}
+
+%------------------------------------------------------------
+%  BIBLIOGRAPHY
+%------------------------------------------------------------
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+%------------------------------------------------------------
+%  APPENDICES
+%------------------------------------------------------------
+\appendix
+\input{appendices/api_reference}
+\input{appendices/environment_variables}
+\input{appendices/schema_reference}
+
+\end{document}

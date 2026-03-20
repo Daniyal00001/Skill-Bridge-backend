@@ -1,0 +1,86 @@
+%============================================================
+%  Appendix C – Database Schema Quick Reference
+%============================================================
+\chapter{Database Schema Quick Reference}
+\label{app:schema}
+
+This appendix provides a concise tabular reference for every model in the \projectname{} Prisma schema (\texttt{prisma/schema.prisma}).
+
+\begin{table}[H]
+\centering
+\caption{All Database Models Summary}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Model} & \textbf{Collection} & \textbf{Primary Purpose} \\
+\midrule
+User              & users               & Unified auth entity for all roles. \\
+Session           & sessions            & Refresh token server-side storage. \\
+ClientProfile     & client\_profiles    & Client-specific profile data. \\
+FreelancerProfile & freelancer\_profiles & Freelancer-specific profile data. \\
+AdminProfile      & admin\_profiles     & Admin account metadata. \\
+Project           & projects            & Client project listings. \\
+ProjectSkill      & project\_skills     & Many-to-many: Project $\leftrightarrow$ Skill. \\
+Proposal          & proposals           & Freelancer bids on projects. \\
+Contract          & contracts           & Active agreements from accepted proposals. \\
+Milestone         & milestones          & Deliverable checkpoints within contracts. \\
+Payment           & payments            & Payment/escrow status per milestone. \\
+Dispute           & disputes            & Contract dispute records. \\
+Review            & reviews             & Blind post-contract reviews. \\
+ChatRoom          & chat\_rooms         & Messaging rooms per contract or pre-contract. \\
+Message           & messages            & Individual chat messages. \\
+Notification      & notifications       & In-app notification feed. \\
+Skill             & skills              & Global skills catalogue. \\
+FreelancerSkill   & freelancer\_skills  & Many-to-many: Freelancer $\leftrightarrow$ Skill. \\
+PortfolioItem     & portfolio\_items    & Freelancer past work showcase. \\
+Certificate       & certificates        & Freelancer professional credentials. \\
+Education         & education           & Freelancer education history. \\
+Gig               & gigs                & Freelancer pre-packaged services. \\
+Category          & categories          & Project category taxonomy. \\
+SubCategory       & sub\_categories     & Project sub-category taxonomy. \\
+Invitation        & invitations         & Client-to-freelancer project invitations. \\
+TokenTransaction  & token\_transactions & Immutable SkillToken ledger. \\
+AiScopingSession  & ai\_scoping\_sessions & Stored AI assistant conversations. \\
+SavedProject      & saved\_projects     & Freelancer project bookmarks. \\
+BrowseInteraction & browse\_interactions & Browsing analytics for personalisation. \\
+AdminLog          & admin\_logs         & Immutable admin action audit trail. \\
+PlatformSetting   & platform\_settings  & Global key-value configuration. \\
+PasswordResetToken & (embedded)         & Secure password reset tokens. \\
+\bottomrule
+\end{tabularx}
+\label{tab:schema_summary}
+\end{table}
+
+\section*{Key Relationships Diagram (Text)}
+
+\begin{lstlisting}[caption={Core Model Relationship Summary}]
+User (1)--(1) ClientProfile
+     (1)--(1) FreelancerProfile
+     (1)--(1) AdminProfile
+     (1)--(*) Session
+     (1)--(*) Notification
+
+ClientProfile (1)--(*) Project
+              (1)--(*) Invitation
+
+FreelancerProfile (1)--(*) Proposal
+                  (1)--(*) FreelancerSkill--(*) Skill
+                  (1)--(*) PortfolioItem
+                  (1)--(*) Certificate
+                  (1)--(*) Education
+                  (1)--(*) Gig
+                  (1)--(*) TokenTransaction
+
+Project (1)--(*) Proposal
+        (1)--(1) Contract
+        (1)--(*) ProjectSkill--(*) Skill
+        (1)--(*) Invitation
+
+Contract (1)--(*) Milestone
+         (1)--(*) Payment
+         (1)--(1) ChatRoom
+         (1)--(1) Dispute
+
+Milestone (1)--(1) Payment
+
+ChatRoom (1)--(*) Message
+\end{lstlisting}

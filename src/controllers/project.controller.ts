@@ -330,6 +330,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
           category: true,
           languageObj: true,
           locationObj: true,
+          _count: { select: { proposals: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -380,7 +381,9 @@ export const getMyProjects = async (req: Request, res: Response) => {
       },
       include: {
         skills: { include: { skill: true } },
-        proposals: { select: { id: true } }
+        proposals: { select: { id: true } },
+        contract: { select: { id: true } },
+        _count: { select: { proposals: true } }
       },
       orderBy: { createdAt: 'desc' }
     })
@@ -414,7 +417,8 @@ export const getProjectById = async (req: Request, res: Response) => {
         category: true,
         subCategory: true,
         languageObj: true,
-        locationObj: true
+        locationObj: true,
+        _count: { select: { proposals: true } }
       }
     })
 
@@ -422,11 +426,13 @@ export const getProjectById = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Project not found.' })
     }
 
-    // Increment view count
-    await prisma.project.update({
-      where: { id },
-      data: { viewCount: { increment: 1 } }
-    })
+    // Increment view count only if viewer is freelancer
+    if (req.user?.role === 'FREELANCER') {
+      await prisma.project.update({
+        where: { id },
+        data: { viewCount: { increment: 1 } }
+      })
+    }
 
     return res.status(200).json({ success: true, project })
 
@@ -442,18 +448,26 @@ export const getProjectById = async (req: Request, res: Response) => {
 // DELETE /api/projects/:id
 // ─────────────────────────────────────────────────────────────
 export const deleteProject = async (req: Request, res: Response) => {
-  console.log("delete project route called")
+  console.log("soft delete project route called")
   try {
     const userId = req.user?.userId
     const id = req.params.id as string
 
     const clientProfile = await prisma.clientProfile.findUnique({ where: { userId } })
-
     if (!clientProfile) {
       return res.status(404).json({ success: false, message: 'Client profile not found.' })
     }
 
-    const project = await prisma.project.findUnique({ where: { id } })
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: {
+        proposals: {
+          include: {
+            freelancerProfile: true
+          }
+        }
+      }
+    })
 
     if (!project) {
       return res.status(404).json({ success: false, message: 'Project not found.' })
@@ -463,19 +477,75 @@ export const deleteProject = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Not authorized.' })
     }
 
+    // Allow cancellation for DRAFT and OPEN projects. 
+    // If it's OPEN, we need to refund tokens.
     if (!['DRAFT', 'OPEN'].includes(project.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot delete a project that is already in progress.'
+        message: 'Cannot cancel a project that is already in progress or completed.'
       })
     }
 
-    await prisma.project.delete({ where: { id } })
+    // Use a transaction for atomic update, refunds, and notifications
+    await prisma.$transaction(async (tx) => {
+      // 1. Update project status to CANCELLED
+      await tx.project.update({
+        where: { id },
+        data: { status: 'CANCELLED' }
+      })
 
-    return res.status(200).json({ success: true, message: 'Project deleted successfully.' })
+      // 1.1 Update all proposals of this project to CANCELLED
+      await tx.proposal.updateMany({
+        where: { projectId: id },
+        data: { status: 'CANCELLED' as any }
+      })
+
+      // 2. Process refunds and notifications for active proposals
+      for (const proposal of project.proposals) {
+        // Only refund for non-withdrawn/rejected if we want, but usually on cancellation everyone gets back tokens
+        if (proposal.tokenCost > 0) {
+          const newBalance = proposal.freelancerProfile.skillTokenBalance + proposal.tokenCost
+          
+          // Increment freelancer balance
+          await tx.freelancerProfile.update({
+            where: { id: proposal.freelancerProfileId },
+            data: { skillTokenBalance: newBalance }
+          })
+
+          // Create token transaction record
+          await tx.tokenTransaction.create({
+            data: {
+              freelancerProfileId: proposal.freelancerProfileId,
+              type: 'CREDIT',
+              reason: 'PROJECT_CANCELLED' as any, // casting because of potential delay in prisma-client regeneration
+              amount: proposal.tokenCost,
+              balanceAfter: newBalance,
+              description: `Refund for cancelled project: ${project.title}`,
+              relatedProposalId: proposal.id
+            }
+          })
+        }
+
+        // Create notification for bidder
+        await tx.notification.create({
+          data: {
+            userId: proposal.freelancerProfile.userId,
+            type: 'SYSTEM_ALERT',
+            title: 'Project Cancelled',
+            body: `The project "${project.title}" has been cancelled by the client. Your spent skill tokens have been refunded.`,
+            link: `/freelancer/proposals`
+          }
+        })
+      }
+    })
+
+    return res.status(200).json({
+      success: true,
+      message: 'Project cancelled successfully. Bidders have been notified and refunded.'
+    })
 
   } catch (error) {
-    console.error('Delete project error:', error)
+    console.error('Delete (Cancel) project error:', error)
     return res.status(500).json({ success: false, message: 'Internal server error.' })
   }
 }

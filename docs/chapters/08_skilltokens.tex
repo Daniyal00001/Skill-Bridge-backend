@@ -1,0 +1,101 @@
+%============================================================
+%  Chapter 8 – SkillToken Economy
+%============================================================
+\chapter{SkillToken Economy}
+
+\section{Overview}
+
+The \textbf{SkillToken} is an internal virtual currency native to the \projectname{} platform. It was designed to solve a critical quality problem that plagues open bidding marketplaces: the proliferation of low-effort, mass-submitted proposals. By making proposal submission non-free (but not monetarily costly), the system creates a credible signal of freelancer intent and filters out disengaged bidders.
+
+\section{Design Rationale}
+
+\begin{itemize}
+  \item \textbf{Cost without money}: SkillTokens are earned through participation and cannot be purchased with real money. This prevents Pay-to-Win dynamics while still creating scarcity.
+  \item \textbf{Reversibility}: Withdrawing a pending proposal refunds the tokens, so a freelancer who changes their mind is not penalised.
+  \item \textbf{Progressive cost}: Token cost scales with project budget — larger, higher-value projects cost more tokens to bid on, ensuring freelancers are selective.
+  \item \textbf{Reward for activity}: Monthly token awards incentivise platform engagement and profile maintenance.
+\end{itemize}
+
+\section{Token Events}
+
+\begin{table}[H]
+\centering
+\caption{SkillToken Ledger Events}
+\begin{tabularx}{\textwidth}{llllX}
+\toprule
+\textbf{Event} & \textbf{Type} & \textbf{Reason Enum} & \textbf{Amount} & \textbf{Trigger} \\
+\midrule
+Registration      & CREDIT & \texttt{REGISTRATION\_BONUS}    & 50   & New freelancer account created. \\
+Submit proposal   & DEBIT  & \texttt{PROPOSAL\_SUBMITTED}    & Varies & Proposal submitted to a project. \\
+Withdraw proposal & CREDIT & \texttt{PROPOSAL\_WITHDRAWN}    & Varies & Pending proposal withdrawn. \\
+Monthly award     & CREDIT & \texttt{MONTHLY\_AWARD}         & 20   & Cron job (last day of month). \\
+Admin grant       & CREDIT & \texttt{ADMIN\_GRANT}           & Any  & Admin manually grants tokens. \\
+Admin deduct      & DEBIT  & \texttt{ADMIN\_DEDUCT}          & Any  & Admin manually deducts tokens. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Token Cost Calculation}
+
+The \texttt{tokenCalculator.ts} utility determines the proposal cost based on the project's budget:
+
+\begin{lstlisting}[language=TypeScript, caption={Token Cost Calculation Logic}]
+export function calculateTokenCost(projectBudget: number): number {
+  if (projectBudget < 100)   return 2;
+  if (projectBudget < 500)   return 5;
+  if (projectBudget < 2000)  return 10;
+  if (projectBudget < 10000) return 20;
+  return 30; // Premium projects
+}
+\end{lstlisting}
+
+This tiered structure ensures that a freelancer proposing on a \$50 micro-project pays 2 tokens, while a proposal on a \$15,000 enterprise project costs 30 tokens, proportional to the value at stake.
+
+\section{Token Ledger Model}
+
+Every token movement is recorded as an immutable \texttt{TokenTransaction} document:
+
+\begin{table}[H]
+\centering
+\caption{TokenTransaction Fields}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{id}                  & ObjectId               & Primary key. \\
+\texttt{freelancerProfileId} & ObjectId               & Links to the freelancer's profile. \\
+\texttt{type}                & TokenWalletTxType      & \texttt{CREDIT} or \texttt{DEBIT}. \\
+\texttt{reason}              & TokenTxReason          & Reason enum (6 values). \\
+\texttt{amount}              & Int                    & Always positive; direction determined by \texttt{type}. \\
+\texttt{balanceAfter}        & Int                    & Running balance snapshot after this transaction. \\
+\texttt{description}         & String?                & Human-readable note (e.g., project title). \\
+\texttt{relatedProposalId}   & ObjectId?              & Linked if reason is proposal-related. \\
+\texttt{createdAt}           & DateTime               & Immutable timestamp. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The \texttt{balanceAfter} field enables both fast current-balance lookup (read the most recent transaction) and full historical reconstruction without summing all rows.
+
+\section{Frontend Token Page}
+
+The \texttt{FreelancerTokens.tsx} page provides:
+
+\begin{itemize}
+  \item A prominent \textbf{balance card} showing the current token balance.
+  \item An \textbf{information section} explaining the token economy (how to earn, how to spend, and the cost tiers).
+  \item A \textbf{transaction history table} showing all credits and debits, sorted by most recent, with colour-coded amounts (green for credit, red for debit).
+  \item A breakdown of the token cost by proposal value tier.
+\end{itemize}
+
+\section{Admin Token Controls}
+
+Admins can grant or deduct tokens from any freelancer via the User Management panel. This provides an escape hatch for:
+
+\begin{itemize}
+  \item Compensating freelancers affected by platform errors.
+  \item Penalising accounts that abused the system.
+  \item Promotional campaigns.
+\end{itemize}
+
+All admin token operations generate the corresponding \texttt{ADMIN\_GRANT} or \texttt{ADMIN\_DEDUCT} \texttt{TokenTransaction} and are also logged in \texttt{AdminLog} for audit purposes.

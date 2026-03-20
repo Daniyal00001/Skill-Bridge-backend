@@ -1,0 +1,167 @@
+%============================================================
+%  Chapter 5 – Database Design
+%============================================================
+\chapter{Database Design}
+
+\section{Overview}
+
+\projectname{} uses \textbf{MongoDB} as the underlying database, accessed through the \textbf{Prisma ORM} (version 6.x). MongoDB's document model was chosen for its schema flexibility, horizontal scalability, and native JSON compatibility with Node.js. Prisma provides a type-safe, auto-generated client and a declarative schema language that makes the data model self-documenting.
+
+The complete schema is defined in \texttt{prisma/schema.prisma} and comprises approximately \textbf{25 models} and \textbf{12 enumerations}. All primary keys are MongoDB ObjectIds mapped to Prisma's \texttt{@db.ObjectId} type.
+
+\section{Enumeration Types}
+
+The schema defines the following enumerations to enforce valid state values across models:
+
+\begin{table}[H]
+\centering
+\caption{Database Enumeration Types}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Enum} & \textbf{Values} \\
+\midrule
+\texttt{Role}               & \texttt{CLIENT}, \texttt{FREELANCER}, \texttt{ADMIN} \\
+\texttt{ProjectStatus}      & \texttt{DRAFT}, \texttt{OPEN}, \texttt{IN\_PROGRESS}, \texttt{UNDER\_REVIEW}, \texttt{REVISION\_REQUESTED}, \texttt{COMPLETED}, \texttt{CANCELLED}, \texttt{DISPUTED} \\
+\texttt{ProjectSize}        & \texttt{SMALL}, \texttt{MEDIUM}, \texttt{LARGE} \\
+\texttt{ProposalStatus}     & \texttt{PENDING}, \texttt{SHORTLISTED}, \texttt{ACCEPTED}, \texttt{REJECTED}, \texttt{WITHDRAWN} \\
+\texttt{ContractStatus}     & \texttt{ACTIVE}, \texttt{COMPLETED}, \texttt{CANCELLED}, \texttt{DISPUTED} \\
+\texttt{MilestoneStatus}    & \texttt{PENDING}, \texttt{IN\_PROGRESS}, \texttt{SUBMITTED}, \texttt{APPROVED}, \texttt{REJECTED} \\
+\texttt{PaymentStatus}      & \texttt{PENDING}, \texttt{HELD\_IN\_ESCROW}, \texttt{RELEASED}, \texttt{REFUNDED}, \texttt{FAILED} \\
+\texttt{DisputeStatus}      & \texttt{OPEN}, \texttt{UNDER\_REVIEW}, \texttt{RESOLVED}, \texttt{CLOSED} \\
+\texttt{DisputeResolution}  & \texttt{FAVOR\_CLIENT}, \texttt{FAVOR\_FREELANCER}, \texttt{SPLIT}, \texttt{DISMISSED} \\
+\texttt{TokenWalletTxType}  & \texttt{CREDIT}, \texttt{DEBIT} \\
+\texttt{TokenTxReason}      & \texttt{REGISTRATION\_BONUS}, \texttt{MONTHLY\_AWARD}, \texttt{PROPOSAL\_SUBMITTED}, \texttt{PROPOSAL\_WITHDRAWN}, \texttt{ADMIN\_GRANT}, \texttt{ADMIN\_DEDUCT} \\
+\texttt{ExperienceLevel}    & \texttt{ENTRY}, \texttt{MID}, \texttt{SENIOR}, \texttt{EXPERT} \\
+\texttt{AvailabilityStatus} & \texttt{AVAILABLE}, \texttt{BUSY}, \texttt{UNAVAILABLE} \\
+\texttt{InvitationStatus}   & \texttt{PENDING}, \texttt{ACCEPTED}, \texttt{REJECTED}, \texttt{EXPIRED} \\
+\texttt{MessageType}        & \texttt{TEXT}, \texttt{FILE}, \texttt{SYSTEM} \\
+\texttt{NotificationType}   & \texttt{PROPOSAL\_RECEIVED}, \texttt{PROPOSAL\_ACCEPTED}, \texttt{PAYMENT\_RELEASED}, \texttt{TOKEN\_CREDITED}, and others (16 total) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Core Data Models}
+
+\subsection{User}
+
+The \texttt{User} model is the unified authentication entity. A single \texttt{users} collection stores all account types; the \texttt{role} field determines whether the user is a Client, Freelancer, or Admin, and controls which sub-profile document is created.
+
+\begin{table}[H]
+\centering
+\caption{User Model Fields}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Field} & \textbf{Type} & \textbf{Description} \\
+\midrule
+\texttt{id}               & ObjectId & Primary key. \\
+\texttt{name}             & String   & Display name. \\
+\texttt{email}            & String   & Unique email address. \\
+\texttt{passwordHash}     & String?  & Bcrypt hash; null for OAuth-only accounts. \\
+\texttt{googleId}         & String?  & Google OAuth sub (subject) identifier. \\
+\texttt{role}             & Role?    & CLIENT, FREELANCER, or ADMIN. \\
+\texttt{isEmailVerified}  & Boolean  & True after OTP verification. \\
+\texttt{isIdVerified}     & Boolean  & True after admin verifies the uploaded ID. \\
+\texttt{idDocumentUrl}    & String?  & Cloudinary URL of the uploaded identity document. \\
+\texttt{isBanned}         & Boolean  & Set by admin; blocks login. \\
+\texttt{profileImage}     & String?  & Cloudinary URL of avatar. \\
+\texttt{createdAt}        & DateTime & Account creation timestamp. \\
+\texttt{lastActiveAt}     & DateTime? & Used by the browse scoring algorithm. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Session}
+
+The \texttt{Session} model stores issued refresh tokens, enabling server-side revocation and preventing token reuse attacks.
+
+\subsection{ClientProfile and FreelancerProfile}
+
+Each role has a dedicated profile document (stored in \texttt{client\_profiles} and \texttt{freelancer\_profiles} collections) linked via a \texttt{userId} foreign reference. This one-to-one relationship keeps the core \texttt{User} document lean while allowing role-specific fields.
+
+Key \texttt{FreelancerProfile} fields include:
+
+\begin{itemize}
+  \item \texttt{skillTokenBalance} — current SkillToken balance.
+  \item \texttt{profileCompletion} — integer 0–100 representing onboarding completeness.
+  \item \texttt{experienceLevel} — \texttt{ExperienceLevel} enum.
+  \item \texttt{availability} — \texttt{AvailabilityStatus} enum.
+  \item \texttt{preferredCategories} — array of category slugs for browse personalisation.
+  \item \texttt{preferredBudgetMin / Max} — browse filter defaults.
+\end{itemize}
+
+\subsection{Project}
+
+The \texttt{Project} model represents a client's work posting. Key design decisions include:
+
+\begin{itemize}
+  \item \texttt{status} follows the \texttt{ProjectStatus} state machine from \texttt{DRAFT} through \texttt{COMPLETED} or \texttt{CANCELLED}.
+  \item \texttt{budgetType} can be \texttt{"fixed"} or \texttt{"hourly"}.
+  \item \texttt{isAiScoped} and \texttt{aiScopeSummary} record whether the OpenAI assistant was used to generate the project spec.
+  \item \texttt{attachments} is a \texttt{String[]} array of Cloudinary URLs.
+\end{itemize}
+
+\subsection{Proposal}
+
+The \texttt{Proposal} model captures a freelancer's bid on a project. The \texttt{tokenCost} field records the SkillTokens deducted at submission. A unique constraint on \texttt{[projectId, freelancerProfileId]} enforces one proposal per freelancer per project.
+
+\subsection{Contract, Milestone, and Payment}
+
+Once a proposal is accepted, a \texttt{Contract} document is created. Each contract has an array of \texttt{Milestone} sub-documents representing deliverable checkpoints. Each milestone has an associated \texttt{Payment} document tracking the escrow and release status. The relationship chain is:
+
+\begin{center}
+\texttt{Project} $\rightarrow$ \texttt{Contract} $\rightarrow$ \texttt{Milestone[]} $\rightarrow$ \texttt{Payment}
+\end{center}
+
+\subsection{Dispute}
+
+The \texttt{Dispute} model links a project to the client, freelancer, and optionally an admin. The \texttt{resolution} field uses the \texttt{DisputeResolution} enum to record the outcome (\texttt{FAVOR\_CLIENT}, \texttt{FAVOR\_FREELANCER}, \texttt{SPLIT}, or \texttt{DISMISSED}).
+
+\subsection{Review}
+
+The \texttt{Review} model implements the blind review system. The \texttt{isRevealed} boolean (default \texttt{false}) controls visibility. Reviews are revealed when both parties have submitted or a timeout elapses. A unique constraint on \texttt{[contractId, giverId]} prevents duplicate reviews.
+
+\subsection{TokenTransaction}
+
+An immutable ledger of all SkillToken movements. Every row stores the \texttt{amount}, \texttt{type} (CREDIT/DEBIT), \texttt{reason} (from \texttt{TokenTxReason} enum), and a \texttt{balanceAfter} snapshot. The snapshot enables full balance reconstruction and audit trail.
+
+\subsection{Additional Models}
+
+\begin{table}[H]
+\centering
+\caption{Additional Database Models}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Model} & \textbf{Purpose} \\
+\midrule
+\texttt{Skill}            & Global skills catalogue (name, category). \\
+\texttt{FreelancerSkill}  & Many-to-many join: freelancer $\leftrightarrow$ skill (with proficiency 1–5). \\
+\texttt{ProjectSkill}     & Many-to-many join: project $\leftrightarrow$ required skill. \\
+\texttt{PortfolioItem}    & Freelancer's past work showcase items. \\
+\texttt{Certificate}      & Freelancer's professional certificates. \\
+\texttt{Education}        & Freelancer's education history. \\
+\texttt{Gig}              & Freelancer's pre-packaged service offering. \\
+\texttt{Category}         & Project category (e.g., Web Development). \\
+\texttt{SubCategory}      & Project sub-category (e.g., Frontend). \\
+\texttt{Invitation}       & Client-to-freelancer project invitation. \\
+\texttt{ChatRoom}         & One chat room per contract or pre-contract. \\
+\texttt{Message}          & Individual message within a chat room. \\
+\texttt{Notification}     & In-app notification for any event. \\
+\texttt{AdminLog}         & Immutable audit trail of admin actions. \\
+\texttt{PlatformSetting}  & Key-value store for global platform config. \\
+\texttt{PasswordResetToken} & Secure time-limited token for password resets. \\
+\texttt{AiScopingSession} & Stored AI assistant conversation for each scoping interaction. \\
+\texttt{SavedProject}     & Freelancer bookmarks for projects. \\
+\texttt{BrowseInteraction} & Tracks freelancer project views for personalisation. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Database Design Principles}
+
+\begin{enumerate}
+  \item \textbf{Cascade deletes}: All child documents use \texttt{onDelete: Cascade} so that deleting a user removes all associated profiles, projects, proposals, and messages automatically.
+  \item \textbf{Unique constraints}: Applied on email (User), refresh tokens (Session), and join-table composite keys to prevent data duplication.
+  \item \textbf{Immutability for ledgers}: \texttt{TokenTransaction} and \texttt{AdminLog} records are never updated or deleted, ensuring a full audit trail.
+  \item \textbf{Snapshot fields}: \texttt{TokenTransaction.balanceAfter} stores the running balance at transaction time, enabling O(1) current-balance lookup.
+  \item \textbf{Denormalised counters}: \texttt{Project.proposalCount} and \texttt{Project.viewCount} are maintained as denormalised integers for fast read-path performance rather than computing counts via aggregation on every request.
+\end{enumerate}

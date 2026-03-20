@@ -1,0 +1,226 @@
+%============================================================
+%  Chapter 4 – System Architecture and Design
+%============================================================
+\chapter{System Architecture and Design}
+
+\section{Architectural Overview}
+
+\projectname{} follows a \textbf{three-tier client-server architecture} with a clear separation of concerns between the presentation, application logic, and data tiers. The system is designed as a RESTful API backend consumed by a React single-page application frontend.
+
+\begin{figure}[H]
+\centering
+\setlength{\fboxsep}{10pt}
+\fbox{%
+\begin{minipage}{0.85\textwidth}
+\begin{center}
+\textbf{Three-Tier Architecture}\\[0.5cm]
+\begin{tabular}{|c|}
+\hline
+\\
+\textbf{Tier 1 – Presentation Layer} \\
+React + Vite SPA (TypeScript) \\
+React Router, TanStack Query, Shadcn UI \\
+{\small Deployed on user's browser} \\[0.2cm]
+\hline
+\\
+\textbf{Tier 2 – Application Layer} \\
+Node.js + Express.js REST API (TypeScript) \\
+Controllers -- Services -- Utilities \\
+Redis Cache, Nodemailer, Cloudinary, OpenAI \\[0.2cm]
+\hline
+\\
+\textbf{Tier 3 – Data Layer} \\
+MongoDB (document store) + Prisma ORM \\
+Redis (key-value cache and session data) \\[0.2cm]
+\hline
+\end{tabular}
+\end{center}
+\end{minipage}%
+}
+\caption{High-Level Three-Tier Architecture of \projectname{}}
+\label{fig:architecture}
+\end{figure}
+
+\section{Technology Stack}
+
+\subsection{Backend}
+
+\begin{table}[H]
+\centering
+\caption{Backend Technology Stack}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Technology} & \textbf{Version} & \textbf{Purpose} \\
+\midrule
+Node.js    & 20.x  & JavaScript/TypeScript server runtime. \\
+Express.js & 5.x   & HTTP web framework providing routing, middleware, and request handling. \\
+TypeScript & 5.x   & Typed superset of JavaScript providing compile-time safety. \\
+Prisma ORM & 6.x   & Type-safe ORM for database access and schema management. \\
+MongoDB    & 7.x   & NoSQL document database for flexible, scalable data storage. \\
+Redis      & 7.x   & In-memory data store for caching, rate-limiting, and OTP storage. \\
+Cloudinary & 2.x   & Cloud-based image and file storage with CDN delivery. \\
+Nodemailer & 8.x   & SMTP email sending for OTP, password reset, and notifications. \\
+OpenAI     & 6.x   & GPT API integration for the AI project scoping assistant. \\
+Passport.js & 0.7  & Authentication middleware for Google OAuth 2.0. \\
+bcrypt.js  & 3.x   & Password hashing library. \\
+jsonwebtoken & 9.x & JWT signing and verification. \\
+Zod        & 4.x   & Runtime schema validation for request bodies. \\
+Multer     & 2.x   & Multipart form-data middleware for file uploads. \\
+node-cron  & 4.x   & Monthly SkillToken award cron job scheduling. \\
+\bottomrule
+\end{tabularx}
+\label{tab:backend_stack}
+\end{table}
+
+\subsection{Frontend}
+
+\begin{table}[H]
+\centering
+\caption{Frontend Technology Stack}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{Technology} & \textbf{Version} & \textbf{Purpose} \\
+\midrule
+React       & 18.x & Component-based UI framework. \\
+Vite        & 5.x  & Next-generation frontend build tool and dev server. \\
+TypeScript  & 5.x  & Static typing for the frontend codebase. \\
+React Router & 6.x & Client-side routing and navigation. \\
+TanStack Query & 5.x & Server state management, caching, and synchronisation. \\
+Axios       & 1.x  & HTTP client for API communication. \\
+Shadcn/Radix UI & -- & Accessible, composable UI component primitives. \\
+Tailwind CSS & 3.x & Utility-first CSS framework for styling. \\
+Lucide React & -- & Icon library. \\
+React Hook Form & -- & Performant, accessible form management. \\
+\bottomrule
+\end{tabularx}
+\label{tab:frontend_stack}
+\end{table}
+
+\section{Backend Application Structure}
+
+The backend follows a layered architecture within a monorepo structure. The \texttt{src/} directory is organised as follows:
+
+\begin{lstlisting}[caption={Backend Directory Structure}]
+src/
++-- app.ts               # Express app: middleware + route registration
++-- server.ts            # HTTP server bootstrap + port binding
++-- config/              # Configuration modules
+|   +-- cloudinary.ts    # Cloudinary SDK init
+|   +-- passport.ts      # Google OAuth strategy definition
+|   +-- prisma.ts        # Prisma client singleton
+|   \-- redis.ts         # Redis client configuration
++-- controllers/         # Route handler functions (thin layer)
+|   +-- auth.controller.ts
+|   +-- freelancer-onboarding.controller.ts
+|   +-- freelancer.controller.ts
+|   +-- project.controller.ts
+|   +-- proposal.controller.ts
+|   +-- token.controller.ts
+|   +-- tracking.controller.ts
+|   +-- contract.controller.ts
+|   \-- metadata.controller.ts
++-- routes/              # Express Router definitions
+|   +-- auth.routes.ts
+|   +-- freelancer.routes.ts
+|   +-- project.routes.ts
+|   +-- proposal.routes.ts
+|   +-- token.routes.ts
+|   +-- tracking.routes.ts
+|   +-- category.routes.ts
+|   +-- metadata.routes.ts
+|   \-- ai.routes.ts
++-- middlewares/         # Express middleware functions
+|   +-- auth.middleware.ts   # JWT verification
+|   +-- role.ts              # Role-based access guard
+|   +-- upload.middleware.ts # Multer file handling
+|   \-- logger.middleware.ts # Request logging
++-- services/
+|   +-- token.service.ts
+|   \-- tracking.service.ts
++-- modules/
+|   \-- browse/          # Browse and discovery module
++-- utils/
+|   +-- email.ts             # Email templates
+|   +-- jwt.ts               # Token helpers
+|   +-- redis.ts             # Redis wrappers
+|   +-- uploadToCloudinary.ts
+|   +-- profileCompletion.ts
+|   +-- tokenCalculator.ts
+|   \-- validators.ts
+\-- ai/                  # AI assistant module
+\end{lstlisting}
+
+\section{Request Lifecycle}
+
+Every HTTP request to the \projectname{} API follows a deterministic lifecycle:
+
+\begin{enumerate}
+  \item \textbf{CORS Check}: The CORS middleware validates the \texttt{Origin} header against the allowed frontend list.
+  \item \textbf{Body Parsing}: \texttt{express.json()} and \texttt{cookie-parser} decode the request payload and cookies.
+  \item \textbf{Request Logging}: The custom \texttt{requestLogger} middleware records method, path, and response time.
+  \item \textbf{Authentication}: The \texttt{protect} middleware verifies the JWT access token from the request header and attaches the decoded user payload to \texttt{req.user}.
+  \item \textbf{Authorisation}: Role-specific middleware (e.g., \texttt{requireRole('CLIENT')}) checks that the authenticated user has the required role.
+  \item \textbf{Controller}: The matching route handler (controller function) is called. Zod schema validation may occur here.
+  \item \textbf{Service/ORM}: The controller calls Prisma to query or mutate the database, or delegates to a service function.
+  \item \textbf{Response}: The controller sends a JSON response with the appropriate HTTP status code.
+\end{enumerate}
+
+\section{Frontend Application Structure}
+
+The React frontend is organised by feature and role:
+
+\begin{lstlisting}[caption={Frontend Directory Structure}]
+src/
++-- App.tsx              # Root component: providers + routing tree
++-- main.tsx             # Vite entry point
++-- contexts/
+|   +-- AuthContext.tsx  # Global auth state (user, token, logout)
+|   \-- ThemeContext.tsx # Light/dark theme toggle
++-- components/
+|   +-- ProtectedRoute.tsx   # Auth + role guard components
+|   +-- layout/              # Navbar, sidebar, footer
+|   +-- common/              # Shared components (cards, badges)
+|   +-- browse/              # Browse-specific components
+|   +-- client/              # Client-specific components
+|   +-- modals/              # Modal dialogs
+|   \-- ui/                  # Shadcn UI primitives
++-- pages/
+|   +-- LandingPage.tsx
+|   +-- AboutPage.tsx
+|   +-- HowItWorksPage.tsx
+|   +-- auth/               # Login, Signup, OTP, OAuth, Reset
+|   +-- client/             # 14 client-side pages
+|   +-- freelancer/         # 12 freelancer-side pages
+|   +-- admin/              # 6 admin pages
+|   \-- legal/              # Privacy policy, Terms of service
++-- hooks/                  # Custom React hooks
+\-- lib/                    # Utility functions, API client config
+\end{lstlisting}
+
+\section{Routing Architecture}
+
+The frontend uses React Router v6 with a nested route structure implementing three route guard types:
+
+\begin{itemize}
+  \item \textbf{Public Routes}: Accessible without authentication (Landing, About, Login, Signup, etc.).
+  \item \textbf{Guest Routes}: Only accessible when \textit{not} authenticated; redirect logged-in users to their dashboard.
+  \item \textbf{Protected Routes}: Require authentication. Further subdivided by \texttt{RoleRoute} into CLIENT-only, FREELANCER-only, and ADMIN-only sub-trees.
+\end{itemize}
+
+\section{State Management}
+
+\begin{table}[H]
+\centering
+\caption{Frontend State Management Strategy}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{State Type} & \textbf{Mechanism} \\
+\midrule
+Authentication state  & React Context (\texttt{AuthContext}) — persisted in memory + HTTP-only cookie for refresh token. \\
+Server state (API data) & TanStack Query — with automatic caching, refetching, and invalidation. \\
+Form state            & React Hook Form — with Zod schema validation. \\
+Theme preference      & React Context (\texttt{ThemeContext}) — persisted in \texttt{localStorage}. \\
+UI state (modals, etc.) & Local \texttt{useState} within components. \\
+\bottomrule
+\end{tabularx}
+\end{table}
