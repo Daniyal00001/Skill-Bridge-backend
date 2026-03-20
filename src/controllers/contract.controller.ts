@@ -416,7 +416,7 @@ export const submitMilestone = async (req: Request, res: Response) => {
           userId: contract.project.clientProfile.userId,
           type: 'MILESTONE_SUBMITTED',
           title: '📦 Milestone Submitted!',
-          body: `Freelancer has submitted deliverables for "${milestone.title}". Please review and approve.`,
+          body: `Freelancer has submitted deliverables for "${milestone.title}". Please review within 3 days; otherwise, payment will be automatically released.`,
           link: `/client/contracts/${contractId}`,
         }
       })

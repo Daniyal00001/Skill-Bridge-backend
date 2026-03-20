@@ -500,8 +500,8 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
           }
         })
 
-        // Create milestone records only if provided
         if (rawMilestones.length > 0) {
+          // Create each defined milestone
           for (let i = 0; i < rawMilestones.length; i++) {
             const m = rawMilestones[i]
             await tx.milestone.create({
@@ -518,6 +518,21 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
               }
             })
           }
+        } else {
+          // No milestones defined by either party — create a single default deliverable
+          // covering the full agreed price so the contract is immediately actionable.
+          await tx.milestone.create({
+            data: {
+              contractId: contract.id,
+              order: 0,
+              title: 'Full Project Deliverable',
+              description: 'Complete the project as described in the proposal and deliver all agreed-upon work.',
+              amount: proposal.proposedPrice,
+              status: 'PENDING',
+              allowedRevisions: agreedRevisionLimit,
+              attachments: [],
+            }
+          })
         }
 
         const notificationTitle = milestonesModifiedByClient 

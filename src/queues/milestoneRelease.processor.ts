@@ -1,6 +1,6 @@
-import { Worker, Job } from 'bullmq'
+import { Job } from 'bull'
 import { prisma } from '../config/prisma'
-import { redisConnection } from './milestoneRelease.queue'
+import { milestoneReleaseQueue } from './milestoneRelease.queue'
 
 interface AutoReleaseJobData {
   milestoneId: string
@@ -190,24 +190,15 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
  * Call this once at server startup.
  */
 export function initMilestoneReleaseWorker() {
-  const worker = new Worker<AutoReleaseJobData>(
-    'milestone-auto-release',
-    processAutoRelease,
-    {
-      connection: redisConnection,
-      concurrency: 5,
-    }
-  )
+  milestoneReleaseQueue.process(5, processAutoRelease)
 
-  worker.on('completed', (job) => {
+  milestoneReleaseQueue.on('completed', (job, result) => {
     console.log(`✅ Auto-release job ${job.id} completed.`)
   })
 
-  worker.on('failed', (job, err) => {
-    console.error(`❌ Auto-release job ${job?.id} failed:`, err.message)
+  milestoneReleaseQueue.on('failed', (job, err) => {
+    console.error(`❌ Auto-release job ${job.id} failed:`, err.message)
   })
 
-  console.log('🚀 MilestoneRelease Worker initialized (BullMQ)')
-
-  return worker
+  console.log('🚀 MilestoneRelease Worker initialized (Bull)')
 }

@@ -1,14 +1,7 @@
-import { Queue } from 'bullmq'
-import IORedis from 'ioredis'
-
-// ── IORedis connection for BullMQ ─────────────────────────────
-export const redisConnection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-  maxRetriesPerRequest: null, // Required by BullMQ
-})
+import Queue from 'bull'
 
 // ── Queue definition ──────────────────────────────────────────
-export const milestoneReleaseQueue = new Queue('milestone-auto-release', {
-  connection: redisConnection,
+export const milestoneReleaseQueue = new Queue('milestone-auto-release', process.env.REDIS_URL || 'redis://localhost:6379', {
   defaultJobOptions: {
     removeOnComplete: true,
     removeOnFail: 500, // keep last 500 failed jobs for debugging
@@ -31,7 +24,6 @@ export async function scheduleMilestoneAutoRelease(
   delayMs: number = AUTO_RELEASE_DELAY_MS
 ): Promise<void> {
   await milestoneReleaseQueue.add(
-    'auto-release',
     { milestoneId, contractId },
     {
       delay: delayMs,
