@@ -10,6 +10,7 @@ import {
   getProjectTokenCost,
   proposeMilestoneChanges,
   acceptMilestoneChanges,
+  requestRevisionChanges,
 } from '../controllers/proposal.controller'
 
 const router = Router()
@@ -60,7 +61,10 @@ router.patch(
 // Propose milestone changes (Negotiate)
 router.post('/:id/negotiate', protect, requireRole('CLIENT'), proposeMilestoneChanges)
 
-// Accept milestone changes
+// Request revision-only changes (Client — no milestones needed)
+router.post('/:id/request-revisions', protect, requireRole('CLIENT'), requestRevisionChanges)
+
+// Accept milestone/revision changes
 router.post('/:id/accept-changes', protect, requireRole('FREELANCER'), acceptMilestoneChanges)
 
 export default router

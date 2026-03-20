@@ -288,6 +288,7 @@ export const getMyProposals = async (req: Request, res: Response) => {
       clientRequestedMilestones: p.clientRequestedMilestones || null,
       negotiationStatus: p.negotiationStatus || null,
       generalRevisionLimit: p.generalRevisionLimit || null,
+      clientRequestedRevisions: (p as any).clientRequestedRevisions ?? null,
       createdAt: p.submittedAt,
       updatedAt: p.updatedAt,
       contract: p.project.contract,
@@ -365,6 +366,7 @@ export const getProjectProposals = async (req: Request, res: Response) => {
       clientRequestedMilestones: p.clientRequestedMilestones || null,
       negotiationStatus: p.negotiationStatus || null,
       generalRevisionLimit: p.generalRevisionLimit || null,
+      clientRequestedRevisions: (p as any).clientRequestedRevisions ?? null,
       createdAt: p.submittedAt,
       contract: p.project?.contract || null,
       freelancer: {
@@ -445,31 +447,37 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
           data: { status: 'REJECTED' }
         })
 
-        // ── Check if milestones were negotiated or modified ──
+        // ── Determine milestones to use ──
         const { clientMilestones } = req.body
         const proposalMilestones = proposal.proposalMilestones as any[] | null
         const requestedMilestones = proposal.clientRequestedMilestones as any[] | null
         
-        // Priority: 1. Direct body (for backward compat), 2. Negotiated (accepted), 3. Original
         let rawMilestones: any[] = []
         let milestonesModifiedByClient = false
 
         if (clientMilestones) {
           rawMilestones = typeof clientMilestones === 'string' ? JSON.parse(clientMilestones) : clientMilestones
           milestonesModifiedByClient = true 
-        } else if (proposal.negotiationStatus === 'FREELANCER_ACCEPTED' && requestedMilestones) {
+        } else if (proposal.negotiationStatus === 'FREELANCER_ACCEPTED' && requestedMilestones && requestedMilestones.length > 0) {
+          // Freelancer accepted client's milestone proposal
           rawMilestones = requestedMilestones
-          milestonesModifiedByClient = false // It's accepted, so it becomes the ACTIVE plan
+          milestonesModifiedByClient = false
         } else {
+          // Use freelancer's original milestones (if any) — milestones are optional now
           rawMilestones = proposalMilestones || []
         }
 
-        // If it was proposed but NOT yet accepted, it's still an OFFER_PENDING situation if hired now
-        if (proposal.negotiationStatus === 'CLIENT_PROPOSED' && !clientMilestones) {
-          rawMilestones = requestedMilestones || []
-          milestonesModifiedByClient = true
+        // Determine agreed revision limit
+        // If client requested more revisions and freelancer accepted, use that
+        let agreedRevisionLimit = (proposal as any).generalRevisionLimit ?? 3
+        if (
+          proposal.negotiationStatus === 'FREELANCER_ACCEPTED' &&
+          (proposal as any).clientRequestedRevisions != null
+        ) {
+          agreedRevisionLimit = (proposal as any).clientRequestedRevisions
         }
 
+        // No milestones = direct hire, always ACTIVE
         const contractStatus = milestonesModifiedByClient ? 'OFFER_PENDING' : 'ACTIVE'
         const projectStatus = milestonesModifiedByClient ? 'HIRED_PENDING' : 'IN_PROGRESS'
 
@@ -478,8 +486,6 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
           where: { id: proposal.projectId },
           data: { status: projectStatus }
         })
-
-
 
         // Create contract
         const contract = await tx.contract.create({
@@ -494,7 +500,7 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
           }
         })
 
-        // Create milestone records if provided
+        // Create milestone records only if provided
         if (rawMilestones.length > 0) {
           for (let i = 0; i < rawMilestones.length; i++) {
             const m = rawMilestones[i]
@@ -507,20 +513,21 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
                 amount: Number(m.amount),
                 dueDate: m.dueDate ? new Date(m.dueDate) : null,
                 status: 'PENDING',
-                allowedRevisions: m.allowedRevisions !== undefined ? Number(m.allowedRevisions) : 3,
+                allowedRevisions: m.allowedRevisions !== undefined ? Number(m.allowedRevisions) : agreedRevisionLimit,
                 attachments: [],
               }
             })
           }
         }
 
-        // Notify the accepted freelancer
         const notificationTitle = milestonesModifiedByClient 
           ? '🎁 You have a new contract offer!' 
           : '🎉 Your Proposal Was Accepted!'
         const notificationBody = milestonesModifiedByClient
           ? `Client hired you for "${proposal.project.title}" but modified the milestones. Review and approve to start work.`
-          : `Congratulations! Your proposal for "${proposal.project.title}" was accepted. A contract has been created.`
+          : rawMilestones.length === 0
+            ? `Congratulations! Your proposal for "${proposal.project.title}" was accepted. Work can begin immediately.`
+            : `Congratulations! Your proposal for "${proposal.project.title}" was accepted. A contract has been created.`
 
         await tx.notification.create({
           data: {
@@ -723,7 +730,7 @@ export const proposeMilestoneChanges = async (req: Request, res: Response): Prom
 }
 
 // ─────────────────────────────────────────────────────────────
-// ACCEPT MILESTONE CHANGES (Freelancer)
+// ACCEPT MILESTONE / REVISION CHANGES (Freelancer)
 // POST /api/proposals/:proposalId/accept-changes
 // ─────────────────────────────────────────────────────────────
 export const acceptMilestoneChanges = async (req: Request, res: Response): Promise<any> => {
@@ -743,18 +750,27 @@ export const acceptMilestoneChanges = async (req: Request, res: Response): Promi
       return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
     }
 
+    const isRevisionOnly = (proposal as any).negotiationStatus === 'CLIENT_PROPOSED_REVISIONS'
+
     await prisma.proposal.update({
       where: { id },
       data: { negotiationStatus: 'FREELANCER_ACCEPTED' }
     })
+
+    const notificationTitle = isRevisionOnly
+      ? '✅ Revision Request Accepted!'
+      : '✅ Milestone Changes Accepted!'
+    const notificationBody = isRevisionOnly
+      ? `Freelancer accepted your revision request for "${(proposal as any).project?.title || 'the project'}". You can now hire them.`
+      : `Freelancer has accepted your proposed milestone plan for "${(proposal as any).project?.title || 'the project'}". You can now finalize the hire.`
 
     // Notify client
     await prisma.notification.create({
       data: {
         userId: (proposal as any).project?.clientProfile?.userId,
         type: 'SYSTEM_ALERT',
-        title: '✅ Milestone Changes Accepted!',
-        body: `Freelancer has accepted your proposed milestone plan for "${(proposal as any).project?.title || 'the project'}". You can now finalize the hire.`,
+        title: notificationTitle,
+        body: notificationBody,
         link: `/client/projects/${proposal.projectId}/proposals`,
       }
     })
@@ -762,6 +778,69 @@ export const acceptMilestoneChanges = async (req: Request, res: Response): Promi
     return res.status(200).json({ success: true, message: 'Changes accepted. Client has been notified.' })
   } catch (error) {
     console.error('Accept changes error:', error)
+    return res.status(500).json({ success: false, message: 'Internal server error.' })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// REQUEST REVISION CHANGES (Client — revisions only, no milestones)
+// POST /api/proposals/:id/request-revisions
+// ─────────────────────────────────────────────────────────────
+export const requestRevisionChanges = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).user?.userId
+    const id = req.params.id as string
+    const { requestedRevisions } = req.body
+
+    if (requestedRevisions == null || Number(requestedRevisions) < -1) {
+      return res.status(400).json({ success: false, message: 'requestedRevisions is required.' })
+    }
+
+    const proposal = await prisma.proposal.findUnique({
+      where: { id },
+      include: {
+        project: { include: { clientProfile: { select: { userId: true } } } }
+      }
+    })
+
+    if (!proposal || (proposal as any).project?.clientProfile?.userId !== userId) {
+      return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
+    }
+
+    if (!['PENDING', 'SHORTLISTED'].includes(proposal.status)) {
+      return res.status(400).json({ success: false, message: 'Can only negotiate on pending or shortlisted proposals.' })
+    }
+
+    await prisma.proposal.update({
+      where: { id },
+      data: {
+        clientRequestedRevisions: Number(requestedRevisions),
+        negotiationStatus: 'CLIENT_PROPOSED_REVISIONS',
+      } as any
+    })
+
+    // Notify freelancer
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { id: proposal.freelancerProfileId },
+      select: { userId: true }
+    })
+
+    if (freelancer) {
+      const revLabel = Number(requestedRevisions) === -1 ? 'unlimited' : String(requestedRevisions)
+      await prisma.notification.create({
+        data: {
+          userId: freelancer.userId,
+          type: 'SYSTEM_ALERT',
+          title: '🔄 Revision Request from Client',
+          body: `Client has requested ${revLabel} revisions for "${(proposal as any).project?.title || 'the project'}". Review and accept to proceed.`,
+          link: `/freelancer/proposals`,
+        }
+      })
+    }
+
+    return res.status(200).json({ success: true, message: 'Revision request sent to freelancer.' })
+  } catch (error) {
+    console.error('Request revision changes error:', error)
     return res.status(500).json({ success: false, message: 'Internal server error.' })
   }
 }

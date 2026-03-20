@@ -543,8 +543,9 @@ model Proposal {
   status               ProposalStatus     @default(PENDING)
   proposalMilestones   Json?              // optional milestone plan submitted by freelancer
   clientRequestedMilestones Json?         // modified milestones proposed by client
-  negotiationStatus     String?            // CLIENT_PROPOSED, FREELANCER_ACCEPTED, FREELANCER_REJECTED
+  negotiationStatus     String?            // CLIENT_PROPOSED, FREELANCER_ACCEPTED, FREELANCER_REJECTED, CLIENT_PROPOSED_REVISIONS
   generalRevisionLimit Int                @default(3) // default revisions if no milestones provided
+  clientRequestedRevisions Int?           // if client requests more revisions without changing milestones
   submittedAt          DateTime           @default(now())
   updatedAt           DateTime       @updatedAt
 
