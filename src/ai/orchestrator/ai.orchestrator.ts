@@ -3,6 +3,7 @@ import { ConversationService } from '../conversation/conversation.service'
 import { ExtractionService } from '../extraction/extraction.service'
 import { MatchingService } from '../matching/matching.service'
 import { NegotiationService } from '../negotiation/negotiation.service'
+import { LLMService } from '../shared/llm.service'
 import { AgentSession, AgentInput, AgentOutput } from '../shared/agent.types'
 import { AgentStage, ExpertiseLevel } from '../shared/constants'
 
@@ -12,6 +13,7 @@ export class AiOrchestrator {
   private extractionService = new ExtractionService()
   private matchingService = new MatchingService()
   private negotiationService = new NegotiationService()
+  private llm = new LLMService()
 
   async run(input: AgentInput): Promise<AgentOutput> {
     const session = await this.sessionService.getOrCreate(input.sessionId, input.clientName)
@@ -45,21 +47,18 @@ export class AiOrchestrator {
 
     console.log(`💬 Round: ${conversationRound} | MinRequired: ${minRounds[expertiseLevel]} | Level: ${expertiseLevel}`)
 
-    const aiSignalsComplete = /perfect.*everything|have everything|find.*best freelancer|matching you now|let me find|finding.*freelancer/i.test(reply)
-    const userWantsMatch = /find|freelancer|match|proceed|yes|show|search|hire/i.test(message)
-    const hasBasicInfo = !!(
-      extraction.project.projectType &&
-      extraction.project.features?.length &&
-      extraction.project.budgetMin
+    // ✅ LLM-based match triggering
+    const shouldMatch = await this.shouldTriggerMatch(
+      session,
+      message,
+      reply,
+      extraction.isComplete,
+      extraction.confidence,
+      minRoundsMet
     )
 
-    const shouldMatch =
-      (extraction.isComplete && extraction.confidence >= 50 && minRoundsMet) ||
-      (aiSignalsComplete && hasBasicInfo && minRoundsMet) ||
-      (userWantsMatch && hasBasicInfo && minRoundsMet)
-
     if (shouldMatch) {
-      console.log(`✅ Triggering MATCH stage...`)
+      console.log(`✅ LLM decided: Triggering MATCH stage...`)
       await this.sessionService.updateStage(session.sessionId, AgentStage.MATCH)
 
       const updatedSession = await this.sessionService.get(session.sessionId)
@@ -85,6 +84,52 @@ export class AiOrchestrator {
       stage: AgentStage.UNDERSTAND,
       reply,
       project: extraction.project,
+    }
+  }
+
+  // ── LLM decides if we should trigger matching ────────────
+  private async shouldTriggerMatch(
+    session: AgentSession,
+    userMessage: string,
+    aiReply: string,
+    isComplete: boolean,
+    confidence: number,
+    minRoundsMet: boolean
+  ): Promise<boolean> {
+    // Don't trigger if minimum rounds not met
+    if (!minRoundsMet) return false
+
+    // Always trigger if extraction is very confident
+    if (isComplete && confidence >= 80) return true
+
+    try {
+      const prompt = `
+You are deciding whether to trigger freelancer matching for a client conversation.
+
+EXTRACTED PROJECT DATA:
+${JSON.stringify(session.project, null, 2)}
+
+LAST USER MESSAGE: "${userMessage}"
+LAST AI REPLY: "${aiReply}"
+IS COMPLETE: ${isComplete}
+CONFIDENCE: ${confidence}%
+
+Should we trigger freelancer matching now? Consider:
+1. Do we have projectType, features, budget AND timeline?
+2. Is the client ready to see freelancers?
+3. Did the AI signal it has everything needed?
+4. Did the user ask to find/show freelancers?
+
+RETURN ONLY: true or false`
+
+      const result = await this.llm.call([{ role: 'user', content: prompt }])
+      const decision = result.trim().toLowerCase().includes('true')
+      console.log(`🤖 LLM match decision: ${decision}`)
+      return decision
+
+    } catch (error) {
+      console.error('❌ LLM match decision failed, using extraction result')
+      return isComplete && confidence >= 50
     }
   }
 
@@ -118,7 +163,7 @@ export class AiOrchestrator {
       const { reply, results } = await this.negotiationService.handle(
         updatedSession!,
         [],
-        selectedFreelancerId  // ← pass selected freelancer
+        selectedFreelancerId
       )
 
       return {

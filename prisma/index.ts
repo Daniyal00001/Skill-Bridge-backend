@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { seedCategories } from "./seed";
 import { seedFreelancers } from "./seedFreelancers";
 import { seedClients } from "./seedClients";
+import { seedMetadata } from "./seed_metadata";
 
 const prisma = new PrismaClient();
 
@@ -10,6 +11,11 @@ async function main() {
   console.log("🚀 Starting full database seed...\n");
 
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.log("📂 Step 0: Seeding Metadata...");
+  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  await seedMetadata();
+
+  console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("📂 Step 1: Seeding Categories...");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   await seedCategories();

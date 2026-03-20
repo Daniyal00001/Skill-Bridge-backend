@@ -1,7 +1,78 @@
 import { ProjectRequirements, FreelancerProfile, MatchedFreelancer } from '../shared/agent.types'
+import { LLMService } from '../shared/llm.service'
 
 export class RankingEngine {
-    rank(freelancers: FreelancerProfile[], project: Partial<ProjectRequirements>): MatchedFreelancer[] {
+    private llm = new LLMService()
+
+    async rankWithLLM(
+        freelancers: FreelancerProfile[],
+        project: Partial<ProjectRequirements>
+    ): Promise<MatchedFreelancer[]> {
+        try {
+            const prompt = `
+You are a technical hiring expert ranking freelancers for a project.
+
+PROJECT:
+- Type: ${project.projectType}
+- Platform: ${project.platform}
+- Features: ${project.features?.join(', ')}
+- Budget: $${project.budgetMin} - $${project.budgetMax}
+- Timeline: ${project.timeline}
+- Required Skills: ${project.techPreferences?.join(', ')}
+- Expertise Needed: ${project.expertiseNeeded}
+
+FREELANCERS:
+${freelancers.map((f, i) => `
+${i + 1}. ID: ${f.id}
+   Name: ${f.name}
+   Skills: ${f.skills.join(', ')}
+   Rate: $${f.hourlyRate}/hr
+   Location: ${f.location}
+`).join('')}
+
+Rank these freelancers from BEST to WORST for this project.
+For each, give a score 0-100 and a brief reason.
+
+RETURN STRICT JSON ONLY:
+[
+  {
+    "id": "freelancer_id",
+    "matchScore": 85,
+    "matchReason": "Perfect skill match for Flutter + Firebase project"
+  }
+]`
+
+            const raw = await this.llm.call([{ role: 'user', content: prompt }])
+            const cleaned = raw.replace(/```json/gi, '').replace(/```/g, '').trim()
+            const rankings = JSON.parse(cleaned) as { id: string; matchScore: number; matchReason: string }[]
+
+            // Map rankings back to freelancer profiles
+            const ranked: MatchedFreelancer[] = rankings
+                .map(r => {
+                    const freelancer = freelancers.find(f => f.id === r.id)
+                    if (!freelancer) return null
+                    return {
+                        ...freelancer,
+                        matchScore: r.matchScore,
+                        matchReason: r.matchReason,
+                        estimatedTotal: freelancer.hourlyRate ? Math.round(freelancer.hourlyRate * 160) : 0
+                    }
+                })
+                .filter(Boolean) as MatchedFreelancer[]
+
+            return ranked.slice(0, 5)
+
+        } catch (error) {
+            console.error('❌ LLM ranking failed, using algorithmic fallback')
+            return this.algorithmicRank(freelancers, project)
+        }
+    }
+
+    // ── Fallback algorithmic ranking ──────────────────────────
+    private algorithmicRank(
+        freelancers: FreelancerProfile[],
+        project: Partial<ProjectRequirements>
+    ): MatchedFreelancer[] {
         return freelancers
             .map(f => ({
                 ...f,
@@ -11,6 +82,11 @@ export class RankingEngine {
             }))
             .sort((a, b) => b.matchScore - a.matchScore)
             .slice(0, 5)
+    }
+
+    // Keep old rank() for backward compatibility
+    rank(freelancers: FreelancerProfile[], project: Partial<ProjectRequirements>): MatchedFreelancer[] {
+        return this.algorithmicRank(freelancers, project)
     }
 
     private calculateScore(f: FreelancerProfile, p: Partial<ProjectRequirements>): number {

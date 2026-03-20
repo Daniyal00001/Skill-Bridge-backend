@@ -1,9 +1,3 @@
-// ============================================================
-// PATH: backend/src/ai/conversation/conversation.service.ts
-// PURPOSE: Drives the UNDERSTAND stage. Detects user expertise
-//          level, builds prompt, calls LLM, returns reply.
-// ============================================================
-
 import { LLMService } from '../shared/llm.service'
 import { SessionService } from '../memory/session.service'
 import { buildConversationSystemPrompt } from './conversation.prompt'
@@ -14,33 +8,36 @@ export class ConversationService {
   private llm = new LLMService()
   private sessionService = new SessionService()
 
-  // ── Main entry: handle one user message in UNDERSTAND stage ──
   async handle(session: AgentSession, userMessage: string): Promise<string> {
 
-    // 1. Detect expertise level if not already set
+    // 1. Detect expertise level using LLM if not already set
     if (!session.expertiseLevel) {
-      session.expertiseLevel = this.detectExpertiseLevel(userMessage)
-      console.log(`🧠 Detected expertise level: ${session.expertiseLevel}`)
+      session.expertiseLevel = await this.detectExpertiseLevelLLM(userMessage)
+      console.log(`🧠 LLM Detected expertise: ${session.expertiseLevel}`)
     }
 
-    // 2. Build system prompt based on level + missing fields
+    // 2. Count conversation rounds
+    const conversationRound = Math.floor(session.history.length / 2)
+
+    // 3. Build system prompt
     const systemPrompt = buildConversationSystemPrompt(
       session.expertiseLevel,
       session.project || {},
-      session.clientName || 'Client'
+      session.clientName || 'Client',
+      conversationRound
     )
 
-    // 3. Build messages array: system + full history + new user message
+    // 4. Build messages
     const messages = [
       { role: 'system' as const, content: systemPrompt },
       ...session.history,
       { role: 'user' as const, content: userMessage },
     ]
 
-    // 4. Call LLM
+    // 5. Call LLM
     const reply = await this.llm.call(messages)
 
-    // 5. Save user message + assistant reply to session history
+    // 6. Save to history
     session.history.push({ role: 'user', content: userMessage })
     session.history.push({ role: 'assistant', content: reply })
     await this.sessionService.save(session)
@@ -48,38 +45,35 @@ export class ConversationService {
     return reply
   }
 
-  // ── Detect expertise level from first message ─────────────
-  detectExpertiseLevel(message: string): ExpertiseLevel {
-    const lower = message.toLowerCase()
+  // ── LLM-based expertise detection ────────────────────────
+  private async detectExpertiseLevelLLM(message: string): Promise<ExpertiseLevel> {
+    try {
+      const prompt = `
+You are analyzing a client's first message to a freelance platform AI assistant.
 
-    // Advanced signals: technical stack terms, architecture, SaaS, etc.
-    const advancedKeywords = [
-      'rest api', 'graphql', 'microservice', 'websocket', 'docker',
-      'kubernetes', 'multi-tenant', 'saas', 'oauth', 'jwt', 'redis',
-      'postgresql', 'mongodb', 'role-based', 'rbac', 'typescript',
-      'next.js', 'nestjs', 'fastapi', 'django', 'spring boot',
-      'ci/cd', 'deployment', 'aws', 'gcp', 'azure', 'fedex api',
-      'stripe api', 'webhook', 'sdk', 'integration', 'architecture'
-    ]
+CLIENT MESSAGE: "${message}"
 
-    // Intermediate signals: knows features, budget, some tech
-    const intermediateKeywords = [
-      'dashboard', 'authentication', 'login', 'payment', 'stripe',
-      'notification', 'mobile app', 'web app', 'flutter', 'react',
-      'node', 'database', 'admin panel', 'user management',
-      'budget', 'timeline', 'deadline', 'marketplace', 'ecommerce',
-      'api', 'backend', 'frontend', 'fullstack'
-    ]
+Classify the client's technical expertise level based on their message:
+- BEGINNER: Vague idea, no technical terms, doesn't know what they need exactly
+- INTERMEDIATE: Knows some features they want, mentions some tech or platforms
+- ADVANCED: Uses technical terms, knows exact stack, mentions architecture/APIs
 
-    const advancedScore = advancedKeywords.filter(k => lower.includes(k)).length
-    const intermediateScore = intermediateKeywords.filter(k => lower.includes(k)).length
+RETURN ONLY ONE WORD — exactly one of: BEGINNER, INTERMEDIATE, ADVANCED
+No explanation, no punctuation, just the word.`
 
-    if (advancedScore >= 2) return ExpertiseLevel.ADVANCED
-    if (intermediateScore >= 2 || advancedScore === 1) return ExpertiseLevel.INTERMEDIATE
-    return ExpertiseLevel.BEGINNER
+      const result = await this.llm.call([{ role: 'user', content: prompt }])
+      const cleaned = result.trim().toUpperCase()
+
+      if (cleaned.includes('ADVANCED')) return ExpertiseLevel.ADVANCED
+      if (cleaned.includes('INTERMEDIATE')) return ExpertiseLevel.INTERMEDIATE
+      return ExpertiseLevel.BEGINNER
+
+    } catch (error) {
+      console.error('❌ LLM expertise detection failed, using INTERMEDIATE as default')
+      return ExpertiseLevel.INTERMEDIATE
+    }
   }
 
-  // ── Check if we have enough info to move to ANALYZE stage ──
   isProjectComplete(project: Partial<any>): boolean {
     return !!(
       project.projectType &&
