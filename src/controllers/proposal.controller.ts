@@ -422,6 +422,13 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Not authorized.' })
     }
 
+    if (status === 'ACCEPTED' && proposal.negotiationStatus === 'CLIENT_PROPOSED') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot hire until freelancer accepts your proposed milestone changes.' 
+      })
+    }
+
     if (status === 'ACCEPTED') {
       // Atomic: accept this, reject others, create contract
       await prisma.$transaction(async (tx) => {
