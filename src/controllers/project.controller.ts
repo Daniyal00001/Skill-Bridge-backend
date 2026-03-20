@@ -425,11 +425,13 @@ export const getProjectById = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Project not found.' })
     }
 
-    // Increment view count
-    await prisma.project.update({
-      where: { id },
-      data: { viewCount: { increment: 1 } }
-    })
+    // Increment view count only if viewer is freelancer
+    if (req.user?.role === 'FREELANCER') {
+      await prisma.project.update({
+        where: { id },
+        data: { viewCount: { increment: 1 } }
+      })
+    }
 
     return res.status(200).json({ success: true, project })
 
