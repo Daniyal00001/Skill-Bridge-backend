@@ -42,6 +42,7 @@ enum ProposalStatus {
   ACCEPTED
   REJECTED
   WITHDRAWN
+  CANCELLED
 }
 
 enum TokenWalletTxType {
@@ -56,6 +57,7 @@ enum TokenTxReason {
   PROPOSAL_WITHDRAWN
   ADMIN_GRANT
   ADMIN_DEDUCT
+  PROJECT_CANCELLED
 }
 
 enum ContractStatus {
