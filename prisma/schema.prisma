@@ -322,6 +322,15 @@ model Skill {
   @@map("skills")
 }
 
+model RejectedSkill {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@map("rejected_skills")
+}
+
 model FreelancerSkill {
   id                  String @id @default(auto()) @map("_id") @db.ObjectId
   freelancerProfileId String @db.ObjectId

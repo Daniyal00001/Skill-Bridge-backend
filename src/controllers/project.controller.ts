@@ -105,6 +105,15 @@ if (req.files && Array.isArray(req.files)) {
         })
 
         if (!skill) {
+          // Check if skill was previously rejected
+          const rejected = await prisma.rejectedSkill.findUnique({ where: { name: skillName } });
+          if (rejected) {
+            return res.status(403).json({ 
+              success: false, 
+              message: `Skill '${skillName}' is not allowed to be added as it has been flagged as invalid or inappropriate.` 
+            });
+          }
+
           const validation = validateSkillName(skillName);
           if (!validation.valid) {
             return res.status(400).json({ success: false, message: `Skill Error ('${skillName}'): ${validation.message}` });
@@ -245,6 +254,15 @@ export const updateProject = async (req: Request, res: Response) => {
           where: { name: { equals: skillName } }
         })
         if (!skill) {
+          // Check if skill was previously rejected
+          const rejected = await prisma.rejectedSkill.findUnique({ where: { name: skillName } });
+          if (rejected) {
+            return res.status(403).json({ 
+              success: false, 
+              message: `Skill '${skillName}' is not allowed to be added as it has been flagged as invalid or inappropriate.` 
+            });
+          }
+
           const validation = validateSkillName(skillName);
           if (!validation.valid) {
              return res.status(400).json({ success: false, message: `Skill Error ('${skillName}'): ${validation.message}` });

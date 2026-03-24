@@ -158,7 +158,7 @@ export const checkSkillRateLimit = async (userId: string): Promise<void> => {
   const key = `skill_rate_limit:${userId}:${today}`;
 
   // Increment the counter and set expiration to 24 hours if it's new
-  const result = await redis.multi().incr(key).expire(key, 86400, 'NX').exec();
+  const result = await redis.multi().incr(key).expire(key, 86400).exec();
 
   if (!result || !result[0]) {
     throw new Error('Redis execution failed');

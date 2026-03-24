@@ -183,6 +183,15 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
         let skillObj = await prisma.skill.findUnique({ where: { name: sk.name } });
         
         if (!skillObj) {
+          // Check if skill was previously rejected
+          const rejected = await prisma.rejectedSkill.findUnique({ where: { name: sk.name } });
+          if (rejected) {
+            return res.status(403).json({ 
+              success: false, 
+              message: `Skill '${sk.name}' is not allowed to be added as it has been flagged as invalid or inappropriate.` 
+            });
+          }
+
           const validation = validateSkillName(sk.name);
           if (!validation.valid) {
             return res.status(400).json({ success: false, message: `Skill Error ('${sk.name}'): ${validation.message}` });
@@ -550,12 +559,21 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
         let skillObj = await prisma.skill.findUnique({ where: { name: skillName } });
 
         if (!skillObj) {
+          // Check if skill was previously rejected
+          const rejected = await prisma.rejectedSkill.findUnique({ where: { name: skillName } });
+          if (rejected) {
+            return res.status(403).json({ 
+              success: false, 
+              message: `Skill '${skillName}' is not allowed to be added as it has been flagged as invalid or inappropriate.` 
+            });
+          }
+
           const validation = validateSkillName(skillName);
           if (!validation.valid) {
              return res.status(400).json({ success: false, message: `Skill Error ('${skillName}'): ${validation.message}` });
           }
           await checkSkillRateLimit(userId);
-
+          
           skillObj = await prisma.skill.create({
             data: { name: skillName, category: "General", status: "PENDING" },
           });

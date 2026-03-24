@@ -49,6 +49,27 @@ export const updateSkillStatus = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Invalid status value" });
     }
 
+    if (status === 'REJECTED') {
+      const skillToDelete = await prisma.skill.findUnique({ where: { id } });
+      if (!skillToDelete) {
+        return res.status(404).json({ success: false, message: "Skill not found" });
+      }
+
+      const skill = await prisma.$transaction(async (tx) => {
+        // Create in RejectedSkill
+        await tx.rejectedSkill.upsert({
+          where: { name: skillToDelete.name },
+          update: {},
+          create: { name: skillToDelete.name }
+        });
+
+        // Delete from Skill (cascades to FreelancerSkill and ProjectSkill)
+        return await tx.skill.delete({ where: { id } });
+      });
+
+      return res.status(200).json({ success: true, message: `Skill rejected and moved to blocked list`, skill });
+    }
+
     const skill = await prisma.skill.update({
       where: { id },
       data: { status }
