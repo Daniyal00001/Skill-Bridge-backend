@@ -659,6 +659,7 @@ model Milestone {
   submittedAt      DateTime?
   approvedAt       DateTime?
   attachments  String[] // submitted file URLs
+  history      Json?    // Array of event objects: { type, timestamp, content, attachments }
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
   payment  Payment?

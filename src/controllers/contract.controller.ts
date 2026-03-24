@@ -407,6 +407,14 @@ export const submitMilestone = async (req: Request, res: Response) => {
           deliverables: deliverables || null,
           submittedAt: new Date(),
           attachments,
+          history: {
+            push: {
+              type: 'SUBMISSION',
+              timestamp: new Date(),
+              content: deliverables || 'Milestone submitted for review.',
+              attachments,
+            }
+          }
         }
       })
 
@@ -461,7 +469,17 @@ export const approveMilestone = async (req: Request, res: Response) => {
       // Mark milestone approved
       await tx.milestone.update({
         where: { id: milestoneId },
-        data: { status: 'APPROVED', approvedAt: new Date() }
+        data: { 
+          status: 'APPROVED', 
+          approvedAt: new Date(),
+          history: {
+            push: {
+              type: 'APPROVAL',
+              timestamp: new Date(),
+              content: 'Milestone approved and payment released.',
+            }
+          }
+        }
       })
 
       // Release payment (dummy)
@@ -545,7 +563,14 @@ export const requestRevision = async (req: Request, res: Response) => {
           status: 'REVISION_REQUESTED',
           revisionNote: note || 'Client has requested revisions.',
           submittedAt: null,
-          revisionsUsed: { increment: 1 }
+          revisionsUsed: { increment: 1 },
+          history: {
+            push: {
+              type: 'REVISION_REQUEST',
+              timestamp: new Date(),
+              content: note || 'Client requested revisions.',
+            }
+          }
         }
       })
 
