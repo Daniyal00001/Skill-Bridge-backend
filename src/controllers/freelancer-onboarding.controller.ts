@@ -3,6 +3,8 @@ import { prisma } from "../config/prisma";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary";
 import { updateProfileCompletion } from "../utils/profileCompletion";
 import { ExperienceLevel, AvailabilityStatus } from "@prisma/client";
+import { validateSkillName } from "../utils/skillValidation";
+import { checkSkillRateLimit } from "../utils/redis";
 
 // Get Current User Profile
 export const getMyFreelancerProfile = async (req: Request, res: Response) => {
@@ -178,12 +180,20 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
       });
 
       for (const sk of skills) {
-        // Find or create global skill
-        const skillObj = await prisma.skill.upsert({
-          where: { name: sk.name },
-          update: {},
-          create: { name: sk.name, category: "General" },
-        });
+        let skillObj = await prisma.skill.findUnique({ where: { name: sk.name } });
+        
+        if (!skillObj) {
+          const validation = validateSkillName(sk.name);
+          if (!validation.valid) {
+            return res.status(400).json({ success: false, message: `Skill Error ('${sk.name}'): ${validation.message}` });
+          }
+          await checkSkillRateLimit(userId);
+          
+          skillObj = await prisma.skill.create({
+            data: { name: sk.name, category: "General", status: "PENDING" },
+          });
+        }
+        
         await prisma.freelancerSkill.upsert({
           where: {
             freelancerProfileId_skillId: {
@@ -537,11 +547,19 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       });
       for (const sk of skills) {
         const skillName = sk.name || sk;
-        const skillObj = await prisma.skill.upsert({
-          where: { name: skillName },
-          update: {},
-          create: { name: skillName, category: "General" },
-        });
+        let skillObj = await prisma.skill.findUnique({ where: { name: skillName } });
+
+        if (!skillObj) {
+          const validation = validateSkillName(skillName);
+          if (!validation.valid) {
+             return res.status(400).json({ success: false, message: `Skill Error ('${skillName}'): ${validation.message}` });
+          }
+          await checkSkillRateLimit(userId);
+
+          skillObj = await prisma.skill.create({
+            data: { name: skillName, category: "General", status: "PENDING" },
+          });
+        }
         await prisma.freelancerSkill.upsert({
           where: {
             freelancerProfileId_skillId: {

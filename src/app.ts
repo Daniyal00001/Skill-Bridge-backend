@@ -15,6 +15,7 @@ import metadataRoutes from './routes/metadata.routes'
 import browseRouter from "./modules/browse/browse.routes";
 import trackingRouter from "./routes/tracking.routes";
 import contractRoutes from './routes/contract.routes'
+import adminRoutes from './routes/admin.routes'
 
 dotenv.config();
 
@@ -55,5 +56,8 @@ app.use('/api/metadata', metadataRoutes)
 
 // contract + milestone routes
 app.use('/api/contracts', contractRoutes)
+
+// admin routes
+app.use('/api/admin', adminRoutes)
 
 export default app

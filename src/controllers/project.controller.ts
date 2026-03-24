@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
 import { uploadToCloudinary } from "../utils/uploadToCloudinary"
+import { validateSkillName } from "../utils/skillValidation";
+import { checkSkillRateLimit } from "../utils/redis";
 // ─────────────────────────────────────────────────────────────
 // CREATE PROJECT (Client only)
 // POST /api/projects
@@ -103,10 +105,17 @@ if (req.files && Array.isArray(req.files)) {
         })
 
         if (!skill) {
+          const validation = validateSkillName(skillName);
+          if (!validation.valid) {
+            return res.status(400).json({ success: false, message: `Skill Error ('${skillName}'): ${validation.message}` });
+          }
+          await checkSkillRateLimit(userId);
+
           skill = await prisma.skill.create({
             data: {
               name: skillName,
-              category: 'other'
+              category: 'other',
+              status: 'PENDING'
             }
           })
         }
@@ -236,8 +245,14 @@ export const updateProject = async (req: Request, res: Response) => {
           where: { name: { equals: skillName } }
         })
         if (!skill) {
+          const validation = validateSkillName(skillName);
+          if (!validation.valid) {
+             return res.status(400).json({ success: false, message: `Skill Error ('${skillName}'): ${validation.message}` });
+          }
+          await checkSkillRateLimit(userId);
+          
           skill = await prisma.skill.create({
-            data: { name: skillName, category: 'other' }
+            data: { name: skillName, category: 'other', status: 'PENDING' }
           })
         }
         await prisma.projectSkill.create({

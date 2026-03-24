@@ -152,3 +152,21 @@ export const getResendCooldownRemaining = async (email: string): Promise<number>
   const ttl = await redis.ttl(`resend_cooldown:${email}`)
   return ttl > 0 ? ttl : 0
 }
+
+export const checkSkillRateLimit = async (userId: string): Promise<void> => {
+  const today = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+  const key = `skill_rate_limit:${userId}:${today}`;
+
+  // Increment the counter and set expiration to 24 hours if it's new
+  const result = await redis.multi().incr(key).expire(key, 86400, 'NX').exec();
+
+  if (!result || !result[0]) {
+    throw new Error('Redis execution failed');
+  }
+
+  const countVal = Array.isArray(result[0]) ? result[0][1] : result[0];
+  const count = Number(countVal);
+  if (count && !isNaN(count) && count > 10) {
+    throw new Error('You have reached the daily limit of adding 10 new custom skills. Please try again tomorrow.');
+  }
+}

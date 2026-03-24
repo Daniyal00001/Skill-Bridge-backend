@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { getMetadata } from "../controllers/metadata.controller";
+import { getMetadata, getSkills } from "../controllers/metadata.controller";
 
 const router = Router();
 
 router.get("/", getMetadata);
+router.get("/skills", getSkills);
 
 export default router;

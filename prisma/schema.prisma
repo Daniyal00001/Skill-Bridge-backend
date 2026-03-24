@@ -145,6 +145,12 @@ enum AvailabilityStatus {
   UNAVAILABLE
 }
 
+enum SkillStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ============================================================
 // USER (Unified auth model — role decides the site)
 // ============================================================
@@ -304,10 +310,11 @@ model FreelancerProfile {
 // ============================================================
 
 model Skill {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String   @unique // e.g. "React", "Graphic Design"
+  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  name      String      @unique // e.g. "React", "Graphic Design"
   category  String // e.g. "Frontend", "Design", "Writing"
-  createdAt DateTime @default(now())
+  status    SkillStatus @default(APPROVED)
+  createdAt DateTime    @default(now())
 
   freelancers   FreelancerSkill[]
   projectSkills ProjectSkill[]
