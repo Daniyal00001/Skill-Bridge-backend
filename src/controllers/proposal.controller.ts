@@ -872,3 +872,93 @@ export const requestRevisionChanges = async (req: Request, res: Response): Promi
     return res.status(500).json({ success: false, message: 'Internal server error.' })
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// GET SINGLE PROPOSAL
+// GET /api/proposals/:id
+// ─────────────────────────────────────────────────────────────
+export const getProposal = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = (req as any).user?.userId
+    const { id } = req.params
+
+    const proposalRaw = await prisma.proposal.findUnique({
+      where: { id },
+      include: {
+        freelancerProfile: {
+          include: {
+            user: { select: { name: true, profileImage: true } },
+            skills: true,
+          }
+        },
+        project: {
+          include: { 
+            clientProfile: true,
+            contract: { select: { id: true, createdAt: true } } 
+          }
+        }
+      }
+    })
+
+    if (!proposalRaw) {
+      return res.status(404).json({ success: false, message: 'Proposal not found.' })
+    }
+
+    // Authorization: Either the client who owns the project OR the freelancer who submitted it
+    const clientProfile = await prisma.clientProfile.findUnique({ where: { userId } })
+    const isOwnerClient = clientProfile && proposalRaw.project.clientProfileId === clientProfile.id
+    const isOwnerFreelancer = proposalRaw.freelancerProfile.userId === userId
+
+    if (!isOwnerClient && !isOwnerFreelancer) {
+      return res.status(403).json({ success: false, message: 'Not authorized.' })
+    }
+
+    // Format skills
+    const sIds = proposalRaw.freelancerProfile.skills.map((s: any) => s.skillId)
+    let skillsNames: string[] = []
+    if (sIds.length > 0) {
+      const sData = await prisma.skill.findMany({
+        where: { id: { in: sIds } }
+      })
+      skillsNames = sData.map(sd => sd.name)
+    }
+
+    const formatted = {
+      id: proposalRaw.id,
+      bidAmount: proposalRaw.proposedPrice,
+      deliveryDays: proposalRaw.deliveryTime,
+      coverLetter: proposalRaw.coverLetter,
+      attachments: proposalRaw.attachments,
+      tokenCost: proposalRaw.tokenCost,
+      status: proposalRaw.status,
+      proposalMilestones: proposalRaw.proposalMilestones || null,
+      clientRequestedMilestones: proposalRaw.clientRequestedMilestones || null,
+      negotiationStatus: proposalRaw.negotiationStatus || null,
+      generalRevisionLimit: proposalRaw.generalRevisionLimit || null,
+      clientRequestedRevisions: (proposalRaw as any).clientRequestedRevisions ?? null,
+      createdAt: proposalRaw.submittedAt,
+      contract: proposalRaw.project?.contract || null,
+      project: {
+        id: proposalRaw.project.id,
+        title: proposalRaw.project.title,
+        budget: proposalRaw.project.budget,
+        budgetType: proposalRaw.project.budgetType,
+      },
+      freelancer: {
+        id: proposalRaw.freelancerProfile.id,
+        name: proposalRaw.freelancerProfile.user?.name,
+        profileImage: proposalRaw.freelancerProfile.user?.profileImage,
+        title: proposalRaw.freelancerProfile.tagline,
+        experienceLevel: proposalRaw.freelancerProfile.experienceLevel,
+        location: proposalRaw.freelancerProfile.location,
+        skills: skillsNames,
+      }
+    }
+
+    return res.status(200).json({ success: true, proposal: formatted })
+
+  } catch (error) {
+    console.error('Get single proposal error:', error)
+    return res.status(500).json({ success: false, message: 'Internal server error.' })
+  }
+}

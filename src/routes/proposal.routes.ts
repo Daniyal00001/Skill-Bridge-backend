@@ -11,6 +11,7 @@ import {
   proposeMilestoneChanges,
   acceptMilestoneChanges,
   requestRevisionChanges,
+  getProposal,
 } from '../controllers/proposal.controller'
 
 const router = Router()
@@ -39,6 +40,9 @@ router.get('/my', protect, requireRole('FREELANCER'), getMyProposals)
 
 // Withdraw a proposal (refunds tokens if PENDING or SHORTLISTED)
 router.delete('/:id/withdraw', protect, requireRole('FREELANCER'), withdrawProposal)
+
+// Get a single proposal detail (Client or Freelancer)
+router.get('/:id', protect, getProposal)
 
 // ── Client Routes ──────────────────────────────────────────────────────────────
 
