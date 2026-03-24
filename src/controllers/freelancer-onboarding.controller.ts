@@ -33,6 +33,7 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
             profileImage: true,
             isEmailVerified: true,
             isIdVerified: true,
+            phoneNumber: true,
           },
         },
       },
