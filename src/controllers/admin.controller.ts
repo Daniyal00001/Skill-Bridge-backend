@@ -63,8 +63,15 @@ export const updateSkillStatus = async (req: Request, res: Response) => {
           create: { name: skillToDelete.name }
         });
 
-        // Delete from Skill (cascades to FreelancerSkill and ProjectSkill)
-        return await tx.skill.delete({ where: { id } });
+        // Explicitly delete from join tables (MongoDB workaround for Cascade)
+        // Use the ID from the record we just found to ensure consistency
+        const fsDeleted = await tx.freelancerSkill.deleteMany({ where: { skillId: skillToDelete.id } });
+        const psDeleted = await tx.projectSkill.deleteMany({ where: { skillId: skillToDelete.id } });
+
+        console.log(`[Rejection] Deleted ${fsDeleted.count} freelancer skills and ${psDeleted.count} project skills for ${skillToDelete.name}`);
+
+        // Delete from Skill
+        return await tx.skill.delete({ where: { id: skillToDelete.id } });
       });
 
       return res.status(200).json({ success: true, message: `Skill rejected and moved to blocked list`, skill });

@@ -142,11 +142,22 @@ if (req.files && Array.isArray(req.files)) {
     const fullProject = await prisma.project.findUnique({
       where: { id: project.id },
       include: {
-        skills: {
-          include: { skill: true }
-        }
+        skills: true, // Don't include skill nested yet
       }
-    })
+    }) as any;
+
+    if (fullProject) {
+      const sIds = fullProject.skills.map((s: any) => s.skillId);
+      if (sIds.length > 0) {
+        const sData = await prisma.skill.findMany({
+          where: { id: { in: sIds } }
+        });
+        fullProject.skills = fullProject.skills.map((s: any) => ({
+          ...s,
+          skill: sData.find(sd => sd.id === s.skillId)
+        })).filter((s: any) => s.skill);
+      }
+    }
 
     return res.status(201).json({
       success: true,
@@ -352,11 +363,11 @@ export const getAllProjects = async (req: Request, res: Response) => {
     }
 
     // Fetch projects with pagination
-    const [projects, total] = await Promise.all([
+    const [projectsRaw, total] = await Promise.all([
       prisma.project.findMany({
         where,
         include: {
-          skills: { include: { skill: true } },
+          skills: true, // Don't include skill nested yet
           clientProfile: {
             select: { fullName: true, company: true }
           },
@@ -371,6 +382,18 @@ export const getAllProjects = async (req: Request, res: Response) => {
       }),
       prisma.project.count({ where })
     ])
+
+    const projects = await Promise.all((projectsRaw as any[]).map(async (p) => {
+      const sIds = p.skills.map((s: any) => s.skillId);
+      if (sIds.length > 0) {
+         const sData = await prisma.skill.findMany({ where: { id: { in: sIds } } });
+         p.skills = p.skills.map((s: any) => ({
+           ...s,
+           skill: sData.find(sd => sd.id === s.skillId)
+         })).filter((s: any) => s.skill);
+      }
+      return p;
+    }));
 
     return res.status(200).json({
       success: true,
@@ -407,19 +430,31 @@ export const getMyProjects = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Client profile not found.' })
     }
 
-    const projects = await prisma.project.findMany({
+    const projectsRaw = await prisma.project.findMany({
       where: {
         clientProfileId: clientProfile.id,
         ...(status && { status: String(status) as any }),
       },
       include: {
-        skills: { include: { skill: true } },
+        skills: true, 
         proposals: { select: { id: true } },
         contract: { select: { id: true } },
         _count: { select: { proposals: true } }
       },
       orderBy: { createdAt: 'desc' }
     })
+
+    const projects = await Promise.all((projectsRaw as any[]).map(async (p) => {
+      const sIds = p.skills.map((s: any) => s.skillId);
+      if (sIds.length > 0) {
+        const sData = await prisma.skill.findMany({ where: { id: { in: sIds } } });
+        p.skills = p.skills.map((s: any) => ({
+          ...s,
+          skill: sData.find(sd => sd.id === s.skillId)
+        })).filter((s: any) => s.skill);
+      }
+      return p;
+    }));
 
     return res.status(200).json({ success: true, projects })
 
@@ -442,7 +477,7 @@ export const getProjectById = async (req: Request, res: Response) => {
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
-        skills: { include: { skill: true } },
+        skills: true,
         clientProfile: {
           select: { fullName: true, company: true, location: true }
         },
@@ -453,7 +488,18 @@ export const getProjectById = async (req: Request, res: Response) => {
         locationObj: true,
         _count: { select: { proposals: true } }
       }
-    })
+    }) as any;
+
+    if (project) {
+      const sIds = project.skills.map((s: any) => s.skillId);
+      if (sIds.length > 0) {
+        const sData = await prisma.skill.findMany({ where: { id: { in: sIds } } });
+        project.skills = project.skills.map((s: any) => ({
+          ...s,
+          skill: sData.find(sd => sd.id === s.skillId)
+        })).filter((s: any) => s.skill);
+      }
+    }
 
     if (!project) {
       return res.status(404).json({ success: false, message: 'Project not found.' })

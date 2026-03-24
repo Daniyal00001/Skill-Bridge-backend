@@ -338,13 +338,13 @@ export const getProjectProposals = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Not authorized.' })
     }
 
-    const proposals = await prisma.proposal.findMany({
+    const proposalsRaw = await prisma.proposal.findMany({
       where: { projectId },
       include: {
         freelancerProfile: {
           include: {
             user: { select: { name: true, profileImage: true } },
-            skills: { include: { skill: true }, take: 5 },
+            skills: true, // Don't include skill nested yet
           }
         },
         project: {
@@ -354,31 +354,44 @@ export const getProjectProposals = async (req: Request, res: Response) => {
       orderBy: { submittedAt: 'asc' }
     })
 
-    const formatted = proposals.map(p => ({
-      id: p.id,
-      bidAmount: p.proposedPrice,
-      deliveryDays: p.deliveryTime,
-      coverLetter: p.coverLetter,
-      attachments: p.attachments,
-      tokenCost: p.tokenCost,
-      status: p.status,
-      proposalMilestones: p.proposalMilestones || null,
-      clientRequestedMilestones: p.clientRequestedMilestones || null,
-      negotiationStatus: p.negotiationStatus || null,
-      generalRevisionLimit: p.generalRevisionLimit || null,
-      clientRequestedRevisions: (p as any).clientRequestedRevisions ?? null,
-      createdAt: p.submittedAt,
-      contract: p.project?.contract || null,
-      freelancer: {
-        id: p.freelancerProfile.id,
-        name: p.freelancerProfile.user?.name,
-        profileImage: p.freelancerProfile.user?.profileImage,
-        title: p.freelancerProfile.tagline,
-        experienceLevel: p.freelancerProfile.experienceLevel,
-        location: p.freelancerProfile.location,
-        skills: p.freelancerProfile.skills.map(s => s.skill.name),
+    const formatted = await Promise.all((proposalsRaw as any[]).map(async (p) => {
+      const sIds = p.freelancerProfile.skills.map((s: any) => s.skillId);
+      let skillsNames: string[] = [];
+      
+      if (sIds.length > 0) {
+        const sData = await prisma.skill.findMany({
+          where: { id: { in: sIds } },
+          take: 5
+        });
+        skillsNames = sData.map(sd => sd.name);
       }
-    }))
+
+      return {
+        id: p.id,
+        bidAmount: p.proposedPrice,
+        deliveryDays: p.deliveryTime,
+        coverLetter: p.coverLetter,
+        attachments: p.attachments,
+        tokenCost: p.tokenCost,
+        status: p.status,
+        proposalMilestones: p.proposalMilestones || null,
+        clientRequestedMilestones: p.clientRequestedMilestones || null,
+        negotiationStatus: p.negotiationStatus || null,
+        generalRevisionLimit: p.generalRevisionLimit || null,
+        clientRequestedRevisions: (p as any).clientRequestedRevisions ?? null,
+        createdAt: p.submittedAt,
+        contract: p.project?.contract || null,
+        freelancer: {
+          id: p.freelancerProfile.id,
+          name: p.freelancerProfile.user?.name,
+          profileImage: p.freelancerProfile.user?.profileImage,
+          title: p.freelancerProfile.tagline,
+          experienceLevel: p.freelancerProfile.experienceLevel,
+          location: p.freelancerProfile.location,
+          skills: skillsNames,
+        }
+      };
+    }));
 
     return res.status(200).json({ success: true, proposals: formatted })
 

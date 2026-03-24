@@ -183,16 +183,14 @@ async function fetchEligibleProjects(
     };
   }
 
-  // Bug #5 fix: use clientProfile (correct Prisma relation name for Project)
-  const rawRows = await prisma.project.findMany({
+  // Fetch projects from DB
+  const rawRowsRaw = await prisma.project.findMany({
     where,
     take: FETCH_POOL_SIZE,
-    orderBy: { createdAt: "desc" }, // initial DB order, re-ranked in memory
+    orderBy: { createdAt: "desc" },
     include: {
       category: { select: { id: true, name: true, slug: true } },
-      skills: {
-        include: { skill: { select: { id: true, name: true } } },
-      },
+      skills: true, // Don't include skill nested yet
       clientProfile: {
         select: {
           id: true,
@@ -207,20 +205,35 @@ async function fetchEligibleProjects(
     },
   });
 
-  // Bug #5 fix: remap clientProfile → client to match RawProject type in scoring engine
-  const projects: RawProject[] = (rawRows as any[]).map((row) => ({
-    ...row,
-    client: row.clientProfile
-      ? {
-          id: row.clientProfile.id,
-          fullName: row.clientProfile.fullName,
-          company: row.clientProfile.company,
-          isVerified: false, // not in ClientProfile schema; extend if needed
-          averageRating: row.clientProfile.averageRating,
-          totalHires: row.clientProfile.totalHires,
-          hireRate: row.clientProfile.hireRate,
-        }
-      : { id: "", fullName: "Unknown", isVerified: false },
+  const projects = await Promise.all((rawRowsRaw as any[]).map(async (row) => {
+    const sIds = row.skills.map((s: any) => s.skillId);
+    let skillsData: any[] = [];
+    if (sIds.length > 0) {
+      const sResult = await prisma.skill.findMany({
+        where: { id: { in: sIds } },
+        select: { id: true, name: true }
+      });
+      skillsData = row.skills.map((s: any) => ({
+        ...s,
+        skill: sResult.find(sd => sd.id === s.skillId)
+      })).filter((s: any) => s.skill);
+    }
+
+    return {
+      ...row,
+      skills: skillsData,
+      client: row.clientProfile
+        ? {
+            id: row.clientProfile.id,
+            fullName: row.clientProfile.fullName,
+            company: row.clientProfile.company,
+            isVerified: false,
+            averageRating: row.clientProfile.averageRating,
+            totalHires: row.clientProfile.totalHires,
+            hireRate: row.clientProfile.hireRate,
+          }
+        : { id: "", fullName: "Unknown", isVerified: false },
+    };
   }));
 
   return projects;
@@ -241,7 +254,7 @@ async function getFreelancerSnapshot(
   const freelancer = await prisma.freelancerProfile.findUnique({
     where: { userId: freelancerId },
     include: {
-      skills: { include: { skill: true } },
+      skills: true, // Don't include skill nested yet
       // Bug #6 fix: savedProjects MUST be included
       savedProjects: { select: { projectId: true } },
       proposals: {
@@ -261,7 +274,18 @@ async function getFreelancerSnapshot(
 
   if (!freelancer) return null;
 
-  // Cast to any so TypeScript doesn't complain about Prisma-included relations
+  // Manual fetch for skills to avoid Inconsistent Result error
+  const sIds = freelancer.skills.map((s: any) => s.skillId);
+  let skillNames: string[] = [];
+  if (sIds.length > 0) {
+    const sData = await prisma.skill.findMany({
+      where: { id: { in: sIds } },
+      select: { name: true }
+    });
+    skillNames = sData.map(sd => sd.name);
+  }
+
+  // Cast to any so TypeScript doesn't complain
   const f = freelancer as any;
 
   const completedContractsRows = await prisma.contract.findMany({
@@ -301,7 +325,7 @@ async function getFreelancerSnapshot(
 
   return {
     id: f.id,
-    skillNames: ((f.skills ?? []) as any[]).map((s) => s.skill.name),
+    skillNames: skillNames,
     experienceLevel: f.experienceLevel as any,
     hourlyRate: f.hourlyRate ?? undefined,
     profileCompletionScore: f.profileCompletionScore ?? 50,
@@ -527,7 +551,7 @@ export async function getSavedProjects(
       project: {
         include: {
           category: true,
-          skills: { include: { skill: true } },
+          skills: true, // Don't include skill nested yet
           clientProfile: true,
         },
       },
@@ -535,17 +559,30 @@ export async function getSavedProjects(
     orderBy: { savedAt: "desc" },
   });
 
-  // Map to RawProject-like shape
-  return saved.map((s) => ({
-    ...s.project,
-    isSaved: true,
-    client: s.project.clientProfile
-      ? {
-          id: s.project.clientProfile.id,
-          fullName: s.project.clientProfile.fullName,
-          isVerified: false,
-        }
-      : { id: "", fullName: "Unknown", isVerified: false },
+  // Map to RawProject-like shape with manual skill mapping
+  return await Promise.all(saved.map(async (s) => {
+    const sIds = s.project.skills.map((sk: any) => sk.skillId);
+    let skillsWithData: any[] = [];
+    if (sIds.length > 0) {
+      const sData = await prisma.skill.findMany({ where: { id: { in: sIds } } });
+      skillsWithData = s.project.skills.map((sk: any) => ({
+        ...sk,
+        skill: sData.find(sd => sd.id === sk.skillId)
+      })).filter((sk: any) => sk.skill);
+    }
+
+    return {
+      ...s.project,
+      skills: skillsWithData,
+      isSaved: true,
+      client: s.project.clientProfile
+        ? {
+            id: s.project.clientProfile.id,
+            fullName: s.project.clientProfile.fullName,
+            isVerified: false,
+          }
+        : { id: "", fullName: "Unknown", isVerified: false },
+    };
   }));
 }
 

@@ -16,7 +16,7 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
     const profile = await prisma.freelancerProfile.findUnique({
       where: { userId },
       include: {
-        skills: { include: { skill: true } },
+        skills: true, // Don't include skill nested yet to avoid Prisma crashing on missing refs
         portfolioItems: true,
         certificates: true,
         gigs: true,
@@ -33,12 +33,26 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
           },
         },
       },
-    });
+    }) as any;
 
     if (!profile)
       return res
         .status(404)
         .json({ success: false, message: "Profile not found" });
+
+    // Manually fetch and attach skills to handle potentially deleted/inconsistent records safely
+    const skillIds = profile.skills.map((s: any) => s.skillId);
+    if (skillIds.length > 0) {
+      const skillsData = await prisma.skill.findMany({
+        where: { id: { in: skillIds } }
+      });
+      
+      profile.skills = profile.skills.map((s: any) => ({
+        ...s,
+        skill: skillsData.find(sd => sd.id === s.skillId)
+      })).filter((s: any) => s.skill);
+    }
+
     return res.status(200).json({ success: true, data: profile });
   } catch (error) {
     console.error("Get My Profile error:", error);
@@ -640,7 +654,7 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
     const updatedProfile = await prisma.freelancerProfile.findUnique({
       where: { userId },
       include: {
-        skills: { include: { skill: true } },
+        skills: true, // Don't include skill nested yet
         portfolioItems: true,
         certificates: true,
         educations: true,
@@ -657,7 +671,20 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
           },
         },
       } as any,
-    });
+    }) as any;
+
+    if (updatedProfile) {
+      const sIds = updatedProfile.skills.map((s: any) => s.skillId);
+      if (sIds.length > 0) {
+        const sData = await prisma.skill.findMany({
+          where: { id: { in: sIds } }
+        });
+        updatedProfile.skills = updatedProfile.skills.map((s: any) => ({
+          ...s,
+          skill: sData.find(sd => sd.id === s.skillId)
+        })).filter((s: any) => s.skill);
+      }
+    }
 
     await updateProfileCompletion(userId);
 
