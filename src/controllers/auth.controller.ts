@@ -20,6 +20,11 @@ import {
   isIPBlocked,              // used in: login
   incrementLoginAttempts,   // used in: login (on failure)
   resetLoginAttempts,       // used in: login (on success)
+  blacklistOldOTP,
+  isOTPBlacklisted,
+  setResendCooldown,
+  isResendCooldownActive,
+  getResendCooldownRemaining,
 } from '../utils/redis'
 
 
@@ -56,6 +61,33 @@ export const signup = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 12)
 
+    // Check if an OTP was sent recently to prevent email spam
+    const isOnCooldown = await isResendCooldownActive(email)
+    if (isOnCooldown) {
+      const existingVerification = await prisma.emailVerification.findUnique({ where: { email } })
+      if (existingVerification) {
+        await prisma.emailVerification.update({
+          where: { email },
+          data: {
+            name,
+            passwordHash: hashedPassword,
+            role: role.toUpperCase() as 'CLIENT' | 'FREELANCER',
+          }
+        })
+        const remaining = await getResendCooldownRemaining(email)
+        return res.status(200).json({
+          success: true,
+          message: 'Verification code already sent recently. Please check your email.',
+          data: { remainingCooldown: remaining }
+        })
+      }
+    }
+
+    const existingCheck = await prisma.emailVerification.findUnique({ where: { email } })
+    if (existingCheck) {
+      await blacklistOldOTP(existingCheck.otp)
+    }
+
     const otp = generateOTP()
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
@@ -80,9 +112,13 @@ export const signup = async (req: Request, res: Response) => {
 
     await sendOtpEmail(email, name, otp)
 
+    // Set 2 min cooldown so user can't spam the endpoint
+    await setResendCooldown(email, 120)
+
     return res.status(200).json({
       success: true,
       message: 'Verification code sent to your email.',
+      data: { remainingCooldown: 120 }
     })
 
   } catch (error) {
@@ -103,6 +139,11 @@ export const verifyOtp = async (req: Request, res: Response) => {
 
     if (!email || !otp) {
       return res.status(400).json({ success: false, message: 'Email and OTP are required.' })
+    }
+
+    const isBlacklisted = await isOTPBlacklisted(otp)
+    if (isBlacklisted) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired verification code.' })
     }
 
     const verificationRecord = await prisma.emailVerification.findUnique({
@@ -167,6 +208,9 @@ export const verifyOtp = async (req: Request, res: Response) => {
       return newUser
     })
 
+    // Explicitly blacklist the OTP in Redis after successful single-time use
+    await blacklistOldOTP(otp)
+
     const accessToken = generateAccessToken({ userId: user.id, role: user.role })
     const refreshToken = generateRefreshToken({ userId: user.id })
 
@@ -223,6 +267,68 @@ export const verifyOtp = async (req: Request, res: Response) => {
 
 
 
+
+// ─────────────────────────────────────────────────────────────
+// RESEND OTP
+// Redis used: ✅ setResendCooldown, isResendCooldownActive, blacklistOldOTP
+// WHY: Prevent spamming emails, invalidate previous OTP to prevent abuse
+// ─────────────────────────────────────────────────────────────
+export const resendOtp = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required.' })
+    }
+
+    const isOnCooldown = await isResendCooldownActive(email)
+    if (isOnCooldown) {
+      return res.status(429).json({ success: false, message: 'Please wait 2 minutes before requesting a new code.' })
+    }
+
+    const verificationRecord = await prisma.emailVerification.findUnique({
+      where: { email },
+    })
+
+    if (!verificationRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending verification found for this email.',
+      })
+    }
+
+    // Blacklist old OTP
+    await blacklistOldOTP(verificationRecord.otp)
+
+    const newOtp = generateOTP()
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+
+    await prisma.emailVerification.update({
+      where: { email },
+      data: {
+        otp: newOtp,
+        expiresAt,
+      },
+    })
+
+    await sendOtpEmail(email, verificationRecord.name, newOtp)
+
+    // Set 2 min cooldown
+    await setResendCooldown(email, 120)
+
+    return res.status(200).json({
+      success: true,
+      message: 'A new verification code has been sent to your email.',
+    })
+
+  } catch (error) {
+    console.error('Resend OTP error:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error. Please try again.',
+    })
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // REFRESH

@@ -119,3 +119,36 @@ export const getOTP = async (email: string): Promise<string | null> => {
 export const deleteOTP = async (email: string): Promise<void> => {
   await redis.del(`otp:${email}`)
 }
+
+// ─────────────────────────────────────────────────────────────
+// 5. OTP BLACKLIST & RESEND COOLDOWN
+// ─────────────────────────────────────────────────────────────
+
+export const blacklistOldOTP = async (
+  otp: string,
+  expirySeconds: number = 10 * 60 // 10 minutes
+): Promise<void> => {
+  await redis.setEx(`blacklist:otp:${otp}`, expirySeconds, 'true')
+}
+
+export const isOTPBlacklisted = async (otp: string): Promise<boolean> => {
+  const result = await redis.get(`blacklist:otp:${otp}`)
+  return result === 'true'
+}
+
+export const setResendCooldown = async (
+  email: string,
+  expirySeconds: number = 120 // 2 minutes
+): Promise<void> => {
+  await redis.setEx(`resend_cooldown:${email}`, expirySeconds, 'blocked')
+}
+
+export const isResendCooldownActive = async (email: string): Promise<boolean> => {
+  const result = await redis.get(`resend_cooldown:${email}`)
+  return result === 'blocked'
+}
+
+export const getResendCooldownRemaining = async (email: string): Promise<number> => {
+  const ttl = await redis.ttl(`resend_cooldown:${email}`)
+  return ttl > 0 ? ttl : 0
+}
