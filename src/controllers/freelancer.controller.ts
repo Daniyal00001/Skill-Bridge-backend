@@ -26,8 +26,10 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
     const limitNumber = parseInt(limit as string) || 25
     const skip = (pageNumber - 1) * limitNumber
 
-    // Dynamic filtering
-    const where: Prisma.FreelancerProfileWhereInput = {}
+    // Only return profiles that actually have an associated valid user (and aren't banned)
+    const where: Prisma.FreelancerProfileWhereInput = {
+      user: { isBanned: false }
+    }
 
     // Search filter (Name, Tagline, Bio)
     if (search) {
