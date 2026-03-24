@@ -1,13 +1,26 @@
 import cloudinary from "../config/cloudinary"
 import streamifier from "streamifier"
 
-export const uploadToCloudinary = (fileBuffer: Buffer, mimetype?: string): Promise<string> => {
+export const uploadToCloudinary = (fileBuffer: Buffer, originalName?: string, mimetype?: string): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const resourceType = mimetype === 'application/pdf' ? 'raw' : 'auto';
+    // Determine resource type: images/videos/audio have specialized types; others are 'raw'
+    let resourceType: 'image' | 'video' | 'raw' | 'auto' = 'auto';
+    
+    if (mimetype) {
+      if (mimetype.startsWith('image/')) resourceType = 'image';
+      else if (mimetype.startsWith('video/')) resourceType = 'video';
+      else if (mimetype === 'application/pdf') resourceType = 'image'; // Cloudinary treats PDF as image for transformations
+      else resourceType = 'raw';
+    }
+
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const fileNameWithoutExt = originalName ? originalName.split('.').slice(0, -1).join('.') : 'file';
+    const extension = originalName ? `.${originalName.split('.').pop()}` : '';
+    const publicId = `project_attachments/${fileNameWithoutExt}_${uniqueSuffix}${extension}`;
 
     const stream = cloudinary.uploader.upload_stream(
       { 
-        folder: "project_attachments", 
+        public_id: publicId,
         resource_type: resourceType,
         type: "upload",
         access_mode: "public"
@@ -27,7 +40,7 @@ export const uploadMultipleToCloudinary = async (files: Express.Multer.File[]): 
   if (!files || files.length === 0) return [];
 
   try {
-    const uploadPromises = files.map((file) => uploadToCloudinary(file.buffer, file.mimetype));
+    const uploadPromises = files.map((file) => uploadToCloudinary(file.buffer, file.originalname, file.mimetype));
     const secureUrls = await Promise.all(uploadPromises);
     return secureUrls;
   } catch (error) {

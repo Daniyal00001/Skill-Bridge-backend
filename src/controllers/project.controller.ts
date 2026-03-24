@@ -52,7 +52,7 @@ export const createProject = async (req: Request, res: Response) => {
 if (req.files && Array.isArray(req.files)) {
   for (const file of req.files as Express.Multer.File[]) {
 
-    const url = await uploadToCloudinary(file.buffer)
+    const url = await uploadToCloudinary(file.buffer, file.originalname, file.mimetype)
 
     attachments.push(url)
   }
@@ -219,7 +219,7 @@ export const updateProject = async (req: Request, res: Response) => {
     const newAttachments: string[] = []
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files as Express.Multer.File[]) {
-        const url = await uploadToCloudinary(file.buffer)
+        const url = await uploadToCloudinary(file.buffer, file.originalname, file.mimetype)
         newAttachments.push(url)
       }
     }

@@ -404,7 +404,7 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
         await deleteFromCloudinary(profile.user.idDocumentUrl);
       }
 
-      const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer);
+      const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer, files["idDocument"][0].originalname, files["idDocument"][0].mimetype);
       await prisma.user.update({
         where: { id: userId },
         data: { idDocumentUrl: idUrl, isIdVerified: true }, // Mock verified immediately
@@ -419,7 +419,7 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
         await deleteFromCloudinary(profile.user.profileImage);
       }
 
-      const picUrl = await uploadToCloudinary(files["profileImage"][0].buffer);
+      const picUrl = await uploadToCloudinary(files["profileImage"][0].buffer, files["profileImage"][0].originalname, files["profileImage"][0].mimetype);
       await prisma.user.update({
         where: { id: userId },
         data: { profileImage: picUrl },
@@ -435,7 +435,7 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
           : req.body.certTitles.split(",")
         : [];
       for (let i = 0; i < files["certFiles"].length; i++) {
-        const url = await uploadToCloudinary(files["certFiles"][i].buffer);
+        const url = await uploadToCloudinary(files["certFiles"][i].buffer, files["certFiles"][i].originalname, files["certFiles"][i].mimetype);
         await prisma.certificate.create({
           data: {
             freelancerProfileId: profile.id,
@@ -456,7 +456,7 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
           : req.body.gigTitles.split(",")
         : [];
       for (let i = 0; i < files["gigFiles"].length; i++) {
-        const url = await uploadToCloudinary(files["gigFiles"][i].buffer);
+        const url = await uploadToCloudinary(files["gigFiles"][i].buffer, files["gigFiles"][i].originalname, files["gigFiles"][i].mimetype);
         await prisma.gig.create({
           data: {
             freelancerProfileId: profile.id,
