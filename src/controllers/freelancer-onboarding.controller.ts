@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/prisma";
-import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary";
+import {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} from "../utils/uploadToCloudinary";
 import { updateProfileCompletion } from "../utils/profileCompletion";
 import { ExperienceLevel, AvailabilityStatus } from "@prisma/client";
 import { validateSkillName } from "../utils/skillValidation";
@@ -13,7 +16,7 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    const profile = await prisma.freelancerProfile.findUnique({
+    const profile = (await prisma.freelancerProfile.findUnique({
       where: { userId },
       include: {
         skills: true, // Don't include skill nested yet to avoid Prisma crashing on missing refs
@@ -33,7 +36,7 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
           },
         },
       },
-    }) as any;
+    })) as any;
 
     if (!profile)
       return res
@@ -44,13 +47,15 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
     const skillIds = profile.skills.map((s: any) => s.skillId);
     if (skillIds.length > 0) {
       const skillsData = await prisma.skill.findMany({
-        where: { id: { in: skillIds } }
+        where: { id: { in: skillIds } },
       });
-      
-      profile.skills = profile.skills.map((s: any) => ({
-        ...s,
-        skill: skillsData.find(sd => sd.id === s.skillId)
-      })).filter((s: any) => s.skill);
+
+      profile.skills = profile.skills
+        .map((s: any) => ({
+          ...s,
+          skill: skillsData.find((sd) => sd.id === s.skillId),
+        }))
+        .filter((s: any) => s.skill);
     }
 
     return res.status(200).json({ success: true, data: profile });
@@ -66,18 +71,40 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
 export const updateOnboardingStep1 = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
-    const { fullName, phoneNumber, location, region, tagline } =
-      req.body;
+    const { fullName, phoneNumber, location, region, tagline } = req.body;
 
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    if (!fullName || fullName.length < 3) return res.status(400).json({ success: false, message: "Full name must be at least 3 characters." });
-    if (!tagline || tagline.length < 10) return res.status(400).json({ success: false, message: "Tagline must be at least 10 characters." });
-    if (!phoneNumber || !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/\s/g, ""))) {
-      return res.status(400).json({ success: false, message: "Invalid phone number format. Must start with '+'." });
+    if (!fullName || fullName.length < 3)
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Full name must be at least 3 characters.",
+        });
+    if (!tagline || tagline.length < 10)
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Tagline must be at least 10 characters.",
+        });
+    if (
+      !phoneNumber ||
+      !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/\s/g, ""))
+    ) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Invalid phone number format. Must start with '+'.",
+        });
     }
-    if (!location) return res.status(400).json({ success: false, message: "Country is required." });
+    if (!location)
+      return res
+        .status(400)
+        .json({ success: false, message: "Country is required." });
 
     // Update User model (name)
     const user = await prisma.user.update({
@@ -100,16 +127,25 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
     });
 
     const newCompletion = await updateProfileCompletion(userId);
-    return res
-      .status(200)
-      .json({
-        success: true,
-        data: { ...profile, profileCompletion: newCompletion },
-      });
+    return res.status(200).json({
+      success: true,
+      data: { ...profile, profileCompletion: newCompletion },
+    });
   } catch (error: any) {
     console.error("Update Step 1 error:", error);
-    if (error.code === 'P2002') return res.status(400).json({ success: false, message: "This phone number is already registered." });
-    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+    if (error.code === "P2002")
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "This phone number is already registered.",
+        });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "Internal server error",
+      });
   }
 };
 
@@ -119,9 +155,19 @@ export const updateOnboardingStep2 = async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId;
     const { hourlyRate, bio, availability, experienceLevel } = req.body;
 
-    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
-    if (!hourlyRate || Number(hourlyRate) < 5) return res.status(400).json({ success: false, message: "Minimum hourly rate is $5." });
-    if (!bio || bio.length < 100) return res.status(400).json({ success: false, message: "Bio must be at least 100 characters." });
+    if (!userId)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!hourlyRate || Number(hourlyRate) < 5)
+      return res
+        .status(400)
+        .json({ success: false, message: "Minimum hourly rate is $5." });
+    if (!bio || bio.length < 100)
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Bio must be at least 100 characters.",
+        });
 
     const profile = await prisma.freelancerProfile.update({
       where: { userId },
@@ -134,12 +180,10 @@ export const updateOnboardingStep2 = async (req: Request, res: Response) => {
     });
 
     const newCompletion = await updateProfileCompletion(userId);
-    return res
-      .status(200)
-      .json({
-        success: true,
-        data: { ...profile, profileCompletion: newCompletion },
-      });
+    return res.status(200).json({
+      success: true,
+      data: { ...profile, profileCompletion: newCompletion },
+    });
   } catch (error) {
     console.error("Update Step 2 error:", error);
     return res
@@ -154,9 +198,12 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId;
     const { skills, education, certifications, languages, gigs } = req.body;
 
-    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    if (!userId)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     if (!skills || !Array.isArray(skills) || skills.length === 0) {
-      return res.status(400).json({ success: false, message: "At least one skill is required." });
+      return res
+        .status(400)
+        .json({ success: false, message: "At least one skill is required." });
     }
 
     const profile = await prisma.freelancerProfile.findUnique({
@@ -194,29 +241,38 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
       });
 
       for (const sk of skills) {
-        let skillObj = await prisma.skill.findUnique({ where: { name: sk.name } });
-        
+        let skillObj = await prisma.skill.findUnique({
+          where: { name: sk.name },
+        });
+
         if (!skillObj) {
           // Check if skill was previously rejected
-          const rejected = await prisma.rejectedSkill.findUnique({ where: { name: sk.name } });
+          const rejected = await prisma.rejectedSkill.findUnique({
+            where: { name: sk.name },
+          });
           if (rejected) {
-            return res.status(403).json({ 
-              success: false, 
-              message: `Skill '${sk.name}' is not allowed to be added as it has been flagged as invalid or inappropriate.` 
+            return res.status(403).json({
+              success: false,
+              message: `Skill '${sk.name}' is not allowed to be added as it has been flagged as invalid or inappropriate.`,
             });
           }
 
           const validation = validateSkillName(sk.name);
           if (!validation.valid) {
-            return res.status(400).json({ success: false, message: `Skill Error ('${sk.name}'): ${validation.message}` });
+            return res
+              .status(400)
+              .json({
+                success: false,
+                message: `Skill Error ('${sk.name}'): ${validation.message}`,
+              });
           }
           await checkSkillRateLimit(userId);
-          
+
           skillObj = await prisma.skill.create({
             data: { name: sk.name, category: "General", status: "PENDING" },
           });
         }
-        
+
         await prisma.freelancerSkill.upsert({
           where: {
             freelancerProfileId_skillId: {
@@ -243,7 +299,7 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
       for (const c of oldCerts) {
         if (c.credentialUrl) await deleteFromCloudinary(c.credentialUrl);
       }
-      
+
       await prisma.certificate.deleteMany({
         where: { freelancerProfileId: profile.id },
       });
@@ -323,35 +379,33 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 
     const profile = await prisma.freelancerProfile.findUnique({
       where: { userId },
-      include: { 
-        certificates: true, 
+      include: {
+        certificates: true,
         gigs: true,
-        user: { select: { profileImage: true, idDocumentUrl: true } }
+        user: { select: { profileImage: true, idDocumentUrl: true } },
       },
     });
     if (!profile)
-      return res.status(404).json({ success: false, message: "Profile not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Profile not found" });
 
     // Validate Limit
     const newCerts = files["certFiles"] ? files["certFiles"].length : 0;
     const newGigs = files["gigFiles"] ? files["gigFiles"].length : 0;
 
     if (profile.certificates.length + newCerts > 4) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Total certificates would exceed limit of 4. Already have ${profile.certificates.length}.`,
-        });
+      return res.status(400).json({
+        success: false,
+        message: `Total certificates would exceed limit of 4. Already have ${profile.certificates.length}.`,
+      });
     }
 
     if (profile.gigs.length + newGigs > 4) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Total gigs would exceed limit of 4. Already have ${profile.gigs.length}.`,
-        });
+      return res.status(400).json({
+        success: false,
+        message: `Total gigs would exceed limit of 4. Already have ${profile.gigs.length}.`,
+      });
     }
 
     const updates: any = {};
@@ -362,7 +416,7 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
       if (profile.user.idDocumentUrl) {
         await deleteFromCloudinary(profile.user.idDocumentUrl);
       }
-      
+
       const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer);
       await prisma.user.update({
         where: { id: userId },
@@ -388,32 +442,40 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 
     // Certs
     if (files["certFiles"]) {
-      const certTitles = req.body.certTitles ? (Array.isArray(req.body.certTitles) ? req.body.certTitles : req.body.certTitles.split(',')) : [];
+      const certTitles = req.body.certTitles
+        ? Array.isArray(req.body.certTitles)
+          ? req.body.certTitles
+          : req.body.certTitles.split(",")
+        : [];
       for (let i = 0; i < files["certFiles"].length; i++) {
         const url = await uploadToCloudinary(files["certFiles"][i].buffer);
         await prisma.certificate.create({
           data: {
             freelancerProfileId: profile.id,
             title: certTitles[i] || `Certificate ${i + 1}`,
-            issuingOrganization: 'Uploaded',
+            issuingOrganization: "Uploaded",
             issueDate: new Date(),
-            credentialUrl: url
-          }
+            credentialUrl: url,
+          },
         });
       }
     }
 
     // Gigs
     if (files["gigFiles"]) {
-      const gigTitles = req.body.gigTitles ? (Array.isArray(req.body.gigTitles) ? req.body.gigTitles : req.body.gigTitles.split(',')) : [];
+      const gigTitles = req.body.gigTitles
+        ? Array.isArray(req.body.gigTitles)
+          ? req.body.gigTitles
+          : req.body.gigTitles.split(",")
+        : [];
       for (let i = 0; i < files["gigFiles"].length; i++) {
         const url = await uploadToCloudinary(files["gigFiles"][i].buffer);
         await prisma.gig.create({
           data: {
             freelancerProfileId: profile.id,
             title: gigTitles[i] || `Gig ${i + 1}`,
-            fileUrl: url
-          }
+            fileUrl: url,
+          },
         });
       }
     }
@@ -421,12 +483,10 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
     // Increment completion
     const newCompletion = await updateProfileCompletion(userId);
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        data: { ...updates, profileCompletion: newCompletion },
-      });
+    return res.status(200).json({
+      success: true,
+      data: { ...updates, profileCompletion: newCompletion },
+    });
   } catch (error) {
     console.error("Upload files error:", error);
     return res
@@ -439,10 +499,20 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 export const updateOnboardingStep5 = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
-    const { github, linkedin, portfolio, website, preferredCategories } = req.body;
+    const { github, linkedin, portfolio, website, preferredCategories } =
+      req.body;
 
-    if (preferredCategories && Array.isArray(preferredCategories) && preferredCategories.length > 4) {
-      return res.status(400).json({ success: false, message: "You can select a maximum of 4 preferred categories." });
+    if (
+      preferredCategories &&
+      Array.isArray(preferredCategories) &&
+      preferredCategories.length > 4
+    ) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "You can select a maximum of 4 preferred categories.",
+        });
     }
 
     const profile = await prisma.freelancerProfile.update({
@@ -457,12 +527,10 @@ export const updateOnboardingStep5 = async (req: Request, res: Response) => {
     });
 
     const newCompletion = await updateProfileCompletion(userId);
-    return res
-      .status(200)
-      .json({
-        success: true,
-        data: { ...profile, profileCompletion: newCompletion },
-      });
+    return res.status(200).json({
+      success: true,
+      data: { ...profile, profileCompletion: newCompletion },
+    });
   } catch (error) {
     console.error("Update Step 5 error:", error);
     return res
@@ -502,8 +570,17 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       region,
     } = req.body;
 
-    if (preferredCategories && Array.isArray(preferredCategories) && preferredCategories.length > 4) {
-      return res.status(400).json({ success: false, message: "You can select a maximum of 4 preferred categories." });
+    if (
+      preferredCategories &&
+      Array.isArray(preferredCategories) &&
+      preferredCategories.length > 4
+    ) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "You can select a maximum of 4 preferred categories.",
+        });
     }
 
     const profile = await prisma.freelancerProfile.findUnique({
@@ -570,24 +647,33 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       });
       for (const sk of skills) {
         const skillName = sk.name || sk;
-        let skillObj = await prisma.skill.findUnique({ where: { name: skillName } });
+        let skillObj = await prisma.skill.findUnique({
+          where: { name: skillName },
+        });
 
         if (!skillObj) {
           // Check if skill was previously rejected
-          const rejected = await prisma.rejectedSkill.findUnique({ where: { name: skillName } });
+          const rejected = await prisma.rejectedSkill.findUnique({
+            where: { name: skillName },
+          });
           if (rejected) {
-            return res.status(403).json({ 
-              success: false, 
-              message: `Skill '${skillName}' is not allowed to be added as it has been flagged as invalid or inappropriate.` 
+            return res.status(403).json({
+              success: false,
+              message: `Skill '${skillName}' is not allowed to be added as it has been flagged as invalid or inappropriate.`,
             });
           }
 
           const validation = validateSkillName(skillName);
           if (!validation.valid) {
-             return res.status(400).json({ success: false, message: `Skill Error ('${skillName}'): ${validation.message}` });
+            return res
+              .status(400)
+              .json({
+                success: false,
+                message: `Skill Error ('${skillName}'): ${validation.message}`,
+              });
           }
           await checkSkillRateLimit(userId);
-          
+
           skillObj = await prisma.skill.create({
             data: { name: skillName, category: "General", status: "PENDING" },
           });
@@ -651,7 +737,7 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       }
     }
 
-    const updatedProfile = await prisma.freelancerProfile.findUnique({
+    const updatedProfile = (await prisma.freelancerProfile.findUnique({
       where: { userId },
       include: {
         skills: true, // Don't include skill nested yet
@@ -671,18 +757,20 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
           },
         },
       } as any,
-    }) as any;
+    })) as any;
 
     if (updatedProfile) {
       const sIds = updatedProfile.skills.map((s: any) => s.skillId);
       if (sIds.length > 0) {
         const sData = await prisma.skill.findMany({
-          where: { id: { in: sIds } }
+          where: { id: { in: sIds } },
         });
-        updatedProfile.skills = updatedProfile.skills.map((s: any) => ({
-          ...s,
-          skill: sData.find(sd => sd.id === s.skillId)
-        })).filter((s: any) => s.skill);
+        updatedProfile.skills = updatedProfile.skills
+          .map((s: any) => ({
+            ...s,
+            skill: sData.find((sd) => sd.id === s.skillId),
+          }))
+          .filter((s: any) => s.skill);
       }
     }
 
