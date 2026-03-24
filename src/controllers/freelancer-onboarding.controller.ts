@@ -77,29 +77,23 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
     if (!fullName || fullName.length < 3)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Full name must be at least 3 characters.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Full name must be at least 3 characters.",
+      });
     if (!tagline || tagline.length < 10)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Tagline must be at least 10 characters.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Tagline must be at least 10 characters.",
+      });
     if (
       !phoneNumber ||
       !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/\s/g, ""))
     ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Invalid phone number format. Must start with '+'.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid phone number format. Must start with '+'.",
+      });
     }
     if (!location)
       return res
@@ -134,18 +128,14 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("Update Step 1 error:", error);
     if (error.code === "P2002")
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "This phone number is already registered.",
-        });
-    return res
-      .status(500)
-      .json({
+      return res.status(400).json({
         success: false,
-        message: error.message || "Internal server error",
+        message: "This phone number is already registered.",
       });
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
@@ -162,12 +152,10 @@ export const updateOnboardingStep2 = async (req: Request, res: Response) => {
         .status(400)
         .json({ success: false, message: "Minimum hourly rate is $5." });
     if (!bio || bio.length < 100)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Bio must be at least 100 characters.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Bio must be at least 100 characters.",
+      });
 
     const profile = await prisma.freelancerProfile.update({
       where: { userId },
@@ -259,12 +247,10 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
 
           const validation = validateSkillName(sk.name);
           if (!validation.valid) {
-            return res
-              .status(400)
-              .json({
-                success: false,
-                message: `Skill Error ('${sk.name}'): ${validation.message}`,
-              });
+            return res.status(400).json({
+              success: false,
+              message: `Skill Error ('${sk.name}'): ${validation.message}`,
+            });
           }
           await checkSkillRateLimit(userId);
 
@@ -507,12 +493,10 @@ export const updateOnboardingStep5 = async (req: Request, res: Response) => {
       Array.isArray(preferredCategories) &&
       preferredCategories.length > 4
     ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "You can select a maximum of 4 preferred categories.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "You can select a maximum of 4 preferred categories.",
+      });
     }
 
     const profile = await prisma.freelancerProfile.update({
@@ -575,12 +559,10 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       Array.isArray(preferredCategories) &&
       preferredCategories.length > 4
     ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "You can select a maximum of 4 preferred categories.",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "You can select a maximum of 4 preferred categories.",
+      });
     }
 
     const profile = await prisma.freelancerProfile.findUnique({
@@ -665,12 +647,10 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
 
           const validation = validateSkillName(skillName);
           if (!validation.valid) {
-            return res
-              .status(400)
-              .json({
-                success: false,
-                message: `Skill Error ('${skillName}'): ${validation.message}`,
-              });
+            return res.status(400).json({
+              success: false,
+              message: `Skill Error ('${skillName}'): ${validation.message}`,
+            });
           }
           await checkSkillRateLimit(userId);
 
