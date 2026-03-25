@@ -58,6 +58,10 @@ app.use('/api/metadata', metadataRoutes)
 // contract + milestone routes
 app.use('/api/contracts', contractRoutes)
 
+// invitation routes
+import invitationRoutes from './routes/invitation.routes'
+app.use('/api/invitations', invitationRoutes)
+
 // admin routes
 app.use('/api/admin', adminRoutes)
 

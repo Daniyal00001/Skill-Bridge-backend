@@ -204,12 +204,23 @@ export const getClientDashboard = async (req: Request, res: Response) => {
       status: p.status,
     }));
 
-    const formattedInvitations = pendingInvitations.map(i => ({
-      id: i.id,
-      freelancerName: i.freelancerProfile?.user?.name,
-      avatar: i.freelancerProfile?.user?.profileImage,
-      status: i.status,
-    }));
+    // Fetch project IDs to check for orphans in invitations list
+    const invitationProjectIds = [...new Set(pendingInvitations.map(i => i.projectId))];
+    const projectsFound = await prisma.project.findMany({
+      where: { id: { in: invitationProjectIds } },
+      select: { id: true }
+    });
+    const projectSet = new Set(projectsFound.map(p => p.id));
+
+    const formattedInvitations = pendingInvitations.map(i => {
+      const isOrphaned = !projectSet.has(i.projectId);
+      return {
+        id: i.id,
+        freelancerName: i.freelancerProfile?.user?.name || 'Unknown',
+        avatar: i.freelancerProfile?.user?.profileImage,
+        status: isOrphaned ? 'CANCELLED' : i.status,
+      };
+    });
 
     return res.status(200).json({
       success: true,

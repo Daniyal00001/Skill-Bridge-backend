@@ -46,7 +46,7 @@ router.get('/:id', protect, getFreelancerById)
  * @desc    Invite a freelancer to a project
  * @access  Private (CLIENT only)
  */
-router.post('/:id/invite', protect, requireRole('CLIENT'), inviteFreelancer)
+router.post('/:id/invite', protect, requireRole('CLIENT'), upload.array('files', 5), inviteFreelancer)
 
 /**
  * @route   POST /api/freelancers/:id/message

@@ -130,6 +130,7 @@ enum InvitationStatus {
   ACCEPTED
   REJECTED
   EXPIRED
+  CANCELLED
 }
 
 enum ExperienceLevel {
@@ -603,6 +604,10 @@ model Invitation {
   clientProfileId     String           @db.ObjectId
   message             String?
   status              InvitationStatus @default(PENDING)
+  milestones          Json?            // proposed milestones
+  revisionsAllowed    Int              @default(3) // global revision limit fallback
+  budget              Float?           // budget specific to this invite
+  attachments         String[]         @default([]) // supporting documents
   createdAt           DateTime         @default(now())
 
   project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
+import { uploadMultipleToCloudinary } from '../utils/uploadToCloudinary'
 import { Prisma, Role } from '@prisma/client'
 
 /**
@@ -201,8 +202,8 @@ export const getFreelancerById = async (req: Request, res: Response) => {
  */
 export const inviteFreelancer = async (req: Request, res: Response) => {
   try {
-    const { id: freelancerProfileId } = req.params
-    const { projectId, message } = req.body
+    const freelancerProfileId = req.params.id as string
+    const { projectId, message, milestones, revisionsAllowed, budget } = req.body
     const userId = (req as any).user?.userId
 
     if (!projectId) {
@@ -253,7 +254,7 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       where: {
         projectId_freelancerProfileId: {
           projectId,
-          freelancerProfileId
+          freelancerProfileId: freelancerProfileId
         }
       }
     })
@@ -265,14 +266,34 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       })
     }
 
+    // Handle uploaded files
+    let attachmentUrls: string[] = []
+    if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+      attachmentUrls = await uploadMultipleToCloudinary(req.files as Express.Multer.File[])
+    }
+
+    // Process milestones if sent as string from FormData
+    let parsedMilestones = milestones
+    if (typeof milestones === 'string') {
+      try {
+        parsedMilestones = JSON.parse(milestones)
+      } catch (e) {
+        parsedMilestones = null
+      }
+    }
+
     // Create invitation
     const invitation = await prisma.invitation.create({
       data: {
         projectId,
-        freelancerProfileId,
+        freelancerProfileId: freelancerProfileId,
         clientProfileId: clientProfile.id,
         message,
-      }
+        milestones: parsedMilestones,
+        revisionsAllowed: revisionsAllowed ? Number(revisionsAllowed) : 3,
+        budget: budget ? Number(budget) : null,
+        attachments: attachmentUrls
+      } as any // Cast to handle schema sync lag
     })
 
     // Create notification for freelancer
@@ -308,7 +329,7 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
  */
 export const initiateChat = async (req: Request, res: Response) => {
   try {
-    const { id: freelancerProfileId } = req.params
+    const freelancerProfileId = req.params.id as string
     const { projectId } = req.body
     const userId = (req as any).user?.userId
 
