@@ -37,7 +37,7 @@ export const getInvitations = async (req: Request, res: Response) => {
     const [projects, freelancers, clients] = await Promise.all([
       prisma.project.findMany({
         where: { id: { in: projectIds } },
-        select: { id: true, title: true, budget: true, budgetType: true }
+        select: { id: true, title: true, budget: true, budgetType: true, category: true }
       }),
       prisma.freelancerProfile.findMany({
         where: { id: { in: freelancerIds } },
@@ -66,6 +66,7 @@ export const getInvitations = async (req: Request, res: Response) => {
           id: inv.id,
           projectId: inv.projectId,
           projectTitle: project?.title || 'Project Deleted',
+          projectCategory: project?.category || 'General',
           projectBudget: project?.budget || 0,
           projectBudgetType: project?.budgetType || 'FIXED',
           freelancerId: inv.freelancerProfileId,

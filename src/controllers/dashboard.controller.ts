@@ -157,7 +157,7 @@ export const getClientDashboard = async (req: Request, res: Response) => {
       disputedProjects,
       openProjectsList,
       inProgressProjectsList,
-      pendingInvitations,
+      recentInvitations,
       recentProposals,
     ] = await Promise.all([
       prisma.project.count({ where: { clientProfileId: clientId, status: { in: ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW', 'REVISION_REQUESTED'] } } }),
@@ -173,10 +173,12 @@ export const getClientDashboard = async (req: Request, res: Response) => {
         select: { budget: true }
       }),
       prisma.invitation.findMany({
-        where: { clientProfileId: clientId, status: 'PENDING' },
+        where: { clientProfileId: clientId },
         take: 5,
         orderBy: { createdAt: 'desc' },
-        include: { freelancerProfile: { include: { user: { select: { name: true, profileImage: true } } } } }
+        include: { 
+          freelancerProfile: { include: { user: { select: { name: true, profileImage: true } } } }
+        }
       }),
       prisma.proposal.findMany({
         where: { project: { clientProfileId: clientId } },
@@ -204,21 +206,22 @@ export const getClientDashboard = async (req: Request, res: Response) => {
       status: p.status,
     }));
 
-    // Fetch project IDs to check for orphans in invitations list
-    const invitationProjectIds = [...new Set(pendingInvitations.map(i => i.projectId))];
-    const projectsFound = await prisma.project.findMany({
+    // Robust Invitation Mapping (Manual join to handle orphaned projects)
+    const invitationProjectIds = [...new Set(recentInvitations.map(i => i.projectId))];
+    const dashboardProjects = await prisma.project.findMany({
       where: { id: { in: invitationProjectIds } },
-      select: { id: true }
+      select: { id: true, title: true }
     });
-    const projectSet = new Set(projectsFound.map(p => p.id));
+    const projMap = new Map(dashboardProjects.map(p => [p.id, p]));
 
-    const formattedInvitations = pendingInvitations.map(i => {
-      const isOrphaned = !projectSet.has(i.projectId);
+    const formattedInvitations = recentInvitations.map(i => {
+      const p = projMap.get(i.projectId);
       return {
         id: i.id,
         freelancerName: i.freelancerProfile?.user?.name || 'Unknown',
         avatar: i.freelancerProfile?.user?.profileImage,
-        status: isOrphaned ? 'CANCELLED' : i.status,
+        projectTitle: p?.title || 'Project Deleted',
+        status: p ? i.status : 'CANCELLED',
       };
     });
 
@@ -236,7 +239,7 @@ export const getClientDashboard = async (req: Request, res: Response) => {
         lists: {
           openProjects: openProjectsList,
           recentProposals: formattedProposals,
-          pendingInvitations: formattedInvitations,
+          recentInvitations: formattedInvitations,
         }
       }
     });
