@@ -16,6 +16,7 @@ import browseRouter from "./modules/browse/browse.routes";
 import trackingRouter from "./routes/tracking.routes";
 import contractRoutes from './routes/contract.routes'
 import adminRoutes from './routes/admin.routes'
+import dashboardRoutes from './routes/dashboard.routes'
 
 dotenv.config();
 
@@ -59,5 +60,8 @@ app.use('/api/contracts', contractRoutes)
 
 // admin routes
 app.use('/api/admin', adminRoutes)
+
+// dashboard aggregation routes
+app.use('/api/dashboard', dashboardRoutes)
 
 export default app
