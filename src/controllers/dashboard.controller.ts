@@ -252,17 +252,26 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
 
     const fid = freelancerProfile.id;
 
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
     const [
       activeProposalsCount,
       shortlistedProposalsCount,
+      proposalsThisMonth,
+      activeContractsCount,
       completedJobs,
+      pendingInvitationsCount,
       activeMilestones,
       recentTokenTxs,
       activeProposalsList,
     ] = await Promise.all([
       prisma.proposal.count({ where: { freelancerProfileId: fid, status: 'PENDING' } }),
       prisma.proposal.count({ where: { freelancerProfileId: fid, status: 'SHORTLISTED' } }),
+      prisma.proposal.count({ where: { freelancerProfileId: fid, submittedAt: { gte: startOfMonth } } }),
+      prisma.contract.count({ where: { freelancerProfileId: fid, status: 'ACTIVE' } }),
       prisma.contract.count({ where: { freelancerProfileId: fid, status: 'COMPLETED' } }),
+      prisma.invitation.count({ where: { freelancerProfileId: fid, status: 'PENDING' } }),
       prisma.milestone.findMany({
         where: { contract: { freelancerProfileId: fid }, status: { in: ['IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED', 'APPROVED'] } },
         take: 5,
@@ -282,12 +291,27 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
       })
     ]);
 
-    // Total Earnings computation (Released payments for this freelancer)
-    const payments = await prisma.payment.aggregate({
-      _sum: { amount: true },
-      where: { status: 'RELEASED', contract: { freelancerProfileId: fid } }
+    // Earnings computations
+    const [totalEarningsRes, monthlyEarningsRes] = await Promise.all([
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: 'RELEASED', contract: { freelancerProfileId: fid } }
+      }),
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: 'RELEASED', contract: { freelancerProfileId: fid }, releasedAt: { gte: startOfMonth } }
+      })
+    ]);
+
+    const totalEarnings = totalEarningsRes._sum.amount || 0;
+    const monthlyEarnings = monthlyEarningsRes._sum.amount || 0;
+
+    // Average Rating from Reviews
+    const reviews = await prisma.review.aggregate({
+      _avg: { rating: true },
+      _count: { rating: true },
+      where: { receiverId: userId }
     });
-    const totalEarnings = payments._sum.amount || 0;
 
     const formattedMilestones = activeMilestones.map(m => ({
       id: m.id,
@@ -314,11 +338,16 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
         stats: {
           activeProposals: activeProposalsCount,
           shortlistedProposals: shortlistedProposalsCount,
+          proposalsThisMonth,
+          activeContractsCount,
           completedJobs,
+          pendingInvitationsCount,
           totalEarnings,
+          monthlyEarnings,
           skillTokenBalance: freelancerProfile.skillTokenBalance,
           profileCompletion: freelancerProfile.profileCompletion,
-          averageRating: freelancerProfile.disputeRatio || 5.0, // Replace disputeRatio with real avg rating when available
+          averageRating: reviews._avg.rating || 5.0,
+          totalReviews: reviews._count.rating || 0
         },
         lists: {
           activeMilestones: formattedMilestones,
