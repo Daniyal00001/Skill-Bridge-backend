@@ -437,6 +437,10 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Not authorized.' })
     }
 
+    if (proposal.status === 'WITHDRAWN' || proposal.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot update status of a withdrawn or cancelled proposal.' })
+    }
+
     if (status === 'ACCEPTED' && proposal.negotiationStatus === 'CLIENT_PROPOSED') {
       return res.status(400).json({ 
         success: false, 
@@ -667,11 +671,17 @@ export const withdrawProposal = async (req: Request, res: Response) => {
         }
       })
 
-      // Decrement project proposal count
-      await tx.project.update({
+      // Decrement project proposal count (ensure it doesn't go below 0)
+      const project = await tx.project.findUnique({
         where: { id: proposal.projectId },
-        data: { proposalCount: { decrement: 1 } }
+        select: { proposalCount: true }
       })
+      if (project && project.proposalCount > 0) {
+        await tx.project.update({
+          where: { id: proposal.projectId },
+          data: { proposalCount: { decrement: 1 } }
+        })
+      }
 
       // Notify the client
       if (proposal.project.clientProfile?.userId) {
@@ -721,6 +731,10 @@ export const proposeMilestoneChanges = async (req: Request, res: Response): Prom
 
     if (!proposal || (proposal as any).project?.clientProfile?.userId !== userId) {
       return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
+    }
+
+    if (proposal.status === 'WITHDRAWN' || proposal.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot negotiate on a withdrawn or cancelled proposal.' })
     }
 
     await prisma.proposal.update({
@@ -778,6 +792,10 @@ export const acceptMilestoneChanges = async (req: Request, res: Response): Promi
       return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
     }
 
+    if (proposal.status === 'WITHDRAWN' || proposal.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot accept changes on a withdrawn or cancelled proposal.' })
+    }
+
     const isRevisionOnly = (proposal as any).negotiationStatus === 'CLIENT_PROPOSED_REVISIONS'
 
     await prisma.proposal.update({
@@ -833,6 +851,10 @@ export const requestRevisionChanges = async (req: Request, res: Response): Promi
 
     if (!proposal || (proposal as any).project?.clientProfile?.userId !== userId) {
       return res.status(404).json({ success: false, message: 'Proposal not found or access denied.' })
+    }
+
+    if (proposal.status === 'WITHDRAWN' || proposal.status === 'CANCELLED') {
+      return res.status(400).json({ success: false, message: 'Cannot request revisions for a withdrawn or cancelled proposal.' })
     }
 
     if (!['PENDING', 'SHORTLISTED'].includes(proposal.status)) {
