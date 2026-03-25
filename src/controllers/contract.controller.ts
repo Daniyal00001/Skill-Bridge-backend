@@ -58,6 +58,7 @@ export const getMyContracts = async (req: Request, res: Response) => {
         project: { select: { title: true, budget: true, status: true } },
         freelancerProfile: { include: { user: { select: { name: true, profileImage: true } } } },
         milestones: { select: { status: true, amount: true } },
+        payments: { select: { amount: true, status: true } },
       },
       orderBy: { createdAt: 'desc' }
     })
@@ -67,6 +68,10 @@ export const getMyContracts = async (req: Request, res: Response) => {
       const approvedAmount = c.milestones
         .filter(m => m.status === 'APPROVED')
         .reduce((s, m) => s + m.amount, 0)
+      
+      const escrowAmount = c.payments
+        .filter((p: any) => p.status === 'HELD_IN_ESCROW')
+        .reduce((sum: number, p: any) => sum + p.amount, 0)
       
       const progress = c.milestones.length > 0 
         ? (c.milestones.filter(m => m.status === 'APPROVED').length / c.milestones.length) * 100 
@@ -79,7 +84,12 @@ export const getMyContracts = async (req: Request, res: Response) => {
         status: c.status,
         totalAmount,
         earnedAmount: approvedAmount,
+        escrowAmount,
         progress: Math.round(progress),
+        milestonesTotal: c.milestones.length,
+        milestonesApproved: c.milestones.filter(m => m.status === 'APPROVED').length,
+        milestonesSubmitted: c.milestones.filter(m => m.status === 'SUBMITTED').length,
+        milestonesRevisionRequested: c.milestones.filter(m => m.status === 'REVISION_REQUESTED').length,
         createdAt: c.createdAt,
         freelancer: {
           name: c.freelancerProfile.user.name,
@@ -295,7 +305,18 @@ export const fundMilestone = async (req: Request, res: Response) => {
       // Mark milestone as FUNDED → IN_PROGRESS (work can start)
       await tx.milestone.update({
         where: { id: milestoneId },
-        data: { status: 'FUNDED' }
+        data: { 
+          status: 'FUNDED',
+          history: [
+            {
+              type: 'FUNDED',
+              timestamp: new Date(),
+              content: `Milestone funded. $${milestone.amount.toLocaleString()} is now held in escrow.`,
+              actorName: contract.project.clientProfile.fullName,
+              actorRole: 'CLIENT'
+            }
+          ]
+        }
       })
 
       // Create a payment record (dummy — HELD_IN_ESCROW)
@@ -351,9 +372,30 @@ export const startMilestone = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Milestone must be funded before starting.' })
     }
 
-    await prisma.milestone.update({
-      where: { id: milestoneId },
-      data: { status: 'IN_PROGRESS' }
+    await prisma.$transaction(async (tx) => {
+      // Fetch latest history
+      const milestone = await tx.milestone.findUnique({
+        where: { id: milestoneId },
+        select: { history: true }
+      })
+      const currentHistory = Array.isArray(milestone?.history) ? milestone.history : []
+
+      await tx.milestone.update({
+        where: { id: milestoneId },
+        data: { 
+          status: 'IN_PROGRESS',
+          history: [
+            ...currentHistory,
+            {
+              type: 'STARTED',
+              timestamp: new Date(),
+              content: 'Freelancer started working on this milestone.',
+              actorName: contract.freelancerProfile.user?.name,
+              actorRole: 'FREELANCER'
+            }
+          ]
+        }
+      })
     })
 
     return res.status(200).json({ success: true, message: 'Milestone started.' })
@@ -390,31 +432,45 @@ export const submitMilestone = async (req: Request, res: Response) => {
       })
     }
 
-    // Handle uploaded attachments
-    const attachments: string[] = [...(milestone.attachments || [])]
+    // Handle uploaded attachments — only the new files uploaded in this submission
+    const newAttachmentUrls: string[] = []
     if (req.files && Array.isArray(req.files)) {
       for (const file of req.files as Express.Multer.File[]) {
         const url = await uploadToCloudinary(file.buffer, file.originalname, file.mimetype)
-        attachments.push(url)
+        newAttachmentUrls.push(url)
       }
     }
 
+    // Full accumulated list for the milestone record
+    const allAttachments: string[] = [...(milestone.attachments || []), ...newAttachmentUrls]
+
     await prisma.$transaction(async (tx) => {
+      // Fetch latest history to prevent race conditions
+      const latestMilestone = await tx.milestone.findUnique({
+        where: { id: milestoneId },
+        select: { history: true }
+      })
+      const currentHistory = Array.isArray(latestMilestone?.history) ? latestMilestone.history : []
+
       await tx.milestone.update({
         where: { id: milestoneId },
         data: {
           status: 'SUBMITTED',
           deliverables: deliverables || null,
           submittedAt: new Date(),
-          attachments,
-          history: {
-            push: {
+          attachments: allAttachments,
+          history: [
+            ...currentHistory,
+            {
               type: 'SUBMISSION',
               timestamp: new Date(),
               content: deliverables || 'Milestone submitted for review.',
-              attachments,
+              // Only record the files attached to THIS submission
+              attachments: newAttachmentUrls,
+              actorName: contract.freelancerProfile.user?.name,
+              actorRole: 'FREELANCER'
             }
-          }
+          ]
         }
       })
 
@@ -466,19 +522,29 @@ export const approveMilestone = async (req: Request, res: Response) => {
     }
 
     await prisma.$transaction(async (tx) => {
+      // Fetch latest history
+      const latestMilestone = await tx.milestone.findUnique({
+        where: { id: milestoneId },
+        select: { history: true }
+      })
+      const currentHistory = Array.isArray(latestMilestone?.history) ? latestMilestone.history : []
+
       // Mark milestone approved
       await tx.milestone.update({
         where: { id: milestoneId },
         data: { 
           status: 'APPROVED', 
           approvedAt: new Date(),
-          history: {
-            push: {
+          history: [
+            ...currentHistory,
+            {
               type: 'APPROVAL',
               timestamp: new Date(),
               content: 'Milestone approved and payment released.',
+              actorName: contract.project.clientProfile.fullName,
+              actorRole: 'CLIENT'
             }
-          }
+          ]
         }
       })
 
@@ -557,6 +623,13 @@ export const requestRevision = async (req: Request, res: Response) => {
     }
 
     await prisma.$transaction(async (tx) => {
+      // Fetch latest history
+      const latestMilestone = await tx.milestone.findUnique({
+        where: { id: milestoneId },
+        select: { history: true }
+      })
+      const currentHistory = Array.isArray(latestMilestone?.history) ? latestMilestone.history : []
+
       await tx.milestone.update({
         where: { id: milestoneId },
         data: {
@@ -564,13 +637,16 @@ export const requestRevision = async (req: Request, res: Response) => {
           revisionNote: note || 'Client has requested revisions.',
           submittedAt: null,
           revisionsUsed: { increment: 1 },
-          history: {
-            push: {
+          history: [
+            ...currentHistory,
+            {
               type: 'REVISION_REQUEST',
               timestamp: new Date(),
               content: note || 'Client requested revisions.',
+              actorName: contract.project.clientProfile.fullName,
+              actorRole: 'CLIENT'
             }
-          }
+          ]
         }
       })
 
@@ -667,7 +743,11 @@ function formatContract(contract: any) {
     status: contract.status,
     startDate: contract.startDate,
     endDate: contract.endDate,
-    milestones: contract.milestones,
+    milestonesModifiedByClient: contract.milestonesModifiedByClient ?? false,
+    milestones: contract.milestones.map((m: any) => ({
+      ...m,
+      history: Array.isArray(m.history) ? m.history : []
+    })),
     totalMilestoneAmount,
     releasedAmount,
     escrowAmount,
