@@ -441,18 +441,19 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Cannot update status of a withdrawn or cancelled proposal.' })
     }
 
-    if (status === 'ACCEPTED' && proposal.negotiationStatus === 'CLIENT_PROPOSED') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Cannot hire until freelancer accepts your proposed milestone changes.' 
-      })
-    }
-
     if (status === 'ACCEPTED') {
       // Atomic: accept this, reject others, create contract
       await prisma.$transaction(async (tx) => {
-        // Accept this proposal
-        await tx.proposal.update({ where: { id }, data: { status: 'ACCEPTED' } })
+        // Accept this proposal and clear negotiation state
+        await tx.proposal.update({ 
+          where: { id }, 
+          data: { 
+            status: 'ACCEPTED',
+            negotiationStatus: null,
+            clientRequestedMilestones: null,
+            clientRequestedRevisions: null
+          } 
+        })
 
         // Reject all other PENDING/SHORTLISTED proposals for this project
         await tx.proposal.updateMany({
