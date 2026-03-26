@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io'
 import { Server as HTTPServer } from 'http'
+import express from 'express'
 import jwt from 'jsonwebtoken'
 import { prisma } from '../../config/prisma'
 import { saveMessage, markMessagesAsRead, isUserRestricted, doesRoomBelongToUser } from './chat.service'
@@ -21,7 +22,7 @@ const getUserIdFromSocket = (socket: Socket): string | null => {
   }
 }
 
-export const initChatSocket = (httpServer: HTTPServer) => {
+export const initChatSocket = (httpServer: HTTPServer, app: express.Application) => {
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: ['http://localhost:5173', 'http://localhost:8080', 'http://localhost:3000'],
@@ -30,6 +31,8 @@ export const initChatSocket = (httpServer: HTTPServer) => {
     pingTimeout: 60000,
     pingInterval: 25000,
   })
+
+  app.set('io', io)
 
   // ── Auth Middleware ────────────────────────────────────────────────────────
   io.use((socket, next) => {
@@ -51,6 +54,9 @@ export const initChatSocket = (httpServer: HTTPServer) => {
 
     // Send the current list of online users to the newly connected user
     socket.emit('online_users', { userIds: Array.from(onlineUsers.keys()) })
+
+    // Join personal room for cross-device/cross-room events
+    socket.join(`user:${userId}`)
 
     // Update lastActiveAt
     await prisma.user.update({ where: { id: userId }, data: { lastActiveAt: new Date() } }).catch(() => {})
@@ -109,8 +115,31 @@ export const initChatSocket = (httpServer: HTTPServer) => {
           type: (type as any) ?? 'TEXT',
         })
 
-        // Broadcast to everyone in room (including sender for confirmation)
+        // 1. Broadcast to everyone currently in the socket room
         io.to(roomId).emit('new_message', message)
+
+        // 2. Also emit to the recipient's personal room to ensure discovery
+        // if they are online but haven't joined this specific room yet
+        const room = await prisma.chatRoom.findUnique({
+          where: { id: roomId },
+          include: {
+            clientProfile: { select: { userId: true } },
+            freelancerProfile: { select: { userId: true } },
+          },
+        })
+
+        if (room) {
+          let recipientId: string | null = null
+          if (room.clientProfile?.userId === userId) {
+            recipientId = room.freelancerProfile?.userId || null
+          } else if (room.freelancerProfile?.userId === userId) {
+            recipientId = room.clientProfile?.userId || null
+          }
+
+          if (recipientId) {
+            io.to(`user:${recipientId}`).emit('new_message', message)
+          }
+        }
 
         console.log(`[Socket] Message sent in room ${roomId} by ${userId}`)
       } catch (err) {
@@ -133,8 +162,30 @@ export const initChatSocket = (httpServer: HTTPServer) => {
     socket.on('mark_seen', async ({ roomId }: { roomId: string }) => {
       try {
         await markMessagesAsRead(roomId, userId)
-        // Notify sender that messages were seen
-        socket.to(roomId).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
+        // Notify everyone in the active room
+        io.to(roomId).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
+
+        // Also explicitly notify the other user in their personal channel
+        const room = await prisma.chatRoom.findUnique({
+          where: { id: roomId },
+          include: {
+            clientProfile: { select: { userId: true } },
+            freelancerProfile: { select: { userId: true } },
+          },
+        })
+
+        if (room) {
+          let otherUserId: string | null = null
+          if (room.clientProfile?.userId === userId) {
+            otherUserId = room.freelancerProfile?.userId || null
+          } else if (room.freelancerProfile?.userId === userId) {
+            otherUserId = room.clientProfile?.userId || null
+          }
+
+          if (otherUserId) {
+            io.to(`user:${otherUserId}`).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
+          }
+        }
       } catch (err) {
         console.error('[Socket] mark_seen error:', err)
       }

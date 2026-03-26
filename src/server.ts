@@ -17,7 +17,7 @@ initMilestoneReleaseWorker()
 
 // Create HTTP server and attach socket.io
 const httpServer = http.createServer(app)
-initChatSocket(httpServer)
+initChatSocket(httpServer, app)
 
 // Test DB connection on startup
 async function startServer() {
