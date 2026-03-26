@@ -307,42 +307,6 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       }
     })
 
-    // ── Post to Chat ────────────────────────────────────────────────────────
-    // Try to find an existing chat room for this pair to notify them in-thread
-    const chatRoom = await prisma.chatRoom.findFirst({
-      where: {
-        clientProfileId: clientProfile.id,
-        freelancerProfileId: freelancerProfileId
-      },
-      orderBy: { createdAt: 'desc' }
-    })
-
-    if (chatRoom) {
-      try {
-        const io = req.app.get('io')
-        const systemMsg = await prisma.message.create({
-          data: {
-            chatRoomId: chatRoom.id,
-            senderId: userId,
-            content: `📄 **Contract Invitation Sent**\nProject: ${project.title}\nBudget: $${budget || project.budget || 'To be discussed'}\n\n[View Invitation Details](/freelancer/invitations/${invitation.id})`,
-            type: 'SYSTEM'
-          },
-          include: {
-            sender: {
-              select: { id: true, name: true, profileImage: true, role: true }
-            }
-          }
-        })
-        
-        if (io) {
-          io.to(chatRoom.id).emit('new_message', systemMsg)
-          io.to(`user:${freelancer.userId}`).emit('new_message', systemMsg)
-        }
-      } catch (msgErr) {
-        console.error('[Invite] Failed to post chat message:', msgErr)
-      }
-    }
-
     return res.status(201).json({
       success: true,
       message: 'Invitation sent successfully',
