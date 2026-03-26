@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "mongodb"
-  url      = env("DATABASE_URL")
 }
 
 // ============================================================
@@ -639,7 +638,7 @@ model Contract {
   freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
   milestones        Milestone[]
   payments   Payment[]
-  chatRoom   ChatRoom?
+  chatRooms  ChatRoom[]
 
   @@map("contracts")
 }
@@ -699,7 +698,7 @@ model Payment {
 
 model ChatRoom {
   id                  String   @id @default(auto()) @map("_id") @db.ObjectId
-  contractId          String?  @unique @db.ObjectId
+  contractId          String?  @db.ObjectId
   projectId           String?  @db.ObjectId
   freelancerProfileId String?  @db.ObjectId
   clientProfileId     String?  @db.ObjectId
@@ -709,6 +708,8 @@ model ChatRoom {
   project           Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   freelancerProfile FreelancerProfile? @relation(fields: [freelancerProfileId], references: [id])
   clientProfile     ClientProfile?     @relation(fields: [clientProfileId], references: [id])
+  clientDeleted     Boolean            @default(false)
+  freelancerDeleted Boolean            @default(false)
   messages          Message[]
 
   @@map("chat_rooms")

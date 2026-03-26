@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { protect, requireRole } from '../middlewares/auth.middleware'
-import { upload } from '../middlewares/upload.middleware'
+import { upload, largeUpload } from '../middlewares/upload.middleware'
 import {
   getContractByProject,
   getContractById,
@@ -47,13 +47,14 @@ router.patch('/:contractId/approve', protect, requireRole('FREELANCER'), approve
 // Reject contract offer
 router.delete('/:contractId/reject', protect, requireRole('FREELANCER'), rejectContractOffer)
 
-// Submit deliverables
+// Submit deliverables (Up to 500MB)
 router.post(
   '/:contractId/milestones/:milestoneId/submit',
   protect,
   requireRole('FREELANCER'),
-  upload.array('files', 5),
+  largeUpload.array('files', 5),
   submitMilestone
 )
+
 
 export default router

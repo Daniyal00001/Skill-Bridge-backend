@@ -18,8 +18,16 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
   }
 }
 
-export const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter,
-})
+export const createUploadMiddleware = (sizeInMB: number) => {
+  return multer({
+    storage,
+    limits: { fileSize: sizeInMB * 1024 * 1024 },
+    fileFilter,
+  })
+}
+
+// Default 10MB upload for most things
+export const upload = createUploadMiddleware(10)
+
+// Large 500MB upload for Messaging and Work Delivery
+export const largeUpload = createUploadMiddleware(500)

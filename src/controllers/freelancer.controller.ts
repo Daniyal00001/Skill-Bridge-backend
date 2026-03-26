@@ -330,7 +330,7 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
 export const initiateChat = async (req: Request, res: Response) => {
   try {
     const freelancerProfileId = req.params.id as string
-    const { projectId } = req.body
+    const { projectId } = req.body || {}
     const userId = (req as any).user?.userId
 
     // Find profiles
@@ -356,17 +356,26 @@ export const initiateChat = async (req: Request, res: Response) => {
       })
     }
 
-    // Check for existing chat room (either linked to this project or a general recruitment one)
-    let chatRoom = await prisma.chatRoom.findFirst({
+    // Find ALL rooms between these two (without contract)
+    const existingRooms = await prisma.chatRoom.findMany({
       where: {
-        freelancerProfileId,
+        freelancerProfileId: freelancerProfileId,
         clientProfileId: clientProfile.id,
-        projectId: projectId || null,
-        contractId: null // Only looking for recruitment chats here
+        contractId: null
       }
     })
 
-    if (!chatRoom) {
+    let chatRoom = existingRooms.length > 0 ? existingRooms[0] : null;
+
+    if (chatRoom) {
+      // If it was soft-deleted, un-delete it
+      if (chatRoom.clientDeleted || chatRoom.freelancerDeleted) {
+        await prisma.chatRoom.update({
+          where: { id: chatRoom.id },
+          data: { clientDeleted: false, freelancerDeleted: false }
+        })
+      }
+    } else {
       // Create new chat room
       chatRoom = await prisma.chatRoom.create({
         data: {

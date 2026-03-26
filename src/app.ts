@@ -68,4 +68,8 @@ app.use('/api/admin', adminRoutes)
 // dashboard aggregation routes
 app.use('/api/dashboard', dashboardRoutes)
 
+// chat module routes (REST) — now with Socket.IO too
+import chatRoutes from './modules/chat/chat.routes'
+app.use('/api/chat', chatRoutes)
+
 export default app
