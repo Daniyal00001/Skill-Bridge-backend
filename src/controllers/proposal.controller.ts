@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
 import { uploadToCloudinary } from '../utils/uploadToCloudinary'
 import { calculateTokenCost, calculateTokenCostWithBreakdown } from '../utils/tokenCalculator'
+import { sanitize, stripTags } from '../utils/sanitize'
 
 // ─────────────────────────────────────────────────────────────
 // GET TOKEN COST FOR A PROJECT (preview before submitting)
@@ -173,11 +174,17 @@ export const submitProposal = async (req: Request, res: Response) => {
           freelancerProfileId: freelancerProfile.id,
           proposedPrice: Number(bidAmount),
           deliveryTime: Number(deliveryDays),
-          coverLetter,
+          coverLetter: sanitize(coverLetter),
           attachments: Array.isArray(attachments) ? attachments : [],
           tokenCost,
           status: 'PENDING',
-          proposalMilestones: milestones ? JSON.parse(typeof milestones === 'string' ? milestones : JSON.stringify(milestones)) : null,
+          proposalMilestones: milestones 
+            ? JSON.parse(typeof milestones === 'string' ? milestones : JSON.stringify(milestones)).map((m: any) => ({
+                ...m,
+                title: stripTags(m.title),
+                description: m.description ? sanitize(m.description) : null
+              })) 
+            : null,
           generalRevisionLimit: generalRevisionLimit ? Number(generalRevisionLimit) : 3,
         },
         include: {
@@ -741,7 +748,13 @@ export const proposeMilestoneChanges = async (req: Request, res: Response): Prom
     await prisma.proposal.update({
       where: { id },
       data: {
-        clientRequestedMilestones: milestones,
+        clientRequestedMilestones: milestones 
+          ? (typeof milestones === 'string' ? JSON.parse(milestones) : milestones).map((m: any) => ({
+              ...m,
+              title: stripTags(m.title),
+              description: m.description ? sanitize(m.description) : null
+            })) 
+          : null,
         negotiationStatus: 'CLIENT_PROPOSED'
       }
     })

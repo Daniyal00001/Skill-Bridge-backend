@@ -1,4 +1,5 @@
 import express from "express";
+import helmet from "helmet";
 import dotenv from "dotenv";
 import authRoutes from './routes/auth.routes'
 import { aiRoutes } from './routes/ai.routes'
@@ -24,6 +25,9 @@ const app = express();
 
 
 // ── Middlewares ───────────────────────────────────────────────
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(cors({
   origin: [
     'http://localhost:5173',

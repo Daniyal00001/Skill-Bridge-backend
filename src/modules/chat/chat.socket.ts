@@ -9,6 +9,13 @@ import { MessageWithSender } from './chat.types'
 // Track online users: userId → Set of socketIds
 const onlineUsers = new Map<string, Set<string>>()
 
+// In-memory rate limiting for Socket.IO messages
+interface RateLimit {
+  count: number
+  resetAt: number
+}
+const socketRateLimits = new Map<string, RateLimit>()
+
 const getUserIdFromSocket = (socket: Socket): string | null => {
   try {
     const token =
@@ -99,6 +106,30 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
 
     // ── Event: send_message ─────────────────────────────────────────────────
     socket.on('send_message', async (data: { roomId: string; content: string; type?: string }) => {
+      // 1. Rate Limiting (20 messages in 10 seconds)
+      const now = Date.now()
+      const limit = socketRateLimits.get(userId) || { count: 0, resetAt: now + 10000 }
+
+      if (now > limit.resetAt) {
+        limit.count = 0
+        limit.resetAt = now + 10000
+      }
+
+      limit.count++
+      socketRateLimits.set(userId, limit)
+
+      if (limit.count > 20) {
+        return socket.emit('error', {
+          message: 'Too many messages sent. Please wait a few seconds.',
+          rateLimitReached: true,
+        })
+      }
+
+      // 2. Length Validation (Max 2000 chars)
+      if (data.content && data.content.length > 2000) {
+        return socket.emit('error', { message: 'Message is too long (max 2000 characters)' })
+      }
+
       try {
         const { roomId, content, type } = data
 

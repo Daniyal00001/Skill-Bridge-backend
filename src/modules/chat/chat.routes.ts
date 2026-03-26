@@ -12,6 +12,7 @@ import {
   markSeenHandler,
   deleteRoom,
 } from './chat.controller'
+import { messageRateLimiter } from '../../middlewares/rateLimit.middleware'
 
 const router = Router()
 
@@ -25,10 +26,10 @@ router.delete('/rooms/:roomId', deleteRoom)
 
 // Messages (paginated via cursor query param)
 router.get('/rooms/:roomId/messages', getMessages)
-router.post('/rooms/:roomId/messages', sendMessage)
+router.post('/rooms/:roomId/messages', messageRateLimiter, sendMessage)
 
 // Attachments (up to 5 files per request, 500MB total/each limit)
-router.post('/rooms/:roomId/attachments', largeUpload.array('files', 5), uploadAttachment)
+router.post('/rooms/:roomId/attachments', messageRateLimiter, largeUpload.array('files', 5), uploadAttachment)
 
 
 // Mark seen

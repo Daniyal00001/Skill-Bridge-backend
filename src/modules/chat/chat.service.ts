@@ -218,12 +218,23 @@ export const getPaginatedMessages = async (
   return { messages: formatted, nextCursor, hasMore }
 }
 
+import { sanitize, stripTags } from '../../utils/sanitize'
+
 export const saveMessage = async (payload: SendMessagePayload): Promise<MessageWithSender> => {
+  if (payload.content.length > 2000) {
+    throw new Error('Message is too long (max 2000 characters)')
+  }
+
+  // Sanitize content: Strip ALL tags for TEXT, use safe allow-list for SYSTEM/others
+  const sanitizedContent = (payload.type === 'TEXT' || !payload.type) 
+    ? stripTags(payload.content) 
+    : sanitize(payload.content)
+
   const message = await prisma.message.create({
     data: {
       chatRoomId: payload.chatRoomId,
       senderId: payload.senderId,
-      content: payload.content,
+      content: sanitizedContent || '',
       type: (payload.type ?? 'TEXT') as any,
       fileUrl: payload.fileUrl ?? null,
     },
