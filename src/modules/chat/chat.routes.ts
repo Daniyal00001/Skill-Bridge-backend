@@ -11,6 +11,7 @@ import {
   restrictUserHandler,
   markSeenHandler,
   deleteRoom,
+  getUnreadCount,
 } from './chat.controller'
 import { messageRateLimiter } from '../../middlewares/rateLimit.middleware'
 
@@ -18,6 +19,8 @@ const router = Router()
 
 // All chat routes require authentication
 router.use(protect)
+
+router.get('/unread-count', getUnreadCount)
 
 // Room management
 router.get('/rooms', getRooms)

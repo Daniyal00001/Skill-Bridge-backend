@@ -180,6 +180,45 @@ export const getChatRoomsForUser = async (userId: string): Promise<ChatRoomWithP
   return finalResult
 }
 
+export const getUnreadRoomsCount = async (userId: string): Promise<number> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      clientProfile: { select: { id: true } },
+      freelancerProfile: { select: { id: true } },
+    },
+  })
+  if (!user) return 0
+
+  const clientProfileId = user.clientProfile?.id
+  const freelancerProfileId = user.freelancerProfile?.id
+
+  // 1. Get all active rooms for this user
+  const rooms = await prisma.chatRoom.findMany({
+    where: {
+      OR: [
+        clientProfileId ? { clientProfileId, clientDeleted: false } : undefined,
+        freelancerProfileId ? { freelancerProfileId, freelancerDeleted: false } : undefined,
+      ].filter(Boolean) as any,
+    },
+    select: { id: true },
+  })
+
+  if (rooms.length === 0) return 0
+
+  // 2. Count distinct chatRoomIds that have unread messages NOT from current user
+  const unreadMessagesGroupByRoom = await prisma.message.groupBy({
+    by: ['chatRoomId'],
+    where: {
+      chatRoomId: { in: rooms.map((r) => r.id) },
+      isRead: false,
+      senderId: { not: userId },
+    },
+  })
+
+  return unreadMessagesGroupByRoom.length
+}
+
 // ── Message Operations ────────────────────────────────────────────────────────
 
 export const getPaginatedMessages = async (

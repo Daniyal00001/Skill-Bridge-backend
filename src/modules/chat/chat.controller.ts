@@ -10,7 +10,22 @@ import {
   isUserRestricted,
   doesRoomBelongToUser,
   deleteChatRoom,
+  getUnreadRoomsCount,
 } from './chat.service'
+
+// ...
+
+// ── GET /api/chat/unread-count ────────────────────────────────────────────────
+export const getUnreadCount = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId
+    const count = await getUnreadRoomsCount(userId)
+    res.json({ success: true, count })
+  } catch (err) {
+    console.error('[Chat] getUnreadCount error:', err)
+    res.status(500).json({ success: false, message: 'Failed to fetch unread count' })
+  }
+}
 import { sendMessageSchema, openRoomSchema, muteRoomSchema, restrictUserSchema } from './chat.schema'
 import { uploadToCloudinary } from '../../utils/uploadToCloudinary'
 import { prisma } from '../../config/prisma'

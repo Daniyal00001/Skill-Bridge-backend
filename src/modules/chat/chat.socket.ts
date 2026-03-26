@@ -3,7 +3,13 @@ import { Server as HTTPServer } from 'http'
 import express from 'express'
 import jwt from 'jsonwebtoken'
 import { prisma } from '../../config/prisma'
-import { saveMessage, markMessagesAsRead, isUserRestricted, doesRoomBelongToUser } from './chat.service'
+import { 
+  saveMessage, 
+  markMessagesAsRead, 
+  isUserRestricted, 
+  doesRoomBelongToUser,
+  getUnreadRoomsCount,
+} from './chat.service'
 import { MessageWithSender } from './chat.types'
 
 // Track online users: userId → Set of socketIds
@@ -150,7 +156,6 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
         io.to(roomId).emit('new_message', message)
 
         // 2. Also emit to the recipient's personal room to ensure discovery
-        // if they are online but haven't joined this specific room yet
         const room = await prisma.chatRoom.findUnique({
           where: { id: roomId },
           include: {
@@ -169,6 +174,10 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
 
           if (recipientId) {
             io.to(`user:${recipientId}`).emit('new_message', message)
+            
+            // 3. Update recipient's unread count badge
+            const unreadCount = await getUnreadRoomsCount(recipientId)
+            io.to(`user:${recipientId}`).emit('unread_count_update', { count: unreadCount })
           }
         }
 
@@ -217,6 +226,10 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
             io.to(`user:${otherUserId}`).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
           }
         }
+
+        // Also update the current user's unread count
+        const unreadCount = await getUnreadRoomsCount(userId)
+        io.to(`user:${userId}`).emit('unread_count_update', { count: unreadCount })
       } catch (err) {
         console.error('[Socket] mark_seen error:', err)
       }
