@@ -176,6 +176,13 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   lastActiveAt      DateTime?
+  // OTP fields for email change
+  pendingEmail      String?
+  emailOtp          String?
+  emailOtpExpiry    DateTime?
+  // OTP fields for phone verification
+  phoneOtp          String?
+  phoneOtpExpiry    DateTime?
 
   // Relations
   clientProfile     ClientProfile?
@@ -236,9 +243,13 @@ model ClientProfile {
   preferredExpLevel ExperienceLevel?
   commMethod        String? // "Slack", "Email", "Chat"
   availability      String? // "Full-time", "Part-time"
-  language          String? // "English", etc.
-  locationPref      String? // "Any location", etc.
-  hiringMethod      String? // "Bidding", "Direct"
+  language          String?   // Preferred freelancer language
+  locationPref      String?   // "Any location", etc.
+  hiringMethod      String?   // "Bidding", "Direct"
+  preferredRegion   String?   // Region from DB (e.g. "Asia", "Europe")
+  spokenLanguages   String[]  // Client's own languages (up to 3)
+  hourlyBudgetMin   Int?      // Preferred freelancer hourly rate - min
+  hourlyBudgetMax   Int?      // Preferred freelancer hourly rate - max
   profileCompletion Int              @default(0)
   createdAt         DateTime?        @default(now())
   updatedAt         DateTime?        @updatedAt
