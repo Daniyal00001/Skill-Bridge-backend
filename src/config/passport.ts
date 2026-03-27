@@ -32,17 +32,15 @@ passport.use(
         })
 
         if (user) {
-          // ── Existing user — update googleId if missing ──
-          if (!user.googleId) {
-            user = await prisma.user.update({
-              where: { id: user.id },
-              data: { 
-                googleId, 
-                profileImage: user.profileImage || profileImage,
-                isEmailVerified: true // Google login implies verified email
-              },
-            })
-          }
+          // ── Existing user — ensure googleId, profileImage, and isEmailVerified ──
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: { 
+              googleId, 
+              profileImage: user.profileImage || profileImage,
+              isEmailVerified: true // Google login implies verified email
+            },
+          })
         } else {
           // ── New user — create account + profile ─────────
           // WHY transaction: user + profile must both succeed

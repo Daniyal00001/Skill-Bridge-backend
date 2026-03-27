@@ -5,6 +5,7 @@ generator client {
 
 datasource db {
   provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 // ============================================================
@@ -228,6 +229,7 @@ model ClientProfile {
   bio               String?
   website           String?
   location          String?
+  region            String?
   timezone          String?
   hiringPreference  String? // "Hourly", "Fixed", "Both"
   budgetRange       String? // "Low", "Medium", "High"
