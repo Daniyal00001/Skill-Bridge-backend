@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/prisma";
 import { sendOtpEmail } from "../utils/email";
+import { sendSmsOtp } from "../utils/sms";
 import crypto from "crypto";
 
 // ── helpers ──────────────────────────────────────────────────
@@ -26,6 +27,8 @@ export const getMyProfile = async (req: Request, res: Response) => {
             email: true,
             pendingEmail: true,
             isEmailVerified: true,
+            // @ts-ignore
+            isPhoneVerified: true,
             isPaymentVerified: true,
             isIdVerified: true,
             profileImage: true,
@@ -138,6 +141,8 @@ export const updateMyProfile = async (req: Request, res: Response) => {
           select: {
             email: true,
             isEmailVerified: true,
+            // @ts-ignore
+            isPhoneVerified: true,
             isPaymentVerified: true,
             isIdVerified: true,
             profileImage: true,
@@ -155,7 +160,9 @@ export const updateMyProfile = async (req: Request, res: Response) => {
           ...(phoneNumber !== undefined && { phoneNumber }),
         },
       });
+      // @ts-ignore
       if (profileImage !== undefined) updatedProfile.user.profileImage = profileImage;
+      // @ts-ignore
       if (phoneNumber !== undefined) updatedProfile.user.phoneNumber = phoneNumber;
     }
 
@@ -252,19 +259,72 @@ export const requestPhoneOtp = async (req: Request, res: Response) => {
     const { phoneNumber } = req.body;
     if (!phoneNumber) return res.status(400).json({ success: false, message: "Phone number is required" });
 
+    // International Standard Regex
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(phoneNumber)) {
+      return res.status(400).json({ success: false, message: "Invalid phone number format. Use international standard (e.g., +923001234567)" });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    // 5-minute resend cooldown
+    // @ts-ignore
+    if (user.phoneOtpLastSent) {
+      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+      // @ts-ignore
+      if (user.phoneOtpLastSent > fiveMinsAgo) {
+        // @ts-ignore
+        const remainingSeconds = Math.ceil((user.phoneOtpLastSent.getTime() + 5 * 60 * 1000 - Date.now()) / 1000);
+        return res.status(429).json({ 
+          success: false, 
+          message: `Please wait ${remainingSeconds} seconds before requesting a new OTP` 
+        });
+      }
+    }
+
+    // Already Verified Check
+    // @ts-ignore
+    if (user.phoneNumber === phoneNumber && user.isPhoneVerified) {
+      return res.status(400).json({ success: false, message: "This phone number is already verified for your account." });
+    }
+
+    // Duplicate Check (Other users)
+    const otherUser = await prisma.user.findFirst({
+      where: { 
+        phoneNumber, 
+        // @ts-ignore
+        isPhoneVerified: true,
+        id: { not: userId } 
+      }
+    });
+    if (otherUser) {
+      return res.status(409).json({ success: false, message: "This phone number is already in use by another verified user." });
+    }
+
     const otp = genOtp();
     await prisma.user.update({
       where: { id: userId },
-      data: { phoneNumber, phoneOtp: otp, phoneOtpExpiry: otpExpiry() },
+      data: { 
+        phoneNumber, 
+        phoneOtp: otp, 
+        phoneOtpExpiry: otpExpiry(),
+        // @ts-ignore
+        phoneOtpLastSent: new Date(),
+        // Reset verified status if changing to a new number
+        // (If it reached here, it's either a different number or wasn't verified)
+        // @ts-ignore
+        isPhoneVerified: false 
+      },
     });
 
-    // WhatsApp placeholder — log OTP to console (plug in Twilio/Meta later)
-    console.log(`[WhatsApp OTP] To: ${phoneNumber} | OTP: ${otp}`);
+    // Send real SMS via Twilio
+    await sendSmsOtp(phoneNumber, otp);
 
-    return res.status(200).json({ success: true, message: `OTP sent to WhatsApp: ${phoneNumber}` });
+    return res.status(200).json({ success: true, message: `OTP sent to ${phoneNumber}` });
   } catch (error) {
     console.error("Error requesting phone OTP:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res.status(500).json({ success: false, message: error instanceof Error ? error.message : "Internal server error" });
   }
 };
 
@@ -292,7 +352,12 @@ export const verifyPhoneOtp = async (req: Request, res: Response) => {
 
     await prisma.user.update({
       where: { id: userId },
-      data: { phoneOtp: null, phoneOtpExpiry: null },
+      data: { 
+        // @ts-ignore
+        isPhoneVerified: true,
+        phoneOtp: null, 
+        phoneOtpExpiry: null 
+      },
     });
 
     return res.status(200).json({ success: true, message: "Phone number verified successfully" });

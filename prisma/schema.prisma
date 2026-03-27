@@ -170,6 +170,7 @@ model User {
   isIdVerified      Boolean   @default(false)
   idDocumentUrl     String?
   phoneNumber       String?
+  isPhoneVerified   Boolean   @default(false)
   isBanned          Boolean   @default(false)
   banReason         String?
   profileImage      String?
@@ -183,6 +184,7 @@ model User {
   // OTP fields for phone verification
   phoneOtp          String?
   phoneOtpExpiry    DateTime?
+  phoneOtpLastSent  DateTime?
 
   // Relations
   clientProfile     ClientProfile?
