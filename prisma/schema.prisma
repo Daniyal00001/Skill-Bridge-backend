@@ -236,6 +236,9 @@ model ClientProfile {
   preferredExpLevel ExperienceLevel?
   commMethod        String? // "Slack", "Email", "Chat"
   availability      String? // "Full-time", "Part-time"
+  language          String? // "English", etc.
+  locationPref      String? // "Any location", etc.
+  hiringMethod      String? // "Bidding", "Direct"
   profileCompletion Int              @default(0)
   createdAt         DateTime?        @default(now())
   updatedAt         DateTime?        @updatedAt

@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { prisma } from '../config/prisma';
+import { Request, Response } from "express";
+import { prisma } from "../config/prisma";
 
 // ─────────────────────────────────────────────────────────────
 // ADMIN DASHBOARD
@@ -24,22 +24,22 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: firstDayOfMonth } } }),
-      prisma.project.count({ where: { status: 'OPEN' } }),
-      prisma.project.count({ where: { status: 'IN_PROGRESS' } }),
-      prisma.project.count({ where: { status: 'COMPLETED' } }),
-      prisma.project.count({ where: { status: 'DISPUTED' } }),
-      prisma.dispute.count({ where: { status: 'OPEN' } }),
-      prisma.skill.count({ where: { status: 'PENDING' } }),
-      prisma.proposal.count({ where: { status: 'PENDING' } }),
+      prisma.project.count({ where: { status: "OPEN" } }),
+      prisma.project.count({ where: { status: "IN_PROGRESS" } }),
+      prisma.project.count({ where: { status: "COMPLETED" } }),
+      prisma.project.count({ where: { status: "DISPUTED" } }),
+      prisma.dispute.count({ where: { status: "OPEN" } }),
+      prisma.skill.count({ where: { status: "PENDING" } }),
+      prisma.proposal.count({ where: { status: "PENDING" } }),
       prisma.user.count({ where: { isBanned: true } }),
     ]);
 
     // Calculate revenue (Sum of all RELEASED payments, assuming platform takes 10% fee)
     const payments = await prisma.payment.aggregate({
       _sum: { amount: true },
-      where: { status: 'RELEASED' },
+      where: { status: "RELEASED" },
     });
-    const totalRevenue = (payments._sum.amount || 0) * 0.10;
+    const totalRevenue = (payments._sum.amount || 0) * 0.1;
 
     // Fetch lists
     const [
@@ -51,18 +51,32 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
     ] = await Promise.all([
       prisma.user.findMany({
         take: 5,
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, name: true, email: true, role: true, isEmailVerified: true, isBanned: true, profileImage: true },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isEmailVerified: true,
+          isBanned: true,
+          profileImage: true,
+        },
       }),
       prisma.project.findMany({
         take: 5,
-        orderBy: { createdAt: 'desc' },
-        select: { id: true, title: true, size: true, status: true, budget: true },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          size: true,
+          status: true,
+          budget: true,
+        },
       }),
       prisma.dispute.findMany({
         take: 5,
-        where: { status: { not: 'CLOSED' } },
-        orderBy: { openedAt: 'desc' },
+        where: { status: { not: "CLOSED" } },
+        orderBy: { openedAt: "desc" },
         include: {
           client: { select: { name: true } },
           freelancer: { select: { name: true } },
@@ -71,23 +85,29 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
       }),
       prisma.skill.findMany({
         take: 5,
-        where: { status: 'PENDING' },
-        orderBy: { createdAt: 'desc' },
+        where: { status: "PENDING" },
+        orderBy: { createdAt: "desc" },
         include: {
           freelancers: {
             take: 1,
-            include: { freelancerProfile: { include: { user: { select: { name: true } } } } }
-          }
-        }
+            include: {
+              freelancerProfile: {
+                include: { user: { select: { name: true } } },
+              },
+            },
+          },
+        },
       }),
-      prisma.adminLog.findMany({
-        take: 5,
-        orderBy: { createdAt: 'desc' },
-      }).catch(() => []) // Catch if AdminLog model has issues or is empty
+      prisma.adminLog
+        .findMany({
+          take: 5,
+          orderBy: { createdAt: "desc" },
+        })
+        .catch(() => []), // Catch if AdminLog model has issues or is empty
     ]);
 
     // Format disputes
-    const formattedDisputes = activeDisputes.map(d => ({
+    const formattedDisputes = activeDisputes.map((d) => ({
       id: d.id,
       projectTitle: d.project.title,
       clientName: d.client.name,
@@ -98,9 +118,10 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
     }));
 
     // Format pending skills to include submitter name if available
-    const formattedPendingSkills = pendingSkillsList.map(s => ({
+    const formattedPendingSkills = pendingSkillsList.map((s) => ({
       ...s,
-      submittedBy: s.freelancers?.[0]?.freelancerProfile?.user?.name || 'Unknown'
+      submittedBy:
+        s.freelancers?.[0]?.freelancerProfile?.user?.name || "Unknown",
     }));
 
     return res.status(200).json({
@@ -125,12 +146,14 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
           activeDisputes: formattedDisputes,
           pendingSkills: formattedPendingSkills,
           recentAdminLogs,
-        }
-      }
+        },
+      },
     });
   } catch (error: any) {
     console.error("Admin Dashboard Error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -141,11 +164,13 @@ export const getClientDashboard = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const clientProfile = await prisma.clientProfile.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!clientProfile) {
-      return res.status(404).json({ success: false, message: "Client profile not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Client profile not found" });
     }
 
     const clientId = clientProfile.id;
@@ -159,44 +184,77 @@ export const getClientDashboard = async (req: Request, res: Response) => {
       inProgressProjectsList,
       recentInvitations,
       recentProposals,
+      totalProjects,
+      hiredProjectsCount,
     ] = await Promise.all([
-      prisma.project.count({ where: { clientProfileId: clientId, status: { in: ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW', 'REVISION_REQUESTED'] } } }),
-      prisma.project.count({ where: { clientProfileId: clientId, status: 'COMPLETED' } }),
-      prisma.project.count({ where: { clientProfileId: clientId, status: 'DISPUTED' } }),
-      prisma.project.findMany({
-        where: { clientProfileId: clientId, status: 'OPEN' },
-        take: 2,
-        orderBy: { createdAt: 'desc' },
+      prisma.project.count({
+        where: {
+          clientProfileId: clientId,
+          status: {
+            in: ["OPEN", "IN_PROGRESS", "UNDER_REVIEW", "REVISION_REQUESTED"],
+          },
+        },
+      }),
+      prisma.project.count({
+        where: { clientProfileId: clientId, status: "COMPLETED" },
+      }),
+      prisma.project.count({
+        where: { clientProfileId: clientId, status: "DISPUTED" },
       }),
       prisma.project.findMany({
-        where: { clientProfileId: clientId, status: 'IN_PROGRESS' },
-        select: { budget: true }
+        where: { clientProfileId: clientId, status: "OPEN" },
+        take: 2,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.project.findMany({
+        where: { clientProfileId: clientId, status: "IN_PROGRESS" },
+        select: { budget: true },
       }),
       prisma.invitation.findMany({
         where: { clientProfileId: clientId },
         take: 5,
-        orderBy: { createdAt: 'desc' },
-        include: { 
-          freelancerProfile: { include: { user: { select: { name: true, profileImage: true } } } }
-        }
+        orderBy: { createdAt: "desc" },
+        include: {
+          freelancerProfile: {
+            include: { user: { select: { name: true, profileImage: true } } },
+          },
+        },
       }),
       prisma.proposal.findMany({
         where: { project: { clientProfileId: clientId } },
         take: 5,
-        orderBy: { submittedAt: 'desc' },
+        orderBy: { submittedAt: "desc" },
         include: {
           project: { select: { title: true } },
-          freelancerProfile: { include: { user: { select: { name: true, profileImage: true } } } }
-        }
-      })
+          freelancerProfile: {
+            include: { user: { select: { name: true, profileImage: true } } },
+          },
+        },
+      }),
+      prisma.project.count({ where: { clientProfileId: clientId } }),
+      prisma.project.count({
+        where: { clientProfileId: clientId, contract: { isNot: null } },
+      }),
     ]);
 
-    const committedBudget = inProgressProjectsList.reduce((acc, p) => acc + (p.budget || 0), 0);
-    const pendingProposalsCount = await prisma.proposal.count({ where: { project: { clientProfileId: clientId }, status: 'PENDING' } });
-    const shortlistedProposalsCount = await prisma.proposal.count({ where: { project: { clientProfileId: clientId }, status: 'SHORTLISTED' } });
+    const hireRate =
+      totalProjects > 0
+        ? Math.round((hiredProjectsCount / totalProjects) * 100)
+        : 0;
+
+    const committedBudget = inProgressProjectsList.reduce(
+      (acc, p) => acc + (p.budget || 0),
+      0,
+    );
+    const pendingProposalsCount = await prisma.proposal.count({
+      where: { project: { clientProfileId: clientId }, status: "PENDING" },
+    });
+    const shortlistedProposalsCount = await prisma.proposal.count({
+      where: { project: { clientProfileId: clientId }, status: "SHORTLISTED" },
+    });
 
     // formatted lists
-    const formattedProposals = recentProposals.map(p => ({
+    const formattedProposals = recentProposals.map((p) => ({
       id: p.id,
       projectId: p.projectId,
       projectTitle: p.project?.title,
@@ -207,21 +265,23 @@ export const getClientDashboard = async (req: Request, res: Response) => {
     }));
 
     // Robust Invitation Mapping (Manual join to handle orphaned projects)
-    const invitationProjectIds = [...new Set(recentInvitations.map(i => i.projectId))];
+    const invitationProjectIds = [
+      ...new Set(recentInvitations.map((i) => i.projectId)),
+    ];
     const dashboardProjects = await prisma.project.findMany({
       where: { id: { in: invitationProjectIds } },
-      select: { id: true, title: true }
+      select: { id: true, title: true },
     });
-    const projMap = new Map(dashboardProjects.map(p => [p.id, p]));
+    const projMap = new Map(dashboardProjects.map((p) => [p.id, p]));
 
-    const formattedInvitations = recentInvitations.map(i => {
+    const formattedInvitations = recentInvitations.map((i) => {
       const p = projMap.get(i.projectId);
       return {
         id: i.id,
-        freelancerName: i.freelancerProfile?.user?.name || 'Unknown',
+        freelancerName: i.freelancerProfile?.user?.name || "Unknown",
         avatar: i.freelancerProfile?.user?.profileImage,
-        projectTitle: p?.title || 'Project Deleted',
-        status: p ? i.status : 'CANCELLED',
+        projectTitle: p?.title || "Project Deleted",
+        status: p ? i.status : "CANCELLED",
       };
     });
 
@@ -235,18 +295,21 @@ export const getClientDashboard = async (req: Request, res: Response) => {
           committedBudget,
           pendingProposals: pendingProposalsCount,
           shortlistedProposals: shortlistedProposalsCount,
+          hireRate,
+          totalProjects,
         },
         lists: {
           openProjects: openProjectsList,
           recentProposals: formattedProposals,
           recentInvitations: formattedInvitations,
-        }
-      }
+        },
+      },
     });
-
   } catch (error: any) {
     console.error("Client Dashboard Error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -257,11 +320,13 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     const freelancerProfile = await prisma.freelancerProfile.findUnique({
-      where: { userId }
+      where: { userId },
     });
 
     if (!freelancerProfile) {
-      return res.status(404).json({ success: false, message: "Freelancer profile not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Freelancer profile not found" });
     }
 
     const fid = freelancerProfile.id;
@@ -280,41 +345,67 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
       recentTokenTxs,
       activeProposalsList,
     ] = await Promise.all([
-      prisma.proposal.count({ where: { freelancerProfileId: fid, status: 'PENDING' } }),
-      prisma.proposal.count({ where: { freelancerProfileId: fid, status: 'SHORTLISTED' } }),
-      prisma.proposal.count({ where: { freelancerProfileId: fid, submittedAt: { gte: startOfMonth } } }),
-      prisma.contract.count({ where: { freelancerProfileId: fid, status: 'ACTIVE' } }),
-      prisma.contract.count({ where: { freelancerProfileId: fid, status: 'COMPLETED' } }),
-      prisma.invitation.count({ where: { freelancerProfileId: fid, status: 'PENDING' } }),
+      prisma.proposal.count({
+        where: { freelancerProfileId: fid, status: "PENDING" },
+      }),
+      prisma.proposal.count({
+        where: { freelancerProfileId: fid, status: "SHORTLISTED" },
+      }),
+      prisma.proposal.count({
+        where: { freelancerProfileId: fid, submittedAt: { gte: startOfMonth } },
+      }),
+      prisma.contract.count({
+        where: { freelancerProfileId: fid, status: "ACTIVE" },
+      }),
+      prisma.contract.count({
+        where: { freelancerProfileId: fid, status: "COMPLETED" },
+      }),
+      prisma.invitation.count({
+        where: { freelancerProfileId: fid, status: "PENDING" },
+      }),
       prisma.milestone.findMany({
-        where: { contract: { freelancerProfileId: fid }, status: { in: ['IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED', 'APPROVED'] } },
+        where: {
+          contract: { freelancerProfileId: fid },
+          status: {
+            in: ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED", "APPROVED"],
+          },
+        },
         take: 5,
-        orderBy: { dueDate: 'asc' },
-        include: { contract: { select: { project: { select: { title: true } } } } }
+        orderBy: { dueDate: "asc" },
+        include: {
+          contract: { select: { project: { select: { title: true } } } },
+        },
       }),
       prisma.tokenTransaction.findMany({
         where: { freelancerProfileId: fid },
         take: 5,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       }),
       prisma.proposal.findMany({
-        where: { freelancerProfileId: fid, status: { in: ['PENDING', 'SHORTLISTED'] } },
+        where: {
+          freelancerProfileId: fid,
+          status: { in: ["PENDING", "SHORTLISTED"] },
+        },
         take: 5,
-        orderBy: { submittedAt: 'desc' },
-        include: { project: { select: { title: true } } }
-      })
+        orderBy: { submittedAt: "desc" },
+        include: { project: { select: { title: true } } },
+      }),
     ]);
 
     // Earnings computations
     const [totalEarningsRes, monthlyEarningsRes] = await Promise.all([
       prisma.payment.aggregate({
         _sum: { amount: true },
-        where: { status: 'RELEASED', contract: { freelancerProfileId: fid } }
+        where: { status: "RELEASED", contract: { freelancerProfileId: fid } },
       }),
       prisma.payment.aggregate({
         _sum: { amount: true },
-        where: { status: 'RELEASED', contract: { freelancerProfileId: fid }, releasedAt: { gte: startOfMonth } }
-      })
+        where: {
+          status: "RELEASED",
+          contract: { freelancerProfileId: fid },
+          releasedAt: { gte: startOfMonth },
+        },
+      }),
     ]);
 
     const totalEarnings = totalEarningsRes._sum.amount || 0;
@@ -324,10 +415,10 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
     const reviews = await prisma.review.aggregate({
       _avg: { rating: true },
       _count: { rating: true },
-      where: { receiverId: userId }
+      where: { receiverId: userId },
     });
 
-    const formattedMilestones = activeMilestones.map(m => ({
+    const formattedMilestones = activeMilestones.map((m) => ({
       id: m.id,
       title: m.title,
       projectTitle: m.contract?.project?.title,
@@ -338,7 +429,7 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
       revisionsUsed: m.revisionsUsed,
     }));
 
-    const formattedProposals = activeProposalsList.map(p => ({
+    const formattedProposals = activeProposalsList.map((p) => ({
       id: p.id,
       projectTitle: p.project?.title,
       proposedPrice: p.proposedPrice,
@@ -361,18 +452,19 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
           skillTokenBalance: freelancerProfile.skillTokenBalance,
           profileCompletion: freelancerProfile.profileCompletion,
           averageRating: reviews._avg.rating || 5.0,
-          totalReviews: reviews._count.rating || 0
+          totalReviews: reviews._count.rating || 0,
         },
         lists: {
           activeMilestones: formattedMilestones,
           recentTokenTxs,
           activeProposals: formattedProposals,
-        }
-      }
+        },
+      },
     });
-
   } catch (error: any) {
     console.error("Freelancer Dashboard Error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
