@@ -57,10 +57,12 @@ export const getNotificationsForUser = async (userId: string, limit = 50, offset
 }
 
 export const markAsRead = async (notificationId: string, userId: string) => {
-  return prisma.notification.updateMany({
+  const result = await prisma.notification.updateMany({
     where: { id: notificationId, userId },
     data: { isRead: true },
   })
+  console.log(`[NotificationService] MarkAsRead result for notification ${notificationId}:`, result)
+  return result
 }
 
 export const markAllAsRead = async (userId: string) => {
