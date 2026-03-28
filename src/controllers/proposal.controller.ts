@@ -3,6 +3,7 @@ import { prisma } from '../config/prisma'
 import { uploadToCloudinary } from '../utils/uploadToCloudinary'
 import { calculateTokenCost, calculateTokenCostWithBreakdown } from '../utils/tokenCalculator'
 import { sanitize, stripTags } from '../utils/sanitize'
+import * as notificationService from '../services/notification.service'
 
 // ─────────────────────────────────────────────────────────────
 // GET TOKEN COST FOR A PROJECT (preview before submitting)
@@ -215,15 +216,13 @@ export const submitProposal = async (req: Request, res: Response) => {
 
       // 5. Notify client
       const clientUserId = proposal.project.clientProfile.userId
-      await tx.notification.create({
-        data: {
-          userId: clientUserId,
-          type: 'PROPOSAL_RECEIVED',
-          title: 'New Proposal Received',
-          body: `A freelancer submitted a proposal for: ${proposal.project.title}`,
-          link: `/client/projects/${projectId}/proposals`,
-        }
-      })
+      await notificationService.createNotification({
+        userId: clientUserId,
+        type: 'PROPOSAL_RECEIVED',
+        title: 'New Proposal Received',
+        body: `A freelancer submitted a proposal for: ${proposal.project.title}`,
+        link: `/client/projects/${projectId}/proposals`,
+      }, tx)
 
       return proposal
     })
@@ -569,43 +568,37 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
             ? `Congratulations! Your proposal for "${proposal.project.title}" was accepted. Work can begin immediately.`
             : `Congratulations! Your proposal for "${proposal.project.title}" was accepted. A contract has been created.`
 
-        await tx.notification.create({
-          data: {
-            userId: proposal.freelancerProfile.userId,
-            type: 'PROPOSAL_ACCEPTED',
-            title: notificationTitle,
-            body: notificationBody,
-            link: `/freelancer/contracts/${contract.id}`,
-          }
-        })
+        await notificationService.createNotification({
+          userId: proposal.freelancerProfile.userId,
+          type: 'PROPOSAL_ACCEPTED',
+          title: notificationTitle,
+          body: notificationBody,
+          link: `/freelancer/contracts/${contract.id}`,
+        }, tx)
       })
 
     } else if (status === 'SHORTLISTED') {
       await prisma.proposal.update({ where: { id }, data: { status: 'SHORTLISTED' } })
 
       // Notify freelancer
-      await prisma.notification.create({
-        data: {
-          userId: proposal.freelancerProfile.userId,
-          type: 'PROPOSAL_SHORTLISTED',
-          title: '⭐ Your Proposal Was Shortlisted!',
-          body: `Your proposal for "${proposal.project.title}" has been shortlisted. The client is reviewing it closely.`,
-          link: `/freelancer/proposals`,
-        }
+      await notificationService.createNotification({
+        userId: proposal.freelancerProfile.userId,
+        type: 'PROPOSAL_SHORTLISTED',
+        title: 'Your Proposal Was Shortlisted!',
+        body: `Your proposal for "${proposal.project.title}" has been shortlisted. The client is reviewing it closely.`,
+        link: `/freelancer/proposals`,
       })
 
     } else {
       // REJECTED
       await prisma.proposal.update({ where: { id }, data: { status: 'REJECTED' } })
 
-      await prisma.notification.create({
-        data: {
-          userId: proposal.freelancerProfile.userId,
-          type: 'PROPOSAL_REJECTED',
-          title: 'Proposal Update',
-          body: `Your proposal for "${proposal.project.title}" was not selected this time. Keep applying!`,
-          link: `/freelancer/proposals`,
-        }
+      await notificationService.createNotification({
+        userId: proposal.freelancerProfile.userId,
+        type: 'PROPOSAL_REJECTED',
+        title: 'Proposal Update',
+        body: `Your proposal for "${proposal.project.title}" was not selected this time. Keep applying!`,
+        link: `/freelancer/proposals`,
       })
     }
 
@@ -693,15 +686,13 @@ export const withdrawProposal = async (req: Request, res: Response) => {
 
       // Notify the client
       if (proposal.project.clientProfile?.userId) {
-        await tx.notification.create({
-          data: {
-            userId: proposal.project.clientProfile.userId,
-            type: 'SYSTEM_ALERT',
-            title: 'Proposal Withdrawn',
-            body: `A freelancer has withdrawn their proposal for "${(proposal as any).project?.title || 'the project'}".`,
-            link: `/client/projects/${proposal.projectId}/proposals`,
-          }
-        })
+        await notificationService.createNotification({
+          userId: proposal.project.clientProfile.userId,
+          type: 'SYSTEM_ALERT',
+          title: 'Proposal Withdrawn',
+          body: `A freelancer has withdrawn their proposal for "${(proposal as any).project?.title || 'the project'}".`,
+          link: `/client/projects/${proposal.projectId}/proposals`,
+        }, tx)
       }
     })
 
@@ -767,14 +758,12 @@ export const proposeMilestoneChanges = async (req: Request, res: Response): Prom
     })
 
     if (freelancer) {
-      await prisma.notification.create({
-        data: {
-          userId: freelancer.userId,
-          type: 'SYSTEM_ALERT',
-          title: '🤝 Milestone Changes Proposed',
-          body: `Client has proposed changes to your milestone plan for "${(proposal as any).project?.title || 'the project'}". Please review and accept to move forward.`,
-          link: `/freelancer/proposals/${id}`,
-        }
+      await notificationService.createNotification({
+        userId: freelancer.userId,
+        type: 'SYSTEM_ALERT',
+        title: 'Milestone Changes Proposed',
+        body: `Client has proposed changes to your milestone plan for "${(proposal as any).project?.title || 'the project'}". Please review and accept to move forward.`,
+        link: `/freelancer/proposals/${id}`,
       })
     }
 
@@ -825,14 +814,12 @@ export const acceptMilestoneChanges = async (req: Request, res: Response): Promi
       : `Freelancer has accepted your proposed milestone plan for "${(proposal as any).project?.title || 'the project'}". You can now finalize the hire.`
 
     // Notify client
-    await prisma.notification.create({
-      data: {
-        userId: (proposal as any).project?.clientProfile?.userId,
-        type: 'SYSTEM_ALERT',
-        title: notificationTitle,
-        body: notificationBody,
-        link: `/client/projects/${proposal.projectId}/proposals`,
-      }
+    await notificationService.createNotification({
+      userId: (proposal as any).project?.clientProfile?.userId,
+      type: 'SYSTEM_ALERT',
+      title: notificationTitle,
+      body: notificationBody,
+      link: `/client/projects/${proposal.projectId}/proposals`,
     })
 
     return res.status(200).json({ success: true, message: 'Changes accepted. Client has been notified.' })
@@ -891,14 +878,12 @@ export const requestRevisionChanges = async (req: Request, res: Response): Promi
 
     if (freelancer) {
       const revLabel = Number(requestedRevisions) === -1 ? 'unlimited' : String(requestedRevisions)
-      await prisma.notification.create({
-        data: {
-          userId: freelancer.userId,
-          type: 'SYSTEM_ALERT',
-          title: '🔄 Revision Request from Client',
-          body: `Client has requested ${revLabel} revisions for "${(proposal as any).project?.title || 'the project'}". Review and accept to proceed.`,
-          link: `/freelancer/proposals`,
-        }
+      await notificationService.createNotification({
+        userId: freelancer.userId,
+        type: 'SYSTEM_ALERT',
+        title: 'Revision Request from Client',
+        body: `Client has requested ${revLabel} revisions for "${(proposal as any).project?.title || 'the project'}". Review and accept to proceed.`,
+        link: `/freelancer/proposals`,
       })
     }
 

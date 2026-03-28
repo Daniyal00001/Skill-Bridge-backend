@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/prisma";
+import * as notificationService from "../services/notification.service";
 import { uploadMultipleToCloudinary } from "../utils/uploadToCloudinary";
 import { Prisma, Role } from "@prisma/client";
 
@@ -171,8 +172,22 @@ export const getFreelancerById = async (req: Request, res: Response) => {
             },
           },
         },
+        reviews: {
+          where: { isRevealed: true },
+          orderBy: { revealedAt: "desc" },
+          take: 10,
+          include: {
+            giver: {
+              select: {
+                name: true,
+                profileImage: true,
+              },
+            },
+          },
+        },
       },
     });
+
 
     if (!freelancer) {
       return res.status(404).json({
@@ -299,14 +314,12 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
     });
 
     // Create notification for freelancer
-    await prisma.notification.create({
-      data: {
-        userId: freelancer.userId,
-        type: "INVITATION_RECEIVED",
-        title: "New Project Invitation",
-        body: `${clientProfile.fullName} invited you to work on: ${project.title}`,
-        link: `/freelancer/invitations/${invitation.id}`,
-      },
+    await notificationService.createNotification({
+      userId: freelancer.userId,
+      type: "INVITATION_RECEIVED",
+      title: "New Project Invitation",
+      body: `${clientProfile.fullName} invited you to work on: ${project.title}`,
+      link: `/freelancer/invitations/${invitation.id}`,
     });
 
     // ── Post to Chat ────────────────────────────────────────────────────────

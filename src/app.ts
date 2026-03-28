@@ -70,6 +70,14 @@ app.use('/api/client', clientRoutes)
 import invitationRoutes from './routes/invitation.routes'
 app.use('/api/invitations', invitationRoutes)
 
+// notification routes
+import notificationRoutes from './routes/notification.routes'
+app.use('/api/notifications', notificationRoutes)
+
+// review routes
+import reviewRoutes from './routes/review.routes'
+app.use('/api/reviews', reviewRoutes)
+
 // admin routes
 app.use('/api/admin', adminRoutes)
 

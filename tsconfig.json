@@ -17,9 +17,7 @@
     ]
   },
   "include": [
-    "src/**/*",
-    "fetch-skills.ts",
-    "prisma/**/*.ts"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/prisma";
+import * as notificationService from "../services/notification.service";
 
 /**
  * @desc    Get all invitations for the authenticated user (Client or Freelancer)
@@ -306,15 +307,13 @@ export const acceptInvitation = async (req: Request, res: Response) => {
       });
 
       // 7. Notify Client
-      await tx.notification.create({
-        data: {
-          userId: invitation.project.clientProfile.userId,
-          type: "SYSTEM_ALERT",
-          title: "🎉 Invitation Accepted!",
-          body: `Freelancer accepted your invitation for "${invitation.project.title}". A contract has been created.`,
-          link: `/client/contracts/${contract.id}`,
-        },
-      });
+      await notificationService.createNotification({
+        userId: invitation.project.clientProfile.userId,
+        type: "SYSTEM_ALERT",
+        title: "Invitation Accepted!",
+        body: `Freelancer accepted your invitation for "${invitation.project.title}". A contract has been created.`,
+        link: `/client/contracts/${contract.id}`,
+      }, tx);
 
       return contract;
     });
@@ -382,15 +381,13 @@ export const rejectInvitation = async (req: Request, res: Response) => {
         data: { status: "REJECTED" },
       });
 
-      await tx.notification.create({
-        data: {
-          userId: invitation.project.clientProfile.userId,
-          type: "SYSTEM_ALERT",
-          title: "Invitation Rejected",
-          body: `Freelancer declined your invitation for "${invitation.project.title}".`,
-          link: `/client/browse`,
-        },
-      });
+      await notificationService.createNotification({
+        userId: invitation.project.clientProfile.userId,
+        type: "SYSTEM_ALERT",
+        title: "Invitation Rejected",
+        body: `Freelancer declined your invitation for "${invitation.project.title}".`,
+        link: `/client/browse`,
+      }, tx);
 
       return inv;
     });

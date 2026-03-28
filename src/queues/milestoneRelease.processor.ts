@@ -107,7 +107,7 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
       data: {
         userId: freelancerUserId,
         type: 'PAYMENT_RELEASED',
-        title: '💸 Payment Auto-Released!',
+        title: 'Payment Auto-Released!',
         body: `"${milestone.title}" was automatically approved after 3 days of review. $${milestone.amount.toFixed(2)} has been released to you.`,
         link: `/freelancer/contracts/${contractId}`,
       },
@@ -118,7 +118,7 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
       data: {
         userId: clientUserId,
         type: 'MILESTONE_APPROVED',
-        title: '⏱️ Milestone Auto-Approved',
+        title: 'Milestone Auto-Approved',
         body: `"${milestone.title}" was automatically approved and payment released after 72 hours without a response. If you have concerns, please open a dispute.`,
         link: `/client/contracts/${contractId}`,
       },
@@ -129,7 +129,7 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
       data: {
         userId: clientUserId,
         type: 'SYSTEM_ALERT',
-        title: '📋 Auto-Release Audit',
+        title: 'Auto-Release Audit',
         body: `System auto-released $${milestone.amount.toFixed(2)} for milestone "${milestone.title}" on contract ${contractId} at ${new Date().toISOString()}.`,
         link: `/client/contracts/${contractId}`,
       },
@@ -164,7 +164,7 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
         data: {
           userId: freelancerUserId,
           type: 'MILESTONE_APPROVED',
-          title: '🎉 Contract Completed!',
+          title: 'Contract Completed!',
           body: `All milestones approved! Your contract for "${contract.project.title}" is now complete.`,
           link: `/freelancer/contracts/${contractId}`,
         },
@@ -174,7 +174,7 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
         data: {
           userId: clientUserId,
           type: 'MILESTONE_APPROVED',
-          title: '🎉 Contract Completed!',
+          title: 'Contract Completed!',
           body: `All milestones have been approved and payment released for "${contract.project.title}". The contract is now complete.`,
           link: `/client/contracts/${contractId}`,
         },

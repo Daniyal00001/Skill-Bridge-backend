@@ -2,6 +2,8 @@ import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
 import { uploadToCloudinary } from '../utils/uploadToCloudinary'
 import { scheduleMilestoneAutoRelease } from '../queues/milestoneRelease.queue'
+import { scheduleReviewAutoUnlock } from '../queues/reviewUnlock.queue'
+import * as notificationService from '../services/notification.service'
 
 // ─────────────────────────────────────────────────────────────
 // HELPER: Check if user has access to a contract
@@ -331,15 +333,13 @@ export const fundMilestone = async (req: Request, res: Response) => {
       })
 
       // Notify freelancer
-      await tx.notification.create({
-        data: {
-          userId: contract.freelancerProfile.userId,
-          type: 'PAYMENT_RELEASED',
-          title: '💰 Milestone Funded!',
-          body: `Client has funded "${milestone.title}" — $${milestone.amount.toFixed(2)} is now in escrow. You can start work!`,
-          link: `/freelancer/contracts/${contractId}`,
-        }
-      })
+      await notificationService.createNotification({
+        userId: contract.freelancerProfile.userId,
+        type: 'PAYMENT_RELEASED',
+        title: 'Milestone Funded!',
+        body: `Client has funded "${milestone.title}" — $${milestone.amount.toFixed(2)} is now in escrow. You can start work!`,
+        link: `/freelancer/contracts/${contractId}`,
+      }, tx)
     })
 
     return res.status(200).json({ success: true, message: 'Milestone funded successfully. Freelancer can now start work.' })
@@ -475,15 +475,13 @@ export const submitMilestone = async (req: Request, res: Response) => {
       })
 
       // Notify client
-      await tx.notification.create({
-        data: {
-          userId: contract.project.clientProfile.userId,
-          type: 'MILESTONE_SUBMITTED',
-          title: '📦 Milestone Submitted!',
-          body: `Freelancer has submitted deliverables for "${milestone.title}". Please review within 3 days; otherwise, payment will be automatically released.`,
-          link: `/client/contracts/${contractId}`,
-        }
-      })
+      await notificationService.createNotification({
+        userId: contract.project.clientProfile.userId,
+        type: 'MILESTONE_SUBMITTED',
+        title: 'Milestone Submitted!',
+        body: `Freelancer has submitted deliverables for "${milestone.title}". Please review within 3 days; otherwise, payment will be automatically released.`,
+        link: `/client/contracts/${contractId}`,
+      }, tx)
     })
 
     // ── Schedule 72-hour auto-release job ──────────────────────
@@ -555,15 +553,13 @@ export const approveMilestone = async (req: Request, res: Response) => {
       })
 
       // Notify freelancer
-      await tx.notification.create({
-        data: {
-          userId: contract.freelancerProfile.userId,
-          type: 'MILESTONE_APPROVED',
-          title: '✅ Milestone Approved!',
-          body: `"${milestone.title}" was approved! $${milestone.amount.toFixed(2)} has been released to you.`,
-          link: `/freelancer/contracts/${contractId}`,
-        }
-      })
+      await notificationService.createNotification({
+        userId: contract.freelancerProfile.userId,
+        type: 'MILESTONE_APPROVED',
+        title: 'Milestone Approved!',
+        body: `"${milestone.title}" was approved! $${milestone.amount.toFixed(2)} has been released to you.`,
+        link: `/freelancer/contracts/${contractId}`,
+      }, tx)
 
       // Check if all milestones approved → complete contract
       const totalMilestones = contract.milestones.length
@@ -580,8 +576,33 @@ export const approveMilestone = async (req: Request, res: Response) => {
           where: { id: contract.project.id },
           data: { status: 'COMPLETED' }
         })
+
+        // Notify both parties: contract complete + leave a review CTA
+        await notificationService.createNotification({
+          userId: contract.freelancerProfile.userId,
+          type: 'MILESTONE_APPROVED',
+          title: 'Contract Completed!',
+          body: `All milestones approved for "${contract.project.title}". Leave a review for your client — you have 7 days.`,
+          link: `/freelancer/contracts/${contractId}`,
+        }, tx)
+        await notificationService.createNotification({
+          userId: contract.project.clientProfile.userId,
+          type: 'MILESTONE_APPROVED',
+          title: 'Contract Completed!',
+          body: `All milestones approved for "${contract.project.title}". Leave a review for your freelancer — you have 7 days.`,
+          link: `/client/contracts/${contractId}`,
+        }, tx)
       }
     })
+
+    // Schedule 7-day review auto-unlock job (outside transaction — queue operation)
+    const finalMilestones = await prisma.milestone.findMany({ where: { contractId } })
+    const allApproved = finalMilestones.every((m: any) =>
+      m.id === milestoneId ? true : m.status === 'APPROVED'
+    )
+    if (allApproved) {
+      await scheduleReviewAutoUnlock(contractId)
+    }
 
     return res.status(200).json({ success: true, message: 'Milestone approved and payment released!' })
   } catch (error) {
@@ -650,15 +671,13 @@ export const requestRevision = async (req: Request, res: Response) => {
         }
       })
 
-      await tx.notification.create({
-        data: {
-          userId: contract.freelancerProfile.userId,
-          type: 'MILESTONE_SUBMITTED',
-          title: '🔄 Revision Requested',
-          body: `Client requested revisions for "${milestone.title}": ${note || 'Please review and resubmit.'}`,
-          link: `/freelancer/contracts/${contractId}`,
-        }
-      })
+      await notificationService.createNotification({
+        userId: contract.freelancerProfile.userId,
+        type: 'MILESTONE_SUBMITTED', // Or maybe define REVISION_REQUESTED? MILESTONE_SUBMITTED is used here in original
+        title: 'Revision Requested',
+        body: `Client requested revisions for "${milestone.title}": ${note || 'Please review and resubmit.'}`,
+        link: `/freelancer/contracts/${contractId}`,
+      }, tx)
     })
 
     return res.status(200).json({ success: true, message: 'Revision requested.' })
@@ -700,15 +719,13 @@ export const approveContractOffer = async (req: Request, res: Response) => {
       })
 
       // 3. Notify the client
-      await tx.notification.create({
-        data: {
-          userId: contract.project.clientProfile.userId,
-          type: 'PROJECT_STARTED',
-          title: '🔥 Your contract was approved!',
-          body: `Freelancer has approved the milestones for "${contract.project.title}". Work can now begin.`,
-          link: `/client/contracts/${contractId}`,
-        }
-      })
+      await notificationService.createNotification({
+        userId: contract.project.clientProfile.userId,
+        type: 'PROJECT_STARTED',
+        title: 'Your contract was approved!',
+        body: `Freelancer has approved the milestones for "${contract.project.title}". Work can now begin.`,
+        link: `/client/contracts/${contractId}`,
+      }, tx)
     })
 
     return res.status(200).json({ success: true, message: 'Contract approved! Work can now begin.' })
@@ -797,15 +814,13 @@ export const rejectContractOffer = async (req: Request, res: Response) => {
       })
 
       // 4. Notify the client
-      await tx.notification.create({
-        data: {
-          userId: contract.project.clientProfile.userId,
-          type: 'PROJECT_STARTED',
-          title: '❌ Contract offer rejected',
-          body: `Freelancer has rejected your modified milestone plan for "${contract.project.title}". The project is back to OPEN.`,
-          link: `/client/proposals/project/${contract.projectId}`,
-        }
-      })
+      await notificationService.createNotification({
+        userId: contract.project.clientProfile.userId,
+        type: 'PROJECT_STARTED', // Re-using for simplicity or define OFFER_REJECTED
+        title: 'Contract offer rejected',
+        body: `Freelancer has rejected your modified milestone plan for "${contract.project.title}". The project is back to OPEN.`,
+        link: `/client/proposals/project/${contract.projectId}`,
+      }, tx)
     })
 
     return res.status(200).json({ success: true, message: 'Offer rejected. Project is back to OPEN.' })

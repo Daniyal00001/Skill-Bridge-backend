@@ -11,9 +11,13 @@ import {
   getUnreadRoomsCount,
 } from './chat.service'
 import { MessageWithSender } from './chat.types'
+import * as notificationService from '../../services/notification.service'
 
 // Track online users: userId → Set of socketIds
 const onlineUsers = new Map<string, Set<string>>()
+let io: SocketIOServer | null = null
+
+export const getIO = () => io
 
 // In-memory rate limiting for Socket.IO messages
 interface RateLimit {
@@ -36,7 +40,7 @@ const getUserIdFromSocket = (socket: Socket): string | null => {
 }
 
 export const initChatSocket = (httpServer: HTTPServer, app: express.Application) => {
-  const io = new SocketIOServer(httpServer, {
+  const ioInstance = new SocketIOServer(httpServer, {
     cors: {
       origin: ['http://localhost:5173', 'http://localhost:8080', 'http://localhost:3000'],
       credentials: true,
@@ -45,10 +49,11 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
     pingInterval: 25000,
   })
 
-  app.set('io', io)
+  io = ioInstance
+  app.set('io', ioInstance)
 
   // ── Auth Middleware ────────────────────────────────────────────────────────
-  io.use((socket, next) => {
+  ioInstance.use((socket, next) => {
     const userId = getUserIdFromSocket(socket)
     if (!userId) {
       return next(new Error('Authentication error'))
@@ -57,7 +62,7 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
     next()
   })
 
-  io.on('connection', async (socket) => {
+  ioInstance.on('connection', async (socket) => {
     const userId = (socket as any).userId as string
     console.log(`[Socket] User connected: ${userId} (${socket.id})`)
 
@@ -100,7 +105,7 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
     }
 
     // Broadcast online status to all connected sockets
-    io.emit('user_online', { userId, isOnline: true })
+    ioInstance.emit('user_online', { userId, isOnline: true })
 
     // ── Event: join_room ────────────────────────────────────────────────────
     socket.on('join_room', async ({ roomId }: { roomId: string }) => {
@@ -153,7 +158,7 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
         })
 
         // 1. Broadcast to everyone currently in the socket room
-        io.to(roomId).emit('new_message', message)
+        ioInstance.to(roomId).emit('new_message', message)
 
         // 2. Also emit to the recipient's personal room to ensure discovery
         const room = await prisma.chatRoom.findUnique({
@@ -173,11 +178,35 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
           }
 
           if (recipientId) {
-            io.to(`user:${recipientId}`).emit('new_message', message)
+            ioInstance.to(`user:${recipientId}`).emit('new_message', message)
             
             // 3. Update recipient's unread count badge
             const unreadCount = await getUnreadRoomsCount(recipientId)
-            io.to(`user:${recipientId}`).emit('unread_count_update', { count: unreadCount })
+            ioInstance.to(`user:${recipientId}`).emit('unread_count_update', { count: unreadCount })
+
+            // 4. If recipient is completely offline, send a persistent feed notification
+            // (Only once per hour to avoid spam)
+            const recipientOnline = isUserOnline(recipientId)
+            if (!recipientOnline) {
+              const oneHourAgo = new Date(Date.now() - 1000 * 60 * 60)
+              const existingRecent = await prisma.notification.findFirst({
+                where: {
+                  userId: recipientId,
+                  type: 'MESSAGE_RECEIVED',
+                  createdAt: { gte: oneHourAgo }
+                }
+              })
+
+              if (!existingRecent) {
+                await notificationService.createNotification({
+                  userId: recipientId,
+                  type: 'MESSAGE_RECEIVED',
+                  title: '💬 New Message',
+                  body: `You have new messages in your inbox from ${message.sender.name || 'a user'}.`,
+                  link: `/chat/${roomId}`,
+                })
+              }
+            }
           }
         }
 
@@ -203,7 +232,7 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
       try {
         await markMessagesAsRead(roomId, userId)
         // Notify everyone in the active room
-        io.to(roomId).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
+        ioInstance.to(roomId).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
 
         // Also explicitly notify the other user in their personal channel
         const room = await prisma.chatRoom.findUnique({
@@ -223,13 +252,13 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
           }
 
           if (otherUserId) {
-            io.to(`user:${otherUserId}`).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
+            ioInstance.to(`user:${otherUserId}`).emit('messages_seen', { roomId, seenByUserId: userId, seenAt: new Date() })
           }
         }
 
         // Also update the current user's unread count
         const unreadCount = await getUnreadRoomsCount(userId)
-        io.to(`user:${userId}`).emit('unread_count_update', { count: unreadCount })
+        ioInstance.to(`user:${userId}`).emit('unread_count_update', { count: unreadCount })
       } catch (err) {
         console.error('[Socket] mark_seen error:', err)
       }
@@ -247,13 +276,13 @@ export const initChatSocket = (httpServer: HTTPServer, app: express.Application)
           // Update lastActiveAt
           await prisma.user.update({ where: { id: userId }, data: { lastActiveAt: new Date() } }).catch(() => {})
           // Broadcast offline status
-          io.emit('user_offline', { userId, isOnline: false, lastActiveAt: new Date() })
+          ioInstance.emit('user_offline', { userId, isOnline: false, lastActiveAt: new Date() })
         }
       }
     })
   })
 
-  return io
+  return ioInstance
 }
 
 export const isUserOnline = (userId: string): boolean => {

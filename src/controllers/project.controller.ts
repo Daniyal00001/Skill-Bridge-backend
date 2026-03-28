@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
+import * as notificationService from '../services/notification.service'
 import { uploadToCloudinary } from "../utils/uploadToCloudinary"
 import { validateSkillName } from "../utils/skillValidation";
 import { checkSkillRateLimit } from "../utils/redis";
@@ -369,7 +370,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
         include: {
           skills: true, // Don't include skill nested yet
           clientProfile: {
-            select: { fullName: true, company: true }
+            select: { fullName: true, company: true, averageRating: true, totalReviews: true }
           },
           category: true,
           languageObj: true,
@@ -479,7 +480,7 @@ export const getProjectById = async (req: Request, res: Response) => {
       include: {
         skills: true,
         clientProfile: {
-          select: { fullName: true, company: true, location: true }
+          select: { fullName: true, company: true, location: true, averageRating: true, totalReviews: true }
         },
         proposals: { select: { id: true } },
         category: true,
@@ -606,15 +607,13 @@ export const deleteProject = async (req: Request, res: Response) => {
         }
 
         // Create notification for bidder
-        await tx.notification.create({
-          data: {
-            userId: proposal.freelancerProfile.userId,
-            type: 'SYSTEM_ALERT',
-            title: 'Project Cancelled',
-            body: `The project "${project.title}" has been cancelled by the client. Your spent skill tokens have been refunded.`,
-            link: `/freelancer/proposals`
-          }
-        })
+        await notificationService.createNotification({
+          userId: proposal.freelancerProfile.userId,
+          type: 'SYSTEM_ALERT',
+          title: 'Project Cancelled',
+          body: `The project "${project.title}" has been cancelled by the client. Your spent skill tokens have been refunded.`,
+          link: `/freelancer/proposals`
+        }, tx)
       }
     })
 

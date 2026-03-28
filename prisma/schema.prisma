@@ -117,6 +117,7 @@ enum NotificationType {
   PAYMENT_RELEASED
   MESSAGE_RECEIVED
   REVIEW_RECEIVED
+  REVIEW_UNLOCKED
   DISPUTE_OPENED
   DISPUTE_RESOLVED
   SYSTEM_ALERT
@@ -265,6 +266,7 @@ model ClientProfile {
   averageRating Float?
   totalHires    Int    @default(0)
   hireRate      Float?
+  totalReviews  Int    @default(0)
 
   @@map("client_profiles")
 }
@@ -319,6 +321,8 @@ model FreelancerProfile {
   preferredCategories    String[] // category slugs manually selected by freelancer
   savedProjects          SavedProject[]
   browseInteractions     BrowseInteraction[]
+  averageRating          Float?
+  totalReviews           Int                 @default(0)
 
   @@map("freelancer_profiles")
 }
@@ -758,15 +762,17 @@ model Message {
 // ============================================================
 
 model Review {
-  id          String    @id @default(auto()) @map("_id") @db.ObjectId
-  contractId  String    @db.ObjectId
-  giverId     String    @db.ObjectId // who wrote the review
-  receiverId  String    @db.ObjectId // who gets the review
-  rating      Int // 1-5
-  comment     String?
-  isRevealed  Boolean   @default(false) // blind until both submit or timeout
-  submittedAt DateTime  @default(now())
-  revealedAt  DateTime?
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  contractId     String    @db.ObjectId
+  giverId        String    @db.ObjectId // who wrote the review
+  receiverId     String    @db.ObjectId // who gets the review
+  rating         Int       // 1-5
+  comment        String?
+  isRevealed     Boolean   @default(false) // blind until both submit or timeout
+  submittedAt    DateTime  @default(now())
+  revealedAt     DateTime?
+  reviewDeadline DateTime? // 7 days after contract completion
+  giverRole      String?   // "CLIENT" | "FREELANCER" — for UI context
 
   giver    User @relation("ReviewGiver", fields: [giverId], references: [id], onDelete: Cascade)
   receiver User @relation("ReviewReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
