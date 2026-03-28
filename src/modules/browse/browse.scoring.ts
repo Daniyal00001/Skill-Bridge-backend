@@ -1,21 +1,3 @@
-// /**
-//  * browse.scoring.ts
-//  * location: backend/src/modules/browse/browse.scoring.ts
-//  * ─────────────────────────────────────────────────────────────────
-//  * WHY HERE: Pure scoring logic with no DB calls or side effects.
-//  * Keeping scoring separate from service means:
-//  *   - Easy to unit test (just pass objects, check output)
-//  *   - Easy to tune weights without touching service code
-//  *   - Can be replaced with ML model later — just swap this file
-//  *
-//  * FORMULA:
-//  *   finalScore = Σ (dimensionScore × weight) × (1 + personalBoost)
-//  *
-//  * Each dimension produces a 0–100 score.
-//  * Weights are defined in browse.types.ts SCORING_WEIGHTS.
-//  * ─────────────────────────────────────────────────────────────────
-//  */
-
 // import {
 //   FreelancerSnapshot,
 //   RawProject,
@@ -24,9 +6,9 @@
 
 // // ── Returned by scoreProject ────────────────────────────────────
 // export interface ProjectScore {
-//   score: number; // 0–100 final weighted score
-//   matchPercentage: number; // human-readable match % shown on card
-//   isExploration: boolean; // always false here; set later by injection
+//   score: number;
+//   matchPercentage: number;
+//   isExploration: boolean;
 //   scoreBreakdown: {
 //     skillMatch: number;
 //     freshness: number;
@@ -44,8 +26,7 @@
 //   project: RawProject,
 //   freelancer: FreelancerSnapshot,
 // ): ProjectScore {
-//   // ── 1. Skill Match (0–100) ──────────────────────────────────
-//   // % of project's required skills that the freelancer has.
+//   // ── 1. Skill Match ──────────────────────────────────────────
 //   const projectSkillNames = (project.skills ?? []).map((s) =>
 //     s.skill.name.toLowerCase(),
 //   );
@@ -61,28 +42,21 @@
 //     skillMatch = Math.round((matched / projectSkillNames.length) * 100);
 //   }
 
-//   // ── 2. Freshness (0–100) ────────────────────────────────────
-//   // Projects <1 hour old → 100. Decay to 0 over 30 days.
+//   // ── 2. Freshness ────────────────────────────────────────────
 //   const ageMs = Date.now() - new Date(project.createdAt).getTime();
-//   // convert milliseconds to days
 //   const ageDays = ageMs / 86_400_000;
 //   const freshness = Math.max(0, Math.round(100 - (ageDays / 30) * 100));
 
-//   // ── 3. Competition (0–100) ──────────────────────────────────
-//   // Fewer proposals = higher score (inverted + capped at 50 proposals)
+//   // ── 3. Competition ──────────────────────────────────────────
 //   const MAX_PROPOSALS = 50;
+//   const cappedProposals = Math.min(project.proposalCount, MAX_PROPOSALS);
 //   const competition = Math.max(
 //     0,
-//     Math.round(
-//       ((MAX_PROPOSALS - Math.min(project.proposalCount, MAX_PROPOSALS)) /
-//         MAX_PROPOSALS) *
-//         100,
-//     ),
+//     Math.round(((MAX_PROPOSALS - cappedProposals) / MAX_PROPOSALS) * 100),
 //   );
 
-//   // ── 4. Budget Fit (0–100) ──────────────────────────────────
-//   // How well project budget aligns with freelancer's preferred range.
-//   let budgetFit = 50; // neutral default
+//   // ── 4. Budget Fit ───────────────────────────────────────────
+//   let budgetFit = 50;
 //   if (
 //     freelancer.preferredBudgetMin != null &&
 //     freelancer.preferredBudgetMax != null
@@ -94,60 +68,65 @@
 //     const distance = Math.abs(project.budget - mid);
 //     budgetFit = Math.max(0, Math.round(100 - (distance / range) * 100));
 //   } else if (freelancer.hourlyRate != null) {
-//     // Very roughly: if project budget > hourly rate * 10, it's a sizeable project
 //     const rough =
 //       Math.min(1, project.budget / (freelancer.hourlyRate * 40)) * 100;
 //     budgetFit = Math.round(rough);
 //   }
 
-//   // ── 5. Client Trust (0–100) ────────────────────────────────
-//   let clientTrust = 40; // neutral base
+//   // ── 5. Client Trust ─────────────────────────────────────────
+//   let clientTrust = 40;
 //   if (project.client) {
-//     if (project.client.isVerified) clientTrust += 30;
+//     if (project.client.isVerified) {
+//       clientTrust += 30;
+//     }
 //     if (project.client.averageRating != null) {
-//       // averageRating = 0–5 → add up to 20 points
-//       clientTrust += Math.round((project.client.averageRating / 5) * 20);
+//       const ratingPoints = Math.round((project.client.averageRating / 5) * 20);
+//       clientTrust += ratingPoints;
 //     }
 //     if (project.client.hireRate != null) {
-//       // hireRate = 0–1 → add up to 10 points
-//       clientTrust += Math.round(project.client.hireRate * 10);
+//       const hirePoints = Math.round(project.client.hireRate * 10);
+//       clientTrust += hirePoints;
 //     }
 //   }
 //   clientTrust = Math.min(100, clientTrust);
 
-//   // ── 6. Freelancer Success (0–100) ──────────────────────────
-//   // Own track record — higher = better. Punish high dispute ratio.
+//   // ── 6. Freelancer Success ───────────────────────────────────
 //   let freelancerSuccess = 40;
-//   freelancerSuccess += Math.min(40, freelancer.completedContracts * 4);
+
+//   const contractPoints = Math.min(40, freelancer.completedContracts * 4);
+//   freelancerSuccess += contractPoints;
+
 //   if (freelancer.averageRating != null) {
-//     freelancerSuccess += Math.round((freelancer.averageRating / 5) * 10);
+//     const ratingPoints = Math.round((freelancer.averageRating / 5) * 10);
+//     freelancerSuccess += ratingPoints;
 //   }
+
 //   freelancerSuccess = Math.max(0, Math.min(100, freelancerSuccess));
 
-//   // ── 7. Activity (0–100) ─────────────────────────────────────
-//   // Penalise if freelancer has sent tons of proposals recently
-//   // (spam prevention: prefer quality bids over mass-apply).
+//   // ── 7. Activity ─────────────────────────────────────────────
 //   const recentActivityPenalty =
 //     Math.min(freelancer.recentProposalCount, 20) * 2;
 //   const activity = Math.max(0, 100 - recentActivityPenalty);
 
-//   // ── 8. Personal Boost (0–0.5 additive multiplier) ──────────
-//   // Applied on top of the weighted score if there is a behavioral signal.
+//   // ── 8. Personal Boost ───────────────────────────────────────
 //   let personalBoost = 0;
-//   if (
+
+//   const inPreferredCategory =
 //     project.category?.slug &&
-//     freelancer.preferredCategories.includes(project.category.slug)
-//   ) {
-//     personalBoost += 0.15; // actively interests the freelancer
-//   }
-//   if (freelancer.savedProjectIds.includes(project.id)) {
-//     personalBoost += 0.1; // previously saved = strong interest
-//   }
-//   if (freelancer.viewedProjectIds.includes(project.id)) {
-//     personalBoost -= 0.05; // already seen = mild de-boost (prevent repetition)
+//     freelancer.preferredCategories.includes(project.category.slug);
+//   if (inPreferredCategory) {
+//     personalBoost += 0.15;
 //   }
 
-//   // ── 9. Weighted Final Score ─────────────────────────────────
+//   if (freelancer.savedProjectIds.includes(project.id)) {
+//     personalBoost += 0.1;
+//   }
+
+//   if (freelancer.viewedProjectIds.includes(project.id)) {
+//     personalBoost -= 0.05;
+//   }
+
+//   // ── Weighted Final Score ────────────────────────────────────
 //   const weighted =
 //     skillMatch * SCORING_WEIGHTS.skillMatch +
 //     freshness * SCORING_WEIGHTS.freshness +
@@ -162,7 +141,7 @@
 
 //   return {
 //     score,
-//     matchPercentage: skillMatch, // shown directly on card
+//     matchPercentage: skillMatch,
 //     isExploration: false,
 //     scoreBreakdown: {
 //       skillMatch,
@@ -176,28 +155,6 @@
 //     },
 //   };
 // }
-
-// -------------------------------------------------------------
-
-// testing
-
-/**
- * browse.scoring.ts
- * location: backend/src/modules/browse/browse.scoring.ts
- * ─────────────────────────────────────────────────────────────────
- * WHY HERE: Pure scoring logic with no DB calls or side effects.
- * Keeping scoring separate from service means:
- *   - Easy to unit test (just pass objects, check output)
- *   - Easy to tune weights without touching service code
- *   - Can be replaced with ML model later — just swap this file
- *
- * FORMULA:
- *   finalScore = Σ (dimensionScore × weight) × (1 + personalBoost)
- *
- * Each dimension produces a 0–100 score.
- * Weights are defined in browse.types.ts SCORING_WEIGHTS.
- * ─────────────────────────────────────────────────────────────────
- */
 
 import {
   FreelancerSnapshot,

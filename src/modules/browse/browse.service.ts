@@ -348,7 +348,7 @@ async function getFreelancerSnapshot(
     skillNames: skillNames,
     experienceLevel: f.experienceLevel as any,
     hourlyRate: f.hourlyRate ?? undefined,
-    profileCompletionScore: f.profileCompletionScore ?? 50,
+    profileCompletionScore: f.profileCompletion ?? 50,
     completedContracts,
     averageRating,
     lastLoginAt: f.lastLoginAt ?? new Date(),
