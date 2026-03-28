@@ -2,11 +2,14 @@ import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
 import * as notificationService from '../services/notification.service'
 import {
-  scheduleReviewAutoUnlock,
-  cancelReviewAutoUnlock,
   revealContractReviews,
   recalculateAverageRating,
 } from '../queues/reviewUnlock.processor'
+import {
+  scheduleReviewAutoUnlock,
+  cancelReviewAutoUnlock,
+  reviewUnlockQueue,
+} from '../queues/reviewUnlock.queue'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/reviews — Submit a blind review
@@ -117,7 +120,7 @@ export const submitReview = async (req: Request, res: Response) => {
 
     // ⏳ Only one review so far — schedule the deadline job (idempotent: jobId deduplicates)
     // Only schedule if no existing job (first submitter triggers it)
-    const existingJob = await (await import('../queues/reviewUnlock.queue')).reviewUnlockQueue.getJob(
+    const existingJob = await reviewUnlockQueue.getJob(
       `review-unlock-${contractId}`
     )
     if (!existingJob) {
