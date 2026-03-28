@@ -13,7 +13,8 @@ import { prisma } from "../config/prisma";
  *  - Skills (≥1)          : 15%
  *  - Languages (≥1)       :  5%
  *  - Education (≥1 entry) :  5%
- *  - Profile Image        : 15%
+ *  - Profile Image        : 10%
+ *  - Preferred Budget     :  5%
  *  - Portfolio/Gig/Cert   : 10%
  *  - Any Social Link      :  5%
  *                   TOTAL : 100%
@@ -87,9 +88,18 @@ export const updateProfileCompletion = async (
     score += 5;
   }
 
-  // 15% – Profile Image (from any source: Google, manual upload, etc.)
+  // 10% – Profile Image (from any source: Google, manual upload, etc.)
   if (profile.user?.profileImage?.trim()) {
-    score += 15;
+    score += 10;
+  }
+
+  // 5% – Preferred Budget Range
+  if (
+    profile.preferredBudgetMin != null &&
+    profile.preferredBudgetMax != null &&
+    profile.preferredBudgetMax > 0
+  ) {
+    score += 5;
   }
 
   // 10% – Portfolio proof (any cert OR gig)

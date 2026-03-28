@@ -144,7 +144,14 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
 export const updateOnboardingStep2 = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
-    const { hourlyRate, bio, availability, experienceLevel } = req.body;
+    const {
+      hourlyRate,
+      bio,
+      availability,
+      experienceLevel,
+      preferredBudgetMin,
+      preferredBudgetMax,
+    } = req.body;
 
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -165,6 +172,8 @@ export const updateOnboardingStep2 = async (req: Request, res: Response) => {
         bio,
         availability: availability as AvailabilityStatus,
         experienceLevel: experienceLevel as ExperienceLevel,
+        preferredBudgetMin: preferredBudgetMin ? parseFloat(preferredBudgetMin) : null,
+        preferredBudgetMax: preferredBudgetMax ? parseFloat(preferredBudgetMax) : null,
       },
     });
 
@@ -553,6 +562,8 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
       idDocumentUrl,
       profileImage,
       region,
+      preferredBudgetMin,
+      preferredBudgetMax,
     } = req.body;
 
     if (
@@ -615,6 +626,10 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
     if (fullName !== undefined) {
       profileUpdateData.fullName = fullName;
     }
+    if (preferredBudgetMin !== undefined)
+      profileUpdateData.preferredBudgetMin = preferredBudgetMin ? parseFloat(preferredBudgetMin) : null;
+    if (preferredBudgetMax !== undefined)
+      profileUpdateData.preferredBudgetMax = preferredBudgetMax ? parseFloat(preferredBudgetMax) : null;
 
     if (Object.keys(profileUpdateData).length > 0) {
       await prisma.freelancerProfile.update({

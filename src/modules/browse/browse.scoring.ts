@@ -259,12 +259,6 @@ export function scoreProject(
   logKV("recentProposalCount", freelancer.recentProposalCount);
   logKV("lastLoginAt", freelancer.lastLoginAt);
   logKV("preferredCategories", freelancer.preferredCategories);
-  logKV(
-    "preferredBudget",
-    freelancer.preferredBudgetMin != null
-      ? `$${freelancer.preferredBudgetMin} – $${freelancer.preferredBudgetMax}`
-      : "—",
-  );
   logKV("appliedProjectIds", freelancer.appliedProjectIds);
   logKV("savedProjectIds", freelancer.savedProjectIds);
   logKV("viewedProjectIds", freelancer.viewedProjectIds);
