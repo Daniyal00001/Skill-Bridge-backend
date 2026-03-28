@@ -24,13 +24,13 @@ import {
   EXPLORATION_RATIO,
   CACHE_TTL_SECONDS,
   InteractionType,
-} from "./browse.types";
-import { scoreProject } from "./browse.scoring";
+} from "./browse-projects.types";
+import { scoreProject } from "./browse-projects.scoring";
 import {
   getCachedFeed,
   setCachedFeed,
   invalidateBrowseCache,
-} from "./browse.cache";
+} from "./browse-projects.cache";
 
 // ── How many projects to fetch from DB before ranking ─────────────
 // We fetch MORE than page size so ranking has a good pool to work with.

@@ -14,8 +14,8 @@ import {
   toggleSaveProject as toggleSaveService,
   getSavedProjects as getSavedService,
   recordProjectInteraction
-} from "./browse.service";
-import { BrowseFilters, SortOption, InteractionType } from "./browse.types";
+} from "./browse-projects.service";
+import { BrowseFilters, SortOption, InteractionType } from "./browse-projects.types";
 
 export const browseProjects = async (
   req: Request,

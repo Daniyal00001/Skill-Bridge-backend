@@ -10,7 +10,7 @@
  */
 
 import redis from "../../config/redis";
-import { BrowseResponse } from "./browse.types";
+import { BrowseResponse } from "./browse-projects.types";
 
 export async function getCachedFeed(
   key: string,

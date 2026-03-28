@@ -160,7 +160,7 @@ import {
   FreelancerSnapshot,
   RawProject,
   SCORING_WEIGHTS,
-} from "./browse.types";
+} from "./browse-projects.types";
 
 // ── Returned by scoreProject ────────────────────────────────────
 export interface ProjectScore {

@@ -20,7 +20,7 @@
  */
 
 import { PrismaClient, InteractionType } from "@prisma/client";
-import { invalidateBrowseCache } from "../modules/browse/browse.cache";
+import { invalidateBrowseCache } from "../modules/browse-projects/browse-projects.cache";
 
 // ─────────────────────────────────────────────────────────────────
 // CORE TRACK FUNCTION

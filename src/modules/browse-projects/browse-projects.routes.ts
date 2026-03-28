@@ -13,13 +13,13 @@ import {
   toggleSaveProject, 
   getSavedProjects, 
   recordProjectView 
-} from "./browse.controller";
+} from "./browse-projects.controller";
 import { protect, requireRole } from "../../middlewares/auth.middleware"; 
 
-const browseRouter = Router();
+const browseProjectsRouter = Router();
 
 // Feed
-browseRouter.get(
+browseProjectsRouter.get(
   "/projects",
   protect,
   requireRole("FREELANCER"),
@@ -27,14 +27,14 @@ browseRouter.get(
 );
 
 // Saved Projects
-browseRouter.get(
+browseProjectsRouter.get(
   "/projects/saved",
   protect,
   requireRole("FREELANCER"),
   getSavedProjects
 );
 
-browseRouter.post(
+browseProjectsRouter.post(
   "/projects/:projectId/save",
   protect,
   requireRole("FREELANCER"),
@@ -42,11 +42,11 @@ browseRouter.post(
 );
 
 // View Tracking
-browseRouter.post(
+browseProjectsRouter.post(
   "/projects/:projectId/view",
   protect,
   requireRole("FREELANCER"),
   recordProjectView
 );
 
-export default browseRouter;
+export default browseProjectsRouter;

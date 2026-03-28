@@ -13,7 +13,7 @@ import freelancerRoutes from './routes/freelancer.routes'
 import proposalRoutes from './routes/proposal.routes'
 import tokenRoutes from './routes/token.routes'
 import metadataRoutes from './routes/metadata.routes'
-import browseRouter from "./modules/browse/browse.routes";
+import browseProjectsRouter from "./modules/browse-projects/browse-projects.routes";
 import trackingRouter from "./routes/tracking.routes";
 import contractRoutes from './routes/contract.routes'
 import adminRoutes from './routes/admin.routes'
@@ -48,7 +48,7 @@ app.use('/api/ai', aiRoutes)
 app.use('/api/projects', projectRoutes)
 app.use('/api/categories', categoryRoutes)
 app.use('/api/freelancers', freelancerRoutes)
-app.use("/api/browse", browseRouter); // browse project module
+app.use("/api/browse-projects", browseProjectsRouter); // browse project module
 app.use("/api/track", trackingRouter); // browse project / tracking module
 // proposal routes
 app.use('/api/proposals', proposalRoutes)
