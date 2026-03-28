@@ -264,7 +264,7 @@ export const getPublicReviewsForUser = async (req: Request, res: Response) => {
       reviews.map(async (r) => {
         const contract = await prisma.contract.findUnique({
           where: { id: r.contractId },
-          include: { project: { select: { title: true } } },
+          include: { project: { select: { id: true, title: true } } },
         })
         return {
           id: r.id,
@@ -274,6 +274,7 @@ export const getPublicReviewsForUser = async (req: Request, res: Response) => {
           giverRole: r.giverRole,
           giverImage: r.giver.profileImage,
           projectTitle: contract?.project?.title || 'Unknown project',
+          projectId: contract?.project?.id,
           submittedAt: r.submittedAt,
           revealedAt: r.revealedAt,
         }
@@ -317,7 +318,7 @@ export const getMyGivenReviews = async (req: Request, res: Response) => {
       reviews.map(async (r) => {
         const contract = await prisma.contract.findUnique({
           where: { id: r.contractId },
-          include: { project: { select: { title: true } } },
+          include: { project: { select: { id: true, title: true } } },
         })
         return {
           id: r.id,
@@ -327,6 +328,7 @@ export const getMyGivenReviews = async (req: Request, res: Response) => {
           receiverImage: r.receiver.profileImage,
           receiverRole: r.receiver.role,
           projectTitle: contract?.project?.title || 'Unknown project',
+          projectId: contract?.project?.id,
           contractId: r.contractId,
           submittedAt: r.submittedAt,
           revealedAt: r.revealedAt,
@@ -360,7 +362,7 @@ export const getMyReceivedReviews = async (req: Request, res: Response) => {
       reviews.map(async (r) => {
         const contract = await prisma.contract.findUnique({
           where: { id: r.contractId },
-          include: { project: { select: { title: true } } },
+          include: { project: { select: { id: true, title: true } } },
         })
         return {
           id: r.id,
@@ -370,6 +372,7 @@ export const getMyReceivedReviews = async (req: Request, res: Response) => {
           giverRole: r.giverRole,
           giverImage: r.giver.profileImage,
           projectTitle: contract?.project?.title || 'Unknown project',
+          projectId: contract?.project?.id,
           contractId: r.contractId,
           submittedAt: r.submittedAt,
           revealedAt: r.revealedAt,
