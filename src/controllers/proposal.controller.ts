@@ -4,6 +4,7 @@ import { uploadToCloudinary } from '../utils/uploadToCloudinary'
 import { calculateTokenCost, calculateTokenCostWithBreakdown } from '../utils/tokenCalculator'
 import { sanitize, stripTags } from '../utils/sanitize'
 import * as notificationService from '../services/notification.service'
+import { updateClientStats } from '../services/tracking.service'
 
 // ─────────────────────────────────────────────────────────────
 // GET TOKEN COST FOR A PROJECT (preview before submitting)
@@ -557,6 +558,11 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
               attachments: [],
             }
           })
+        }
+
+        // Update client hire stats if the contract is immediately active
+        if (contractStatus === 'ACTIVE') {
+          await updateClientStats(tx, proposal.project.clientProfileId)
         }
 
         const notificationTitle = milestonesModifiedByClient 

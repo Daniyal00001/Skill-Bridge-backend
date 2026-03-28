@@ -26,7 +26,11 @@ import {
   InteractionType,
 } from "./browse.types";
 import { scoreProject } from "./browse.scoring";
-import { getCachedFeed, setCachedFeed, invalidateBrowseCache } from "./browse.cache";
+import {
+  getCachedFeed,
+  setCachedFeed,
+  invalidateBrowseCache,
+} from "./browse.cache";
 
 // ── How many projects to fetch from DB before ranking ─────────────
 // We fetch MORE than page size so ranking has a good pool to work with.
@@ -195,46 +199,57 @@ async function fetchEligibleProjects(
         select: {
           id: true,
           fullName: true,
-          company: true,
           averageRating: true,
           totalHires: true,
           hireRate: true,
+          user: {
+            select: {
+              isPaymentVerified: true,
+              isIdVerified: true,
+            },
+          },
         },
       },
       locationObj: { select: { name: true } },
     },
   });
 
-  const projects = await Promise.all((rawRowsRaw as any[]).map(async (row) => {
-    const sIds = row.skills.map((s: any) => s.skillId);
-    let skillsData: any[] = [];
-    if (sIds.length > 0) {
-      const sResult = await prisma.skill.findMany({
-        where: { id: { in: sIds } },
-        select: { id: true, name: true }
-      });
-      skillsData = row.skills.map((s: any) => ({
-        ...s,
-        skill: sResult.find(sd => sd.id === s.skillId)
-      })).filter((s: any) => s.skill);
-    }
+  const projects = await Promise.all(
+    (rawRowsRaw as any[]).map(async (row) => {
+      const sIds = row.skills.map((s: any) => s.skillId);
+      let skillsData: any[] = [];
+      if (sIds.length > 0) {
+        const sResult = await prisma.skill.findMany({
+          where: { id: { in: sIds } },
+          select: { id: true, name: true },
+        });
+        skillsData = row.skills
+          .map((s: any) => ({
+            ...s,
+            skill: sResult.find((sd) => sd.id === s.skillId),
+          }))
+          .filter((s: any) => s.skill);
+      }
 
-    return {
-      ...row,
-      skills: skillsData,
-      client: row.clientProfile
-        ? {
-            id: row.clientProfile.id,
-            fullName: row.clientProfile.fullName,
-            company: row.clientProfile.company,
-            isVerified: false,
-            averageRating: row.clientProfile.averageRating,
-            totalHires: row.clientProfile.totalHires,
-            hireRate: row.clientProfile.hireRate,
-          }
-        : { id: "", fullName: "Unknown", isVerified: false },
-    };
-  }));
+      return {
+        ...row,
+        skills: skillsData,
+        client: row.clientProfile
+          ? {
+              id: row.clientProfile.id,
+              fullName: row.clientProfile.fullName,
+              isVerified: !!(
+                row.clientProfile.user?.isPaymentVerified ||
+                row.clientProfile.user?.isIdVerified
+              ),
+              averageRating: row.clientProfile.averageRating,
+              totalHires: row.clientProfile.totalHires,
+              hireRate: row.clientProfile.hireRate,
+            }
+          : { id: "", fullName: "Unknown", isVerified: false },
+      };
+    }),
+  );
 
   return projects;
 }
@@ -266,8 +281,13 @@ async function getFreelancerSnapshot(
       // Behavioral tracking data
       browseInteractions: {
         orderBy: { createdAt: "desc" },
-        take: 100,
-        select: { projectId: true, type: true, categorySlug: true, createdAt: true },
+        take: 20,
+        select: {
+          projectId: true,
+          type: true,
+          categorySlug: true,
+          createdAt: true,
+        },
       },
     },
   });
@@ -280,9 +300,9 @@ async function getFreelancerSnapshot(
   if (sIds.length > 0) {
     const sData = await prisma.skill.findMany({
       where: { id: { in: sIds } },
-      select: { name: true }
+      select: { name: true },
     });
-    skillNames = sData.map(sd => sd.name);
+    skillNames = sData.map((sd) => sd.name);
   }
 
   // Cast to any so TypeScript doesn't complain
@@ -331,7 +351,6 @@ async function getFreelancerSnapshot(
     profileCompletionScore: f.profileCompletionScore ?? 50,
     completedContracts,
     averageRating,
-    disputeRatio: f.disputeRatio ?? 0,
     lastLoginAt: f.lastLoginAt ?? new Date(),
     recentProposalCount: f.proposals?.length ?? 0,
     preferredCategories: [
@@ -552,7 +571,16 @@ export async function getSavedProjects(
         include: {
           category: true,
           skills: true, // Don't include skill nested yet
-          clientProfile: true,
+          clientProfile: {
+            include: {
+              user: {
+                select: {
+                  isPaymentVerified: true,
+                  isIdVerified: true,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -560,30 +588,42 @@ export async function getSavedProjects(
   });
 
   // Map to RawProject-like shape with manual skill mapping
-  return await Promise.all(saved.map(async (s) => {
-    const sIds = s.project.skills.map((sk: any) => sk.skillId);
-    let skillsWithData: any[] = [];
-    if (sIds.length > 0) {
-      const sData = await prisma.skill.findMany({ where: { id: { in: sIds } } });
-      skillsWithData = s.project.skills.map((sk: any) => ({
-        ...sk,
-        skill: sData.find(sd => sd.id === sk.skillId)
-      })).filter((sk: any) => sk.skill);
-    }
+  return await Promise.all(
+    saved.map(async (s) => {
+      const sIds = s.project.skills.map((sk: any) => sk.skillId);
+      let skillsWithData: any[] = [];
+      if (sIds.length > 0) {
+        const sData = await prisma.skill.findMany({
+          where: { id: { in: sIds } },
+        });
+        skillsWithData = s.project.skills
+          .map((sk: any) => ({
+            ...sk,
+            skill: sData.find((sd) => sd.id === sk.skillId),
+          }))
+          .filter((sk: any) => sk.skill);
+      }
 
-    return {
-      ...s.project,
-      skills: skillsWithData,
-      isSaved: true,
-      client: s.project.clientProfile
-        ? {
-            id: s.project.clientProfile.id,
-            fullName: s.project.clientProfile.fullName,
-            isVerified: false,
-          }
-        : { id: "", fullName: "Unknown", isVerified: false },
-    };
-  }));
+      return {
+        ...s.project,
+        skills: skillsWithData,
+        isSaved: true,
+        client: s.project.clientProfile
+          ? {
+              id: s.project.clientProfile.id,
+              fullName: s.project.clientProfile.fullName,
+              isVerified: !!(
+                (s.project.clientProfile as any).user?.isPaymentVerified ||
+                (s.project.clientProfile as any).user?.isIdVerified
+              ),
+              averageRating: s.project.clientProfile.averageRating,
+              totalHires: s.project.clientProfile.totalHires,
+              hireRate: s.project.clientProfile.hireRate,
+            }
+          : { id: "", fullName: "Unknown", isVerified: false },
+      };
+    }),
+  );
 }
 
 // ── 13. Record Project Interaction ──────────────────────────

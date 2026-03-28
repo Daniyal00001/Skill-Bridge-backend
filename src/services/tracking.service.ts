@@ -253,45 +253,6 @@ export async function trackFreelancerLogin(
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// DISPUTE RATIO UPDATER
-// Call this from dispute resolution (admin controller).
-// WHY here: Keeps dispute logic centralized in tracking service,
-// admin controller bas "dispute resolved" signal bhejta hai.
-// ─────────────────────────────────────────────────────────────────
-export async function updateDisputeRatio(
-  prisma: PrismaClient,
-  freelancerProfileId: string
-): Promise<void> {
-  try {
-    // Count total completed contracts
-    const totalContracts = await prisma.contract.count({
-      where: {
-        freelancerProfileId,
-        status: { in: ["COMPLETED", "DISPUTED"] },
-      },
-    });
-
-    if (totalContracts === 0) return;
-
-    // Count disputed contracts involving this freelancer
-    const disputedContracts = await prisma.contract.count({
-      where: {
-        freelancerProfileId,
-        status: "DISPUTED",
-      },
-    });
-
-    const ratio = disputedContracts / totalContracts;
-
-    await prisma.freelancerProfile.update({
-      where: { id: freelancerProfileId },
-      data: { disputeRatio: ratio },
-    });
-  } catch (err) {
-    console.error("[Tracking] Dispute ratio update failed:", err);
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────
 // CLIENT STATS UPDATER

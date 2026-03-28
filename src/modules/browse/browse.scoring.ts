@@ -122,7 +122,6 @@
 //   if (freelancer.averageRating != null) {
 //     freelancerSuccess += Math.round((freelancer.averageRating / 5) * 10);
 //   }
-//   freelancerSuccess -= Math.round(freelancer.disputeRatio * 30);
 //   freelancerSuccess = Math.max(0, Math.min(100, freelancerSuccess));
 
 //   // ── 7. Activity (0–100) ─────────────────────────────────────
@@ -300,9 +299,8 @@ export function scoreProject(
   logKV("profileCompletionScore", `${freelancer.profileCompletionScore}%`);
   logKV("completedContracts", freelancer.completedContracts);
   logKV("averageRating", freelancer.averageRating ?? "—");
-  logKV("disputeRatio", freelancer.disputeRatio);
-  logKV("lastLoginAt", freelancer.lastLoginAt);
   logKV("recentProposalCount", freelancer.recentProposalCount);
+  logKV("lastLoginAt", freelancer.lastLoginAt);
   logKV("preferredCategories", freelancer.preferredCategories);
   logKV(
     "preferredBudget",
@@ -464,14 +462,8 @@ export function scoreProject(
     );
   }
 
-  const disputePenalty = Math.round(freelancer.disputeRatio * 30);
-  freelancerSuccess -= disputePenalty;
-  logKV(
-    `-${disputePenalty} disputeRatio (${freelancer.disputeRatio} × 30)`,
-    freelancerSuccess,
-  );
-
   freelancerSuccess = Math.max(0, Math.min(100, freelancerSuccess));
+
   logScore("freelancerSuccess", freelancerSuccess);
 
   // ── 7. Activity ─────────────────────────────────────────────

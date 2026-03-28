@@ -4,6 +4,7 @@ import { uploadToCloudinary } from '../utils/uploadToCloudinary'
 import { scheduleMilestoneAutoRelease } from '../queues/milestoneRelease.queue'
 import { scheduleReviewAutoUnlock } from '../queues/reviewUnlock.queue'
 import * as notificationService from '../services/notification.service'
+import { updateClientStats } from '../services/tracking.service'
 
 // ─────────────────────────────────────────────────────────────
 // HELPER: Check if user has access to a contract
@@ -711,6 +712,9 @@ export const approveContractOffer = async (req: Request, res: Response) => {
         where: { id: contractId },
         data: { status: 'ACTIVE' }
       })
+
+      // Update client hire stats
+      await updateClientStats(tx, contract.project.clientProfileId)
 
       // 2. Update project status to IN_PROGRESS
       await tx.project.update({

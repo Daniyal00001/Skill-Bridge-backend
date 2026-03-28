@@ -28,7 +28,6 @@ export interface RawProject {
   client: {
     id: string;
     fullName: string;
-    company?: string;
     isVerified: boolean;
     averageRating?: number;
     totalHires?: number;
@@ -45,7 +44,6 @@ export interface FreelancerSnapshot {
   profileCompletionScore: number; // 0–100
   completedContracts: number;
   averageRating?: number;
-  disputeRatio: number; // 0–1 (lower is better)
   lastLoginAt: Date;
   recentProposalCount: number; // last 30 days
   // Behavioral signals
