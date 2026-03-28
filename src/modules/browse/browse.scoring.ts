@@ -175,6 +175,8 @@ export interface ProjectScore {
     clientTrust: number;
     freelancerSuccess: number;
     activity: number;
+    locationMatch: number; // NEW
+    languageMatch: number; // NEW
     personalBoost: number;
   };
 }
@@ -397,10 +399,10 @@ export function scoreProject(
   let freelancerSuccess = 40;
   logKV("base", 40);
 
-  const contractPoints = Math.min(40, freelancer.completedContracts * 4);
+  const contractPoints = Math.min(50, freelancer.completedContracts * 4);
   freelancerSuccess += contractPoints;
   logKV(
-    `+${contractPoints} completedContracts (${freelancer.completedContracts} × 4, capped 40)`,
+    `+${contractPoints} completedContracts (${freelancer.completedContracts} × 4, capped 50)`,
     freelancerSuccess,
   );
 
@@ -426,6 +428,39 @@ export function scoreProject(
   logKV("recentActivityPenalty", recentActivityPenalty);
   logKV("formula", `max(0, 100 - ${recentActivityPenalty})`);
   logScore("activity", activity);
+
+  // ── 7.5 Location Match ──────────────────────────────────────
+  logSection("7.5 Location Match");
+  let locationMatch = 0;
+  if (!project.locationPref || project.locationPref === "Any location") {
+    locationMatch = 100;
+    logKV("project.locationPref", "Any location → 100", S.score);
+  } else if (freelancer.location === project.locationPref) {
+    locationMatch = 100;
+    logKV("match detected", `"${freelancer.location}" → 100`, S.score);
+  } else {
+    logKV("no match", `Project wants "${project.locationPref}", Freelancer is "${freelancer.location ?? "Unknown"}"`, S.warn);
+  }
+  logScore("locationMatch", locationMatch);
+
+  // ── 7.6 Language Match ──────────────────────────────────────
+  logSection("7.6 Language Match");
+  let languageMatch = 0;
+  const projectLang = (project.language || "English").toLowerCase();
+  const flLangs: any[] = Array.isArray(freelancer.languages) ? freelancer.languages : [];
+  
+  const hasLangMatch = flLangs.some((l: any) => {
+    const lName = (typeof l === "string" ? l : l?.name || "").toLowerCase();
+    return lName === projectLang;
+  });
+
+  if (hasLangMatch) {
+    languageMatch = 100;
+    logKV("match detected", `"${projectLang}" → 100`, S.score);
+  } else {
+    logKV("no match", `Project requires "${projectLang}"`, S.warn);
+  }
+  logScore("languageMatch", languageMatch);
 
   // ── 8. Personal Boost ───────────────────────────────────────
   logSection("8. Personal Boost");
@@ -467,6 +502,8 @@ export function scoreProject(
     budgetFit * SCORING_WEIGHTS.budgetFit +
     clientTrust * SCORING_WEIGHTS.clientTrust +
     freelancerSuccess * SCORING_WEIGHTS.freelancerSuccess +
+    locationMatch * SCORING_WEIGHTS.locationMatch +
+    languageMatch * SCORING_WEIGHTS.languageMatch +
     activity * SCORING_WEIGHTS.activity;
 
   console.log("%cWeights breakdown:", S.label);
@@ -508,6 +545,16 @@ export function scoreProject(
       weight: SCORING_WEIGHTS.activity,
       contribution: +(activity * SCORING_WEIGHTS.activity).toFixed(2),
     },
+    locationMatch: {
+      score: locationMatch,
+      weight: SCORING_WEIGHTS.locationMatch,
+      contribution: +(locationMatch * SCORING_WEIGHTS.locationMatch).toFixed(2),
+    },
+    languageMatch: {
+      score: languageMatch,
+      weight: SCORING_WEIGHTS.languageMatch,
+      contribution: +(languageMatch * SCORING_WEIGHTS.languageMatch).toFixed(2),
+    },
   });
 
   logKV("weighted (pre-boost)", weighted.toFixed(2));
@@ -540,6 +587,8 @@ export function scoreProject(
       clientTrust,
       freelancerSuccess,
       activity,
+      locationMatch,
+      languageMatch,
       personalBoost,
     },
   };

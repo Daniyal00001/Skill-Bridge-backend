@@ -21,6 +21,7 @@ export interface RawProject {
   experienceLevel: "ENTRY" | "MID" | "SENIOR" | "EXPERT";
   size: "SMALL" | "MEDIUM" | "LARGE";
   locationPref?: string;
+  language: string;
 
   category: { id: string; name: string; slug: string };
   skills: Array<{ skill: { id: string; name: string } }>;
@@ -53,6 +54,8 @@ export interface FreelancerSnapshot {
   appliedProjectIds: string[];
   savedProjectIds: string[];
   viewedProjectIds: string[];
+  languages?: any; // from FreelancerProfile
+  location?: string;
 }
 
 // ── Scored project ready for the feed ─────────────────────────────
@@ -114,12 +117,14 @@ export interface BrowseResponse {
 // ── Weights used in scoring formula ───────────────────────────────
 // Exported so tests can override weights easily
 export const SCORING_WEIGHTS = {
-  skillMatch: 0.4,
+  skillMatch: 0.3, // Reduced from 0.4
   freshness: 0.2,
   competition: 0.15,
   budgetFit: 0.1,
   clientTrust: 0.05,
   freelancerSuccess: 0.05,
+  locationMatch: 0.05, // NEW
+  languageMatch: 0.05, // NEW
   activity: 0.05,
 } as const;
 

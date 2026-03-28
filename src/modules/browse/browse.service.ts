@@ -372,6 +372,8 @@ async function getFreelancerSnapshot(
         return isView && isRecent;
       })
       .map((i) => i.projectId),
+    languages: f.languages,
+    location: f.location,
   };
 }
 
