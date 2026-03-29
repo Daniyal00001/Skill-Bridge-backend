@@ -1321,11 +1321,13 @@ async function main() {
   await seedFreelancers();
 }
 
-main()
-  .catch((e) => {
-    console.error("❌ Seed failed:", e);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+if (require.main === module) {
+  main()
+    .catch((e) => {
+      console.error("❌ Seed failed:", e);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}
 

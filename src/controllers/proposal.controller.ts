@@ -970,6 +970,10 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
         title: proposalRaw.project.title,
         budget: proposalRaw.project.budget,
         budgetType: proposalRaw.project.budgetType,
+        client: {
+          name: proposalRaw.project.clientProfile.fullName,
+          profileImage: proposalRaw.project.clientProfile.user?.profileImage,
+        }
       },
       freelancer: {
         id: proposalRaw.freelancerProfile.id,
