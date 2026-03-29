@@ -26,6 +26,8 @@ import {
   isResendCooldownActive,
   getResendCooldownRemaining,
 } from '../utils/redis'
+import { trackLogin } from '../utils/loginTracker'
+import { Role } from '@prisma/client'
 
 
 
@@ -226,6 +228,8 @@ export const verifyOtp = async (req: Request, res: Response) => {
         expiresAt,
       },
     })
+
+    await trackLogin(user.id, user.role as Role, req)
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
@@ -525,6 +529,8 @@ export const login = async (req: Request, res: Response) => {
       },
     })
 
+    await trackLogin(user.id, user.role as Role, req)
+
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -633,6 +639,10 @@ export const googleCallback = async (req: Request, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
 
+    if (user.role) {
+      await trackLogin(user.id, user.role as Role, req)
+    }
+
     const frontendURL = process.env.FRONTEND_URL || 'http://localhost:8080'
 
     return res.redirect(
@@ -703,6 +713,8 @@ export const completeGoogleSignup = async (req: Request, res: Response) => {
 
       return updatedUser
     })
+
+    await trackLogin(user.id, user.role as Role, req)
 
     const accessToken = generateAccessToken({
       userId: user.id,

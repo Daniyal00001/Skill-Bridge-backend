@@ -127,7 +127,10 @@ export const updateProfileCompletion = async (
   // Save back to DB
   await prisma.freelancerProfile.update({
     where: { userId },
-    data: { profileCompletion: finalScore },
+    data: {
+      profileCompletion: finalScore,
+      profileCompletionScore: finalScore,
+    },
   });
 
   return finalScore;
