@@ -222,7 +222,7 @@ function logScore(label: string, value: number) {
   );
 }
 
-// ── 1. SKILL MATCH (35%) ─────────────────────────────────────────
+// ── 1. SKILL MATCH (30%) ─────────────────────────────────────────
 function calcSkillMatch(
   freelancerSkills: string[],
   clientRequiredSkills: string[],
@@ -407,7 +407,7 @@ function calcSuccessScore(
   return result;
 }
 
-// ── 6. ACTIVITY SCORE (bonus signal) ────────────────────────────
+// ── 6. ACTIVITY SCORE (5% - Last Login) ─────────────────────────
 function calcActivityScore(lastLoginAt?: Date | null): number {
   logSection("6. Activity Score");
   logKV("lastLoginAt", lastLoginAt ?? "—");
@@ -600,7 +600,8 @@ export function scoreFreelancer(
     rating * FREELANCER_SCORING_WEIGHTS.rating +
     availability * FREELANCER_SCORING_WEIGHTS.availability +
     budgetFit * FREELANCER_SCORING_WEIGHTS.budgetFit +
-    successScore * FREELANCER_SCORING_WEIGHTS.successScore;
+    successScore * FREELANCER_SCORING_WEIGHTS.successScore +
+    activityScore * FREELANCER_SCORING_WEIGHTS.activityScore;
 
   console.log("%cWeights breakdown:", S.label);
   console.table({
@@ -635,6 +636,13 @@ export function scoreFreelancer(
       weight: FREELANCER_SCORING_WEIGHTS.successScore,
       contribution: +(
         successScore * FREELANCER_SCORING_WEIGHTS.successScore
+      ).toFixed(2),
+    },
+    activityScore: {
+      score: activityScore,
+      weight: FREELANCER_SCORING_WEIGHTS.activityScore,
+      contribution: +(
+        activityScore * FREELANCER_SCORING_WEIGHTS.activityScore
       ).toFixed(2),
     },
   });

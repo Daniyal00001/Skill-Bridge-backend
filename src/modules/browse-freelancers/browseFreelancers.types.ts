@@ -138,11 +138,12 @@ export interface FreelancerBrowseResponse {
 
 // Scoring weights
 export const FREELANCER_SCORING_WEIGHTS = {
-  skillMatch: 0.35,
+  skillMatch: 0.3,
   rating: 0.25,
   availability: 0.2,
   budgetFit: 0.1,
   successScore: 0.1,
+  activityScore: 0.05,
 } as const;
 
 export const FREELANCER_EXPLORATION_RATIO = 0.1;
