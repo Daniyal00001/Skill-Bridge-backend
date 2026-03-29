@@ -195,6 +195,7 @@ model User {
   sentMessages  Message[]      @relation("MessageSender")
   notifications Notification[]
   sessions      Session[]
+  loginLogs     LoginLog[]
 
   // Reviews given and received
   reviewsGiven    Review[] @relation("ReviewGiver")
@@ -205,6 +206,19 @@ model User {
   disputesAsFreelancer Dispute[] @relation("DisputeFreelancer")
 
   @@map("users")
+}
+
+model LoginLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  role      Role
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("login_logs")
 }
 
 // ============================================================
@@ -256,6 +270,7 @@ model ClientProfile {
   profileCompletion Int              @default(0)
   createdAt         DateTime?        @default(now())
   updatedAt         DateTime?        @updatedAt
+  lastLoginAt       DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   projects    Project[]
@@ -314,7 +329,6 @@ model FreelancerProfile {
 
   // ── Browse System additions ──
   lastLoginAt            DateTime?
-  disputeRatio           Float               @default(0)
   profileCompletionScore Int                 @default(0)
   preferredBudgetMin     Float?
   preferredBudgetMax     Float?
@@ -447,6 +461,7 @@ model AdminProfile {
   fullName   String
   department String?
   createdAt  DateTime @default(now())
+  lastLoginAt DateTime?
 
   user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   resolvedDisputes Dispute[]  @relation("DisputeAdmin")
@@ -572,7 +587,7 @@ model AiScopingSession {
 model Proposal {
   id                  String         @id @default(auto()) @map("_id") @db.ObjectId
   projectId           String         @db.ObjectId
-  freelancerProfileId String         @db.ObjectId
+  freelancerProfileId String?        @db.ObjectId
   proposedPrice       Float // bid amount
   deliveryTime        Int // in days
   coverLetter         String
@@ -588,7 +603,7 @@ model Proposal {
   updatedAt           DateTime       @updatedAt
 
   project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile? @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, freelancerProfileId]) // one proposal per freelancer per project
   @@map("proposals")
@@ -621,7 +636,7 @@ model TokenTransaction {
 model Invitation {
   id                  String           @id @default(auto()) @map("_id") @db.ObjectId
   projectId           String           @db.ObjectId
-  freelancerProfileId String           @db.ObjectId
+  freelancerProfileId String?          @db.ObjectId
   clientProfileId     String           @db.ObjectId
   message             String?
   status              InvitationStatus @default(PENDING)
@@ -632,7 +647,7 @@ model Invitation {
   createdAt           DateTime         @default(now())
 
   project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+  freelancerProfile FreelancerProfile? @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
   clientProfile     ClientProfile     @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, freelancerProfileId]) // one invitation per freelancer per project

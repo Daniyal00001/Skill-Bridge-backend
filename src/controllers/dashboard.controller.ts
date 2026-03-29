@@ -21,6 +21,7 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
       pendingSkills,
       pendingProposals,
       bannedUsers,
+      adminProfile,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { createdAt: { gte: firstDayOfMonth } } }),
@@ -32,6 +33,7 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
       prisma.skill.count({ where: { status: "PENDING" } }),
       prisma.proposal.count({ where: { status: "PENDING" } }),
       prisma.user.count({ where: { isBanned: true } }),
+      prisma.adminProfile.findUnique({ where: { userId: req.user?.userId } }),
     ]);
 
     // Calculate revenue (Sum of all RELEASED payments, assuming platform takes 10% fee)
@@ -138,7 +140,9 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
           pendingSkills,
           pendingProposals,
           bannedUsers,
+          totalProjects: totalUsers, // Using totalUsers as an indicator for global dashboard
           totalRevenue,
+          lastLoginAt: adminProfile?.lastLoginAt,
         },
         lists: {
           recentUsers,
@@ -297,6 +301,7 @@ export const getClientDashboard = async (req: Request, res: Response) => {
           shortlistedProposals: shortlistedProposalsCount,
           hireRate,
           totalProjects,
+          lastLoginAt: clientProfile.lastLoginAt,
         },
         lists: {
           openProjects: openProjectsList,
@@ -453,6 +458,7 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
           profileCompletion: freelancerProfile.profileCompletion,
           averageRating: reviews._avg.rating || 5.0,
           totalReviews: reviews._count.rating || 0,
+          lastLoginAt: freelancerProfile.lastLoginAt,
         },
         lists: {
           activeMilestones: formattedMilestones,
