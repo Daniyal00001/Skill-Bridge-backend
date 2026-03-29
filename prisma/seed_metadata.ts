@@ -2,8 +2,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function seedMetadata() {
+export async function seedMetadata(prisma: PrismaClient = new PrismaClient()) {
   console.log("🌱 Seeding metadata...");
+
 
   // Languages
   const languages = [
