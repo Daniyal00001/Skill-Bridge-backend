@@ -7,7 +7,7 @@ import { Prisma, Role } from "@prisma/client";
 /**
  * @desc    Get all freelancers with advanced filtering and pagination
  * @route   GET /api/freelancers
- * @access  Private (Protect middleware should be applied)
+ * @access  Private
  */
 export const getAllFreelancers = async (req: Request, res: Response) => {
   try {
@@ -28,7 +28,6 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
     const limitNumber = parseInt(limit as string) || 25;
     const skip = (pageNumber - 1) * limitNumber;
 
-    // Only return profiles that actually have an associated valid user (and aren't banned)
     const where: Prisma.FreelancerProfileWhereInput = {
       user: { isBanned: false },
     };
@@ -81,7 +80,6 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
       };
     }
 
-    // Execute query
     const [freelancers, totalCount] = await Promise.all([
       prisma.freelancerProfile.findMany({
         where,
@@ -93,9 +91,7 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
             },
           },
           skills: {
-            include: {
-              skill: true,
-            },
+            include: { skill: true },
           },
         },
         orderBy,
@@ -105,7 +101,6 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
       prisma.freelancerProfile.count({ where }),
     ]);
 
-    // Calculate pagination metadata
     const totalPages = Math.ceil(totalCount / limitNumber);
 
     return res.status(200).json({
@@ -123,17 +118,30 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Get all freelancers error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
 /**
- * @desc    Get single freelancer profile details
+ * @desc    Get single freelancer profile — full detail for profile page
  * @route   GET /api/freelancers/:id
  * @access  Private
+ *
+ * Returns:
+ *   - Full FreelancerProfile fields (bio, tagline, hourlyRate, experienceLevel,
+ *     availability, responseTime, languages, github, linkedin, portfolio, website,
+ *     profileCompletion, skillTokenBalance, averageRating, totalReviews, etc.)
+ *   - user  { name, email, profileImage, isEmailVerified, isIdVerified,
+ *             isPaymentVerified, createdAt, lastActiveAt }
+ *   - skills[]         — with proficiencyLevel + skill.name/category
+ *   - portfolioItems[] — title, description, imageUrl, projectUrl, techStack, completedAt
+ *   - certificates[]   — title, issuingOrganization, issueDate, expiryDate, credentialUrl
+ *   - educations[]     — school, degree, year
+ *   - gigs[]           — title, description, fileUrl
+ *   - reviews[]        — revealed reviews received, newest first (max 20)
+ *   - recentProjects[] — up to 5 completed/accepted projects with title + budget
  */
 export const getFreelancerById = async (req: Request, res: Response) => {
   try {
@@ -142,52 +150,84 @@ export const getFreelancerById = async (req: Request, res: Response) => {
     const freelancer = await prisma.freelancerProfile.findUnique({
       where: { id },
       include: {
+        // ── Core user fields ──────────────────────────────────
         user: {
           select: {
             name: true,
             email: true,
             profileImage: true,
             isEmailVerified: true,
+            isIdVerified: true,
+            isPaymentVerified: true,
             createdAt: true,
             lastActiveAt: true,
-          },
-        },
-        skills: {
-          include: {
-            skill: true,
-          },
-        },
-        portfolioItems: true,
-        certificates: true,
-        gigs: true,
-        proposals: {
-          take: 5,
-          where: { status: "ACCEPTED" },
-          include: {
-            project: {
-              select: {
-                title: true,
-                budget: true,
+            // Revealed reviews received by this freelancer
+            reviewsReceived: {
+              where: { isRevealed: true },
+              orderBy: { revealedAt: "desc" },
+              take: 20,
+              include: {
+                giver: {
+                  select: {
+                    name: true,
+                    profileImage: true,
+                  },
+                },
               },
             },
           },
         },
-        reviews: {
-          where: { isRevealed: true },
-          orderBy: { revealedAt: "desc" },
-          take: 10,
+
+        // ── Skills with proficiency ───────────────────────────
+        skills: {
           include: {
-            giver: {
+            skill: {
               select: {
+                id: true,
                 name: true,
-                profileImage: true,
+                category: true,
+              },
+            },
+          },
+          orderBy: { proficiencyLevel: "desc" }, // highest proficiency first
+        },
+
+        // ── Portfolio ─────────────────────────────────────────
+        portfolioItems: {
+          orderBy: { completedAt: "desc" },
+        },
+
+        // ── Certificates ──────────────────────────────────────
+        certificates: {
+          orderBy: { issueDate: "desc" },
+        },
+
+        // ── Education ─────────────────────────────────────────
+        educations: true,
+
+        // ── Service packages / gigs ───────────────────────────
+        gigs: {
+          orderBy: { createdAt: "desc" },
+        },
+
+        // ── Accepted proposals → recent projects ─────────────
+        proposals: {
+          where: { status: "ACCEPTED" },
+          orderBy: { updatedAt: "desc" },
+          take: 5,
+          include: {
+            project: {
+              select: {
+                id: true,
+                title: true,
+                budget: true,
+                budgetType: true,
               },
             },
           },
         },
       },
     });
-
 
     if (!freelancer) {
       return res.status(404).json({
@@ -196,16 +236,33 @@ export const getFreelancerById = async (req: Request, res: Response) => {
       });
     }
 
+    // ── Destructure reviewsReceived out of user ───────────────
+    const { reviewsReceived, ...userWithoutReviews } = freelancer.user as any;
+
+    // ── Flatten accepted proposals → recentProjects ───────────
+    const recentProjects = (freelancer.proposals || []).map((p) => p.project);
+
+    // ── Build the final response shape ───────────────────────
+    const data = {
+      ...freelancer,
+      user: {
+        ...userWithoutReviews,
+      },
+      reviews: reviewsReceived || [],
+      recentProjects,
+      // Remove raw proposals array from response (already mapped above)
+      proposals: undefined,
+    };
+
     return res.status(200).json({
       success: true,
-      data: freelancer,
+      data,
     });
   } catch (error) {
     console.error("Get freelancer by ID error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -264,12 +321,12 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       });
     }
 
-    // Check for existing invitation or proposal
+    // Check for existing invitation
     const existingInvite = await prisma.invitation.findUnique({
       where: {
         projectId_freelancerProfileId: {
           projectId,
-          freelancerProfileId: freelancerProfileId,
+          freelancerProfileId,
         },
       },
     });
@@ -289,12 +346,12 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       );
     }
 
-    // Process milestones if sent as string from FormData
+    // Parse milestones if sent as FormData string
     let parsedMilestones = milestones;
     if (typeof milestones === "string") {
       try {
         parsedMilestones = JSON.parse(milestones);
-      } catch (e) {
+      } catch {
         parsedMilestones = null;
       }
     }
@@ -303,17 +360,17 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
     const invitation = await prisma.invitation.create({
       data: {
         projectId,
-        freelancerProfileId: freelancerProfileId,
+        freelancerProfileId,
         clientProfileId: clientProfile.id,
         message,
         milestones: parsedMilestones,
         revisionsAllowed: revisionsAllowed ? Number(revisionsAllowed) : 3,
         budget: budget ? Number(budget) : null,
         attachments: attachmentUrls,
-      } as any, // Cast to handle schema sync lag
+      } as any,
     });
 
-    // Create notification for freelancer
+    // Notify freelancer
     await notificationService.createNotification({
       userId: freelancer.userId,
       type: "INVITATION_RECEIVED",
@@ -322,12 +379,11 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       link: `/freelancer/invitations/${invitation.id}`,
     });
 
-    // ── Post to Chat ────────────────────────────────────────────────────────
-    // Try to find an existing chat room for this pair to notify them in-thread
+    // Post system message to existing chat room if one exists
     const chatRoom = await prisma.chatRoom.findFirst({
       where: {
         clientProfileId: clientProfile.id,
-        freelancerProfileId: freelancerProfileId,
+        freelancerProfileId,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -365,17 +421,16 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Invite freelancer error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
 /**
- * @desc    Initiate or get a chat room for recruitment
+ * @desc    Initiate or retrieve a recruitment chat room between client and freelancer
  * @route   POST /api/freelancers/:id/message
- * @access  Private
+ * @access  Private (Role: CLIENT)
  */
 export const initiateChat = async (req: Request, res: Response) => {
   try {
@@ -383,7 +438,6 @@ export const initiateChat = async (req: Request, res: Response) => {
     const { projectId } = req.body || {};
     const userId = (req as any).user?.userId;
 
-    // Find profiles
     const clientProfile = await prisma.clientProfile.findUnique({
       where: { userId },
     });
@@ -406,10 +460,10 @@ export const initiateChat = async (req: Request, res: Response) => {
       });
     }
 
-    // Find ALL rooms between these two (without contract)
+    // Look for an existing non-contract room between the two
     const existingRooms = await prisma.chatRoom.findMany({
       where: {
-        freelancerProfileId: freelancerProfileId,
+        freelancerProfileId,
         clientProfileId: clientProfile.id,
         contractId: null,
       },
@@ -418,15 +472,14 @@ export const initiateChat = async (req: Request, res: Response) => {
     let chatRoom = existingRooms.length > 0 ? existingRooms[0] : null;
 
     if (chatRoom) {
-      // If it was soft-deleted, un-delete it
+      // Restore soft-deleted room
       if (chatRoom.clientDeleted || chatRoom.freelancerDeleted) {
-        await prisma.chatRoom.update({
+        chatRoom = await prisma.chatRoom.update({
           where: { id: chatRoom.id },
           data: { clientDeleted: false, freelancerDeleted: false },
         });
       }
     } else {
-      // Create new chat room
       chatRoom = await prisma.chatRoom.create({
         data: {
           freelancerProfileId,
@@ -442,9 +495,8 @@ export const initiateChat = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Initiate chat error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
