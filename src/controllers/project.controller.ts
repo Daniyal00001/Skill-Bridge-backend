@@ -370,7 +370,21 @@ export const getAllProjects = async (req: Request, res: Response) => {
         include: {
           skills: true, // Don't include skill nested yet
           clientProfile: {
-            select: { fullName: true, company: true, averageRating: true, totalReviews: true }
+            select: { 
+              fullName: true, 
+              company: true, 
+              averageRating: true, 
+              totalReviews: true,
+              createdAt: true,
+              totalHires: true,
+              hireRate: true,
+              user: {
+                select: {
+                  profileImage: true,
+                  name: true
+                }
+              }
+            }
           },
           category: true,
           languageObj: true,
@@ -480,7 +494,22 @@ export const getProjectById = async (req: Request, res: Response) => {
       include: {
         skills: true,
         clientProfile: {
-          select: { fullName: true, company: true, location: true, averageRating: true, totalReviews: true }
+          select: { 
+            fullName: true, 
+            company: true, 
+            location: true, 
+            averageRating: true, 
+            totalReviews: true, 
+            createdAt: true, 
+            totalHires: true, 
+            hireRate: true,
+            user: {
+              select: {
+                profileImage: true,
+                name: true
+              }
+            }
+          }
         },
         proposals: { select: { id: true } },
         category: true,
