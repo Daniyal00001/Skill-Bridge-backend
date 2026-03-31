@@ -146,7 +146,7 @@ export const FREELANCER_SCORING_WEIGHTS = {
   activityScore: 0.05,
 } as const;
 
-export const FREELANCER_EXPLORATION_RATIO = 0.1;
+export const FREELANCER_EXPLORATION_RATIO = 0.1; // for new freelancers
 export const FREELANCER_CACHE_TTL_SECONDS = 120; // 2 min (freelancer data changes slower)
 export const FREELANCER_FETCH_POOL_SIZE = 150;
 export const FREELANCER_PAGE_SIZE = 20;

@@ -57,7 +57,7 @@ build/
 .env
 
 # Python
-_pycache_/
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -77,3 +77,4 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+

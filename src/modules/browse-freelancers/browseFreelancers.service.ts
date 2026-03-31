@@ -168,6 +168,7 @@ async function fetchEligibleFreelancers(
   }
 
   const rows = await prisma.freelancerProfile.findMany({
+    where,
     take: FREELANCER_FETCH_POOL_SIZE,
     orderBy: { averageRating: "desc" }, // initial DB order
     select: {
