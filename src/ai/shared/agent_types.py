@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from shared.constants import (
     AgentStage, 
@@ -44,6 +44,15 @@ class ProjectRequirements(BaseModel):
     expertiseNeeded: Optional[Literal["entry", "intermediate", "senior"]] = None
     additionalNotes: Optional[str] = None
 
+    @field_validator("expertiseNeeded", mode="before")
+    @classmethod
+    def normalize_expertise(cls, v):
+        if isinstance(v, str):
+            v_lower = v.lower()
+            if v_lower in ["entry", "intermediate", "senior"]:
+                return v_lower
+        return v
+
 
 # ── Freelancer Profile ────────────────────────────────────────
 class FreelancerProfile(BaseModel):
@@ -79,10 +88,19 @@ class FreelancerResponse(BaseModel):
 class NegotiationResult(BaseModel):
     freelancerId: str
     freelancerName: str
-    status: Literal["ACCEPTED", "PENDING", "DECLINED", "COUNTERED", "NO_REPLY"]
+    status: Literal["ACCEPTED", "PENDING", "DECLINED", "COUNTERED", "NO_REPLY", "QUESTIONS"]
     finalPrice: Optional[float] = None
     aiReply: Optional[str] = None
     notes: str = ""
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v):
+        if isinstance(v, str):
+            v_upper = v.upper()
+            if v_upper in ["ACCEPTED", "PENDING", "DECLINED", "COUNTERED", "NO_REPLY", "QUESTIONS"]:
+                return v_upper
+        return v
 
 
 # ── Negotiation State ─────────────────────────────────────────

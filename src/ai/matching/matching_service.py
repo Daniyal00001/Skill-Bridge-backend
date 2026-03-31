@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+import re
 
 from matching.ranking_engine import FreelancerProfile, MatchedFreelancer, RankingEngine
 
@@ -33,6 +34,13 @@ CATEGORY_MAP: Dict[str, str] = {
     "kubernetes": "DevOps & Cloud",
     "unity": "Game Development",
     "unreal": "Game Development",
+    "mern": "Web Development",
+    "mern stack": "Web Development",
+    "fullstack": "Web Development",
+    "full stack": "Web Development",
+    "mongodb": "Web Development",
+    "express": "Web Development",
+    "node.js": "Web Development",
 }
 
 
@@ -79,19 +87,22 @@ class MatchingService:
     ) -> List[FreelancerProfile]:
         try:
             profiles = []
+            
+            # Step 0: Decompose compound terms (e.g. MERN -> React, Node, etc.)
+            expanded_skills = self._decompose_skills(required_skills)
 
             # Step 1: Exact skill match
-            profiles = await self._fetch_by_skills(required_skills, mode="exact")
+            profiles = await self._fetch_by_skills(expanded_skills, mode="exact")
             print(f"🔍 Exact skill match: {len(profiles)} found")
 
             # Step 2: Case-insensitive match
-            if not profiles and required_skills:
-                profiles = await self._fetch_by_skills(required_skills, mode="ilike")
+            if not profiles and expanded_skills:
+                profiles = await self._fetch_by_skills(expanded_skills, mode="ilike")
                 print(f"🔍 Case insensitive match: {len(profiles)} found")
 
             # Step 3: Category-based fallback
-            if not profiles and required_skills:
-                target_category = self._resolve_category(required_skills)
+            if not profiles and expanded_skills:
+                target_category = self._resolve_category(expanded_skills)
                 print(f"🔍 Category fallback: {target_category}")
                 profiles = await self._fetch_by_category(target_category)
                 print(f"🔍 Category match: {len(profiles)} found")
@@ -134,7 +145,14 @@ class MatchingService:
         
         try:
             # 1. First, find skill IDs for requested names
-            skill_cursor = self.db.skills.find({"name": {"$in": skills}})
+            if mode == "exact":
+                skill_query = {"name": {"$in": skills}}
+            else:
+                # Use regex for case-insensitive matching
+                patterns = [re.escape(s) for s in skills]
+                skill_query = {"name": {"$regex": f"^({'|'.join(patterns)})$", "$options": "i"}}
+
+            skill_cursor = self.db.skills.find(skill_query)
             found_skills = await skill_cursor.to_list(length=100)
             skill_ids = [s["_id"] for s in found_skills]
             
@@ -152,7 +170,12 @@ class MatchingService:
                 }},
                 {"$match": {
                     "skill_links.skillId": {"$in": skill_ids}
-                    # Removed strict availability check for testing
+                }},
+                {"$lookup": {
+                    "from": "skills",
+                    "localField": "skill_links.skillId",
+                    "foreignField": "_id",
+                    "as": "skills_data"
                 }},
                 {"$limit": 20}
             ]
@@ -197,11 +220,15 @@ class MatchingService:
 
     def _map_profile(self, row: Any) -> FreelancerProfile:
         """Map ORM row to FreelancerProfile."""
+        skills = []
+        if "skills_data" in row:
+            skills = [s.get("name", "") for s in row["skills_data"] if s.get("name")]
+
         return FreelancerProfile(
             id=str(row["_id"]),
             name=row.get("fullName", "Unknown Freelancer"),
             location=row.get("location", ""),
-            skills=[],  # Could populate this with another lookup if needed
+            skills=skills,
             rating=4.5, # Placeholder rating
             hourlyRate=row.get("hourlyRate", 0.0),
             completedProjects=0,
@@ -209,6 +236,30 @@ class MatchingService:
             availability=row.get("availability") == "AVAILABLE",
             specializations=row.get("preferredCategories", []),
         )
+
+    def _resolve_category(self, skills: List[str]) -> str:
+        for skill in skills:
+            skill_lower = skill.lower()
+            if skill_lower in CATEGORY_MAP:
+                return CATEGORY_MAP[skill_lower]
+        return "Web Development"  # Default fallback
+
+    def _decompose_skills(self, skills: List[str]) -> List[str]:
+        expanded = []
+        mapping = {
+            "mern": ["mongodb", "express", "react", "node"],
+            "mern stack": ["mongodb", "express", "react", "node"],
+            "mean": ["mongodb", "express", "angular", "node"],
+            "mean stack": ["mongodb", "express", "angular", "node"],
+            "lamp": ["linux", "apache", "mysql", "php"],
+        }
+        for s in skills:
+            s_lower = s.lower()
+            if s_lower in mapping:
+                expanded.extend(mapping[s_lower])
+            else:
+                expanded.append(s)
+        return list(set(expanded)) # Unique items only
 
     def _build_match_reply(
         self, matches: List[MatchedFreelancer], project_type: Optional[str]

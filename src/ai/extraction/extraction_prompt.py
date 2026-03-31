@@ -27,7 +27,7 @@ EXTRACTION RULES:
 
 ADDITIONAL INFERENCE:
 - techPreferences: Based on the Platform and Features, pick the BEST stack. prioritize the REFERENCE SKILLS list.
-- expertiseNeeded: "ENTRY", "INTERMEDIATE", or "SENIOR" based on technical complexity.
+- expertiseNeeded: "entry", "intermediate", or "senior" based on technical complexity.
 
 RETURN STRICT JSON ONLY:
 {{
@@ -38,7 +38,7 @@ RETURN STRICT JSON ONLY:
   "budgetMax": number | null,
   "timeline": string | null,
   "techPreferences": string[],
-  "expertiseNeeded": "ENTRY" | "INTERMEDIATE" | "SENIOR" | null,
+  "expertiseNeeded": "entry" | "intermediate" | "senior" | null,
   "additionalNotes": string | null
 }}
 """.strip()

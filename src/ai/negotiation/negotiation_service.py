@@ -23,7 +23,7 @@ class NegotiationService:
     async def handle(
         self,
         session: Dict[str, Any],
-        freelancer_responses: Optional[List[Dict[str, Any]]] = None,
+        freelancer_responses: Optional[List[Any]] = None,
         selected_freelancer_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         freelancer_responses = freelancer_responses or []
@@ -105,14 +105,19 @@ class NegotiationService:
     async def _handle_responses(
         self,
         session: Dict[str, Any],
-        freelancer_responses: List[Dict[str, Any]],
+        freelancer_responses: List[Any],
     ) -> Dict[str, Any]:
 
         matches: List[Dict[str, Any]] = session.get("matches") or []
         results: List[Dict[str, Any]] = []
         reply_messages: List[str] = []
 
-        for response in freelancer_responses:
+        for resp in freelancer_responses:
+            # Handle both Dict and Pydantic objects for robustness
+            response = resp if isinstance(resp, dict) else (
+                resp.model_dump() if hasattr(resp, "model_dump") else resp.dict()
+            )
+
             freelancer = next(
                 (m for m in matches if m["id"] == response["freelancerId"]), None
             )

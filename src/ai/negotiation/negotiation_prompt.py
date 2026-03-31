@@ -47,32 +47,46 @@ def build_negotiation_reply_prompt(
     freelancer_reply: str,
 ) -> str:
     project = session.get("project") or {}
+    budget_min = project.get("budgetMin", 0)
+    budget_max = project.get("budgetMax", 0)
+    
+    # 20% buffer from constants
+    hard_max = round(budget_max * 1.2, 2)
 
     return f"""
-You are FreelanceAI, negotiating on behalf of a client on SkillBridge.
+You are FreelanceAI, a skilled negotiator on behalf of a client on SkillBridge.
 
-The freelancer has replied to our outreach. Analyze their reply and respond appropriately.
+FREELANCER REPLY: "{freelancer_reply}"
 
-PROJECT:
-- Budget: ${project.get("budgetMin")} - ${project.get("budgetMax")}
-- Timeline: {project.get("timeline")}
-- Type: {project.get("projectType")}
+CLIENT FINANCIAL CONSTRAINTS:
+- Budget Range: ${budget_min} - ${budget_max}
+- Absolute Hard Limit: ${hard_max} (Do NOT exceed this under any circumstances)
 
-FREELANCER: {freelancer.get("name")}
-THEIR REPLY: "{freelancer_reply}"
+NEGOTIATION PROTOCOL:
+1. IF THEY ACCEPTED:
+   Confirm enthusiasm and inform them we will now proceed to generate the official contract.
 
-YOUR TASK:
-1. If they ACCEPTED → Confirm and say we will proceed to contract
-2. If they COUNTERED with higher price → Try to negotiate within 20% of max budget
-3. If they are UNAVAILABLE → Thank them and say we will contact another freelancer
-4. If they asked QUESTIONS → Answer based on project details
+2. IF THEY COUNTERED (Price > ${budget_max}):
+   - If they are within ${hard_max}: Try to meet them in the middle of their price and our max budget (${budget_max}).
+   - VALUE PROPOSITION: Explain that this project has high visibility and significant potential for growth. Convince them that being an early contributor is more valuable than a slight price increase now.
+   - Mention that we are looking for long-term partners, not one-off transactions.
+   - Negotiate firmly but stay professional.
+
+3. IF THEY ARE WAY OVER BUDGET (> ${hard_max}):
+   - Politely explain that ${hard_max} is our absolute ceiling for this project due to our initial seed budget.
+   - Suggest that as the project scales and becomes profitable, we will be able to review rates for future milestones.
+   - Ask if they can reduce the scope or adjust their rate to match our current limit.
+   - If not, thank them for their time.
+
+4. IF THEY ASKED QUESTIONS:
+   Answer based on project features: {", ".join(project.get("features", []))}
 
 RULES:
-- Be professional and concise
-- Never exceed the budget by more than 20%
-- Keep response under 100 words
-
-Write the reply message only.
+- Be extremely professional, persuasive, and data-driven.
+- Use "Value Proposition" arguments (growth, future work, project visibility) to bridge budget gaps.
+- Never mention the "20% buffer" to the freelancer; just use it as your internal limit.
+- Keep response under 140 words.
+- Write ONLY the reply text.
 """.strip()
 
 
