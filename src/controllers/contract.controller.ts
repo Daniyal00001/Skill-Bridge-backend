@@ -760,6 +760,7 @@ function formatContract(contract: any) {
     clientName: contract.project.clientProfile.fullName,
     freelancerName: contract.freelancerProfile.user?.name,
     freelancerImage: contract.freelancerProfile.user?.profileImage,
+    freelancerId: contract.freelancerProfileId,
     agreedPrice: contract.agreedPrice,
     status: contract.status,
     startDate: contract.startDate,

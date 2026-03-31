@@ -4,7 +4,8 @@ import {
   getAllFreelancers, 
   getFreelancerById, 
   inviteFreelancer, 
-  initiateChat 
+  initiateChat,
+  getGigById
 } from '../controllers/freelancer.controller'
 
 import {
@@ -83,5 +84,12 @@ router.post('/onboarding/upload', protect, upload.fields([
  * @access  Private
  */
 router.patch('/profile', protect, updateFreelancerProfile)
+
+/**
+ * @route   GET /api/freelancers/gigs/:id
+ * @desc    Get single gig details
+ * @access  Private
+ */
+router.get('/gigs/:id', protect, getGigById)
 
 export default router

@@ -500,3 +500,47 @@ export const initiateChat = async (req: Request, res: Response) => {
       .json({ success: false, message: "Internal server error" });
   }
 };
+
+/**
+ * @desc    Get single gig details
+ * @route   GET /api/freelancers/gigs/:id
+ * @access  Private
+ */
+export const getGigById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const gig = await prisma.gig.findUnique({
+      where: { id },
+      include: {
+        freelancerProfile: {
+          include: {
+            user: {
+              select: {
+                name: true,
+                profileImage: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!gig) {
+      return res.status(404).json({
+        success: false,
+        message: "Gig not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: gig,
+    });
+  } catch (error) {
+    console.error("Get gig by ID error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
