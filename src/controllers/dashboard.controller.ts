@@ -344,6 +344,7 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
       shortlistedProposalsCount,
       proposalsThisMonth,
       activeContractsCount,
+      disputedContractsCount,
       completedJobs,
       pendingInvitationsCount,
       activeMilestones,
@@ -363,6 +364,9 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
         where: { freelancerProfileId: fid, status: "ACTIVE" },
       }),
       prisma.contract.count({
+        where: { freelancerProfileId: fid, status: "DISPUTED" },
+      }),
+      prisma.contract.count({
         where: { freelancerProfileId: fid, status: "COMPLETED" },
       }),
       prisma.invitation.count({
@@ -374,6 +378,9 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
           status: {
             in: ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED", "APPROVED"],
           },
+          contract: {
+            status: { in: ["ACTIVE", "DISPUTED"] }
+          }
         },
         take: 5,
         orderBy: { dueDate: "asc" },
@@ -450,6 +457,7 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
           shortlistedProposals: shortlistedProposalsCount,
           proposalsThisMonth,
           activeContractsCount,
+          disputedContractsCount,
           completedJobs,
           pendingInvitationsCount,
           totalEarnings,

@@ -254,9 +254,14 @@ export const resolveDispute = async (req: Request, res: Response) => {
       },
     });
 
-    // Update project status to CANCELLED if resolution is PROJECT_CANCELLED
+    // Update project and contract status based on resolution
     if (resolution === 'PROJECT_CANCELLED') {
       await prisma.project.update({ where: { id: dispute.projectId }, data: { status: 'CANCELLED' } });
+      await prisma.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'CANCELLED' } });
+    } else {
+      // For resolutions other than project cancellation, reset contract to active
+      await prisma.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'ACTIVE' } });
+      await prisma.project.update({ where: { id: dispute.projectId }, data: { status: 'IN_PROGRESS' } });
     }
 
     // Log admin action
@@ -379,8 +384,9 @@ export const createDispute = async (req: Request, res: Response) => {
       });
     }
 
-    // Update project status to DISPUTED
+    // Update project and contract status to DISPUTED
     await prisma.project.update({ where: { id: projectId }, data: { status: 'DISPUTED' } });
+    await prisma.contract.update({ where: { projectId }, data: { status: 'DISPUTED' } });
 
     // Notify admin(s)
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
@@ -425,12 +431,11 @@ export const getMyDispute = async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const userRole = req.user!.role;
 
-    // Since projectId is no longer unique (both parties can file),
-    // we use findFirst and filter by the caller's role
+    // Find any dispute for this project where the requester is either the client or the freelancer
     const dispute = await prisma.dispute.findFirst({
       where: {
         projectId,
-        filedBy: userRole as any,
+        OR: [{ clientId: userId }, { freelancerId: userId }],
       },
       include: {
         project: { select: { id: true, title: true, budget: true } },
