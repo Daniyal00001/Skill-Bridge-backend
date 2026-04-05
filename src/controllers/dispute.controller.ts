@@ -354,6 +354,14 @@ export const resolveDispute = async (req: Request, res: Response) => {
             where: { id: contract.project.clientProfileId },
             data: { balance: { increment: totalEscrow } }
           });
+          // Mark associated milestones as REJECTED since they weren't paid
+          const milestoneIds = contract.payments.map(p => p.milestoneId).filter(Boolean) as string[];
+          if (milestoneIds.length > 0) {
+            await tx.milestone.updateMany({
+              where: { id: { in: milestoneIds } },
+              data: { status: 'REJECTED' }
+            });
+          }
         } else if (resolution === 'PARTIAL_SPLIT') {
           // Default 50/50 split
           const half = totalEscrow / 2;
@@ -369,13 +377,37 @@ export const resolveDispute = async (req: Request, res: Response) => {
             where: { id: contract.project.clientProfileId },
             data: { balance: { increment: half } }
           });
+          // Mark milestones as APPROVED since they are considered "resolved"
+          const milestoneIds = contract.payments.map(p => p.milestoneId).filter(Boolean) as string[];
+          if (milestoneIds.length > 0) {
+            await tx.milestone.updateMany({
+              where: { id: { in: milestoneIds } },
+              data: { status: 'APPROVED', approvedAt: new Date() }
+            });
+          }
         }
       }
 
-      // Update project and contract status based on resolution
+      // ── CHECK FOR COMPLETION ──────────────────────────────────────────
+      // Fetch all milestones to see if any are left unfinished
+      const allMilestones = await tx.milestone.findMany({
+        where: { contractId: contract.id }
+      });
+      const allDone = allMilestones.every(m => ['APPROVED', 'REJECTED'].includes(m.status));
+
+      // Update project and contract status based on resolution and completion
       if (resolution === 'PROJECT_CANCELLED') {
         await tx.project.update({ where: { id: dispute.projectId }, data: { status: 'CANCELLED' } });
         await tx.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'CANCELLED' } });
+      } else if (allDone) {
+        await tx.contract.update({ 
+          where: { projectId: dispute.projectId }, 
+          data: { status: 'COMPLETED', endDate: new Date() } 
+        });
+        await tx.project.update({ 
+          where: { id: dispute.projectId }, 
+          data: { status: 'COMPLETED' } 
+        });
       } else {
         await tx.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'ACTIVE' } });
         await tx.project.update({ where: { id: dispute.projectId }, data: { status: 'IN_PROGRESS' } });
