@@ -18,7 +18,7 @@ async function resolveContractAccess(contractId: string, userId: string, role: '
       project: {
         include: {
           clientProfile: { select: { userId: true, fullName: true } },
-          disputes: { orderBy: { createdAt: 'desc' } }
+          disputes: { orderBy: { openedAt: 'desc' } }
         }
       },
       freelancerProfile: {
