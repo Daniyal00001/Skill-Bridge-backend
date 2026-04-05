@@ -272,6 +272,7 @@ model ClientProfile {
   createdAt         DateTime?        @default(now())
   updatedAt         DateTime?        @updatedAt
   lastLoginAt       DateTime?
+  balance           Float            @default(0)
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   projects    Project[]
@@ -309,6 +310,7 @@ model FreelancerProfile {
   skillTokenBalance       Int                @default(0) // SkillTokens economy
   createdAt               DateTime?          @default(now())
   updatedAt               DateTime?          @updatedAt
+  balance                 Float              @default(0)
 
   // Social / portfolio links
   github    String?

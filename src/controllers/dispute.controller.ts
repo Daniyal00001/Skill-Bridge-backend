@@ -301,26 +301,88 @@ export const resolveDispute = async (req: Request, res: Response) => {
       where: { userId: req.user!.userId },
     });
 
-    const updated = await prisma.dispute.update({
-      where: { id: id as string },
-      data: {
-        status: 'RESOLVED' as any,
-        resolution: resolution as any,
-        resolutionNote,
-        resolvedAt: new Date(),
-        ...(adminProfile ? { adminId: adminProfile.id } : {}),
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const disputeUpdate = await tx.dispute.update({
+        where: { id: id as string },
+        data: {
+          status: 'RESOLVED' as any,
+          resolution: resolution as any,
+          resolutionNote,
+          resolvedAt: new Date(),
+          ...(adminProfile ? { adminId: adminProfile.id } : {}),
+        },
+      });
 
-    // Update project and contract status based on resolution
-    if (resolution === 'PROJECT_CANCELLED') {
-      await prisma.project.update({ where: { id: dispute.projectId }, data: { status: 'CANCELLED' } });
-      await prisma.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'CANCELLED' } });
-    } else {
-      // For resolutions other than project cancellation, reset contract to active
-      await prisma.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'ACTIVE' } });
-      await prisma.project.update({ where: { id: dispute.projectId }, data: { status: 'IN_PROGRESS' } });
-    }
+      // Find the contract and escrowed payments
+      const contract = await tx.contract.findUnique({
+        where: { projectId: dispute.projectId },
+        include: {
+          payments: { where: { status: 'HELD_IN_ESCROW' } },
+          freelancerProfile: true,
+          project: { include: { clientProfile: true } }
+        }
+      });
+
+      if (contract && contract.payments.length > 0) {
+        const totalEscrow = contract.payments.reduce((sum, p) => sum + p.amount, 0);
+
+        if (resolution === 'FAVOR_FREELANCER') {
+          // Release all to freelancer
+          await tx.payment.updateMany({
+            where: { contractId: contract.id, status: 'HELD_IN_ESCROW' },
+            data: { status: 'RELEASED', releasedAt: new Date() }
+          });
+          await tx.freelancerProfile.update({
+            where: { id: contract.freelancerProfileId },
+            data: { balance: { increment: totalEscrow } }
+          });
+          // Also mark associated milestones as APPROVED
+          const milestoneIds = contract.payments.map(p => p.milestoneId).filter(Boolean) as string[];
+          if (milestoneIds.length > 0) {
+            await tx.milestone.updateMany({
+              where: { id: { in: milestoneIds } },
+              data: { status: 'APPROVED', approvedAt: new Date() }
+            });
+          }
+        } else if (resolution === 'FAVOR_CLIENT' || resolution === 'PROJECT_CANCELLED') {
+          // Refund all to client
+          await tx.payment.updateMany({
+            where: { contractId: contract.id, status: 'HELD_IN_ESCROW' },
+            data: { status: 'REFUNDED' }
+          });
+          await tx.clientProfile.update({
+            where: { id: contract.project.clientProfileId },
+            data: { balance: { increment: totalEscrow } }
+          });
+        } else if (resolution === 'PARTIAL_SPLIT') {
+          // Default 50/50 split
+          const half = totalEscrow / 2;
+          await tx.payment.updateMany({
+            where: { contractId: contract.id, status: 'HELD_IN_ESCROW' },
+            data: { status: 'RELEASED', releasedAt: new Date() } // Mark as processed
+          });
+          await tx.freelancerProfile.update({
+            where: { id: contract.freelancerProfileId },
+            data: { balance: { increment: half } }
+          });
+          await tx.clientProfile.update({
+            where: { id: contract.project.clientProfileId },
+            data: { balance: { increment: half } }
+          });
+        }
+      }
+
+      // Update project and contract status based on resolution
+      if (resolution === 'PROJECT_CANCELLED') {
+        await tx.project.update({ where: { id: dispute.projectId }, data: { status: 'CANCELLED' } });
+        await tx.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'CANCELLED' } });
+      } else {
+        await tx.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'ACTIVE' } });
+        await tx.project.update({ where: { id: dispute.projectId }, data: { status: 'IN_PROGRESS' } });
+      }
+
+      return disputeUpdate;
+    });
 
     // Log admin action
     if (adminProfile) {
