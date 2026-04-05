@@ -29,7 +29,7 @@ router.get('/', requireRole('ADMIN'), getAllDisputes);
 // Get single dispute detail
 router.get('/:id', requireRole('ADMIN'), getDisputeById);
 
-// Update status (e.g., UNDER_REVIEW, WAITING_FOR_RESPONSE, ESCALATED)
+// Update status (e.g., UNDER_REVIEW, RESOLVED, CLOSED)
 router.patch('/:id/status', requireRole('ADMIN'), updateDisputeStatus);
 
 // Resolve a dispute (FAVOR_CLIENT, FAVOR_FREELANCER, etc.)

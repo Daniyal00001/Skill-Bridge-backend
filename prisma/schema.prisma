@@ -89,7 +89,6 @@ enum PaymentStatus {
 enum DisputeStatus {
   OPEN
   UNDER_REVIEW
-  WAITING_FOR_RESPONSE
   RESOLVED
   CLOSED
 }

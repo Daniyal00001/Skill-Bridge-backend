@@ -64,11 +64,10 @@ export const getAllDisputes = async (req: Request, res: Response) => {
     ]);
 
     // Stats counts across all disputes
-    const [open, underReview, waitingForResponse, resolved, closed] =
+    const [open, underReview, resolved, closed] =
       await Promise.all([
         prisma.dispute.count({ where: { status: 'OPEN' } }),
         prisma.dispute.count({ where: { status: 'UNDER_REVIEW' } }),
-        prisma.dispute.count({ where: { status: 'WAITING_FOR_RESPONSE' } }),
         prisma.dispute.count({ where: { status: 'RESOLVED' } }),
         prisma.dispute.count({ where: { status: 'CLOSED' } }),
       ]);
@@ -77,7 +76,7 @@ export const getAllDisputes = async (req: Request, res: Response) => {
       success: true,
       disputes,
       pagination: { total, page: parseInt(page as string), limit: parseInt(limit as string) },
-      stats: { open, underReview, waitingForResponse, resolved, closed },
+      stats: { open, underReview, resolved, closed },
     });
   } catch (err: any) {
     console.error('getAllDisputes error:', err);
@@ -93,10 +92,21 @@ export const getDisputeById = async (req: Request, res: Response) => {
   if (!ADMIN_ONLY(req, res)) return;
 
   try {
-    const { id } = req.params;
+    const { id: disputeId } = req.params;
 
+    // 1. Fetch the dispute to get the opening timestamp
+    const baseDispute = await prisma.dispute.findUnique({
+      where: { id: disputeId },
+      select: { openedAt: true }
+    });
+
+    if (!baseDispute) {
+      return res.status(404).json({ success: false, message: 'Dispute not found' });
+    }
+
+    // 2. Fetch full detail with messages sent BEFORE or AT the time of dispute
     const dispute = await prisma.dispute.findUnique({
-      where: { id: id as string },
+      where: { id: disputeId },
       include: {
         project: {
           include: {
@@ -107,6 +117,18 @@ export const getDisputeById = async (req: Request, res: Response) => {
               include: {
                 milestones: { orderBy: { order: "asc" } },
                 freelancerProfile: { include: { user: { select: { name: true, profileImage: true } } } },
+                chatRooms: {
+                  include: {
+                    messages: {
+                      where: {
+                        sentAt: { lte: baseDispute.openedAt }
+                      },
+                      take: 100,
+                      orderBy: { sentAt: "desc" },
+                      include: { sender: { select: { name: true, profileImage: true, role: true } } },
+                    },
+                  },
+                },
               },
             },
             proposals: {
@@ -114,9 +136,11 @@ export const getDisputeById = async (req: Request, res: Response) => {
               take: 1,
             },
             chatRooms: {
-              take: 1,
               include: {
                 messages: {
+                  where: {
+                    sentAt: { lte: baseDispute.openedAt }
+                  },
                   take: 100,
                   orderBy: { sentAt: "desc" },
                   include: { sender: { select: { name: true, profileImage: true, role: true } } },
@@ -157,6 +181,41 @@ export const getDisputeById = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Dispute not found' });
     }
 
+    // 3. Find ALL rooms involving these two people to capture logs with null projectId
+    const [clientProfile, freelancerProfile] = await Promise.all([
+      prisma.clientProfile.findUnique({ where: { userId: dispute.clientId } }),
+      prisma.freelancerProfile.findUnique({ where: { userId: dispute.freelancerId } }),
+    ]);
+
+    if (clientProfile && freelancerProfile) {
+      const globalRooms = await prisma.chatRoom.findMany({
+        where: {
+          AND: [
+            { clientProfileId: clientProfile.id },
+            { freelancerProfileId: freelancerProfile.id },
+          ]
+        },
+        include: {
+          messages: {
+            where: {
+              sentAt: { lte: baseDispute.openedAt }
+            },
+            take: 100,
+            orderBy: { sentAt: "desc" },
+            include: { sender: { select: { name: true, profileImage: true, role: true } } },
+          },
+        },
+      });
+
+      // Attach these rooms to the project object so the frontend can find them
+      const project = (dispute.project || {}) as any;
+      const existingRooms = project.chatRooms || [];
+      const allRoomIds = new Set(existingRooms.map((r: any) => r.id));
+      
+      const uniqueGlobalRooms = globalRooms.filter(r => !allRoomIds.has(r.id));
+      project.chatRooms = [...existingRooms, ...uniqueGlobalRooms];
+    }
+
     return res.json({ success: true, dispute });
   } catch (err: any) {
     console.error('getDisputeById error:', err);
@@ -172,7 +231,7 @@ export const getDisputeById = async (req: Request, res: Response) => {
 export const updateDisputeStatus = async (req: Request, res: Response) => {
   if (!ADMIN_ONLY(req, res)) return;
 
-  const VALID_STATUSES = ['OPEN', 'UNDER_REVIEW', 'WAITING_FOR_RESPONSE', 'RESOLVED', 'CLOSED'];
+  const VALID_STATUSES = ['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'CLOSED'];
 
   try {
     const { id } = req.params;
