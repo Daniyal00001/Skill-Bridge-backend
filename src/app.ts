@@ -82,6 +82,10 @@ app.use("/api/notifications", notificationRoutes);
 import reviewRoutes from "./routes/review.routes";
 app.use("/api/reviews", reviewRoutes);
 
+// dispute routes
+import disputeRoutes from "./routes/dispute.routes";
+app.use("/api/disputes", disputeRoutes);
+
 // admin routes
 app.use("/api/admin", adminRoutes);
 

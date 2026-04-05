@@ -89,14 +89,17 @@ enum PaymentStatus {
 enum DisputeStatus {
   OPEN
   UNDER_REVIEW
+  WAITING_FOR_RESPONSE
   RESOLVED
+  ESCALATED
   CLOSED
 }
 
 enum DisputeResolution {
   FAVOR_CLIENT
   FAVOR_FREELANCER
-  SPLIT
+  PARTIAL_SPLIT
+  PROJECT_CANCELLED
   DISMISSED
 }
 
@@ -513,7 +516,7 @@ model Project {
   contract      Contract?
   invitations   Invitation[]
   chatRooms     ChatRoom[]
-  dispute       Dispute?
+  disputes      Dispute[]   // changed from dispute? to disputes[]
 
   // ── Browse System addition ──
   savedBy SavedProject[]
@@ -801,23 +804,30 @@ model Review {
 // ============================================================
 
 model Dispute {
-  id             String             @id @default(auto()) @map("_id") @db.ObjectId
-  projectId      String             @unique @db.ObjectId
-  clientId       String             @db.ObjectId
-  freelancerId   String             @db.ObjectId
-  adminId        String?            @db.ObjectId
-  reason         String
-  details        String?
-  status         DisputeStatus      @default(OPEN)
-  resolution     DisputeResolution?
-  resolutionNote String?
-  openedAt       DateTime           @default(now())
-  resolvedAt     DateTime?
+  id               String             @id @default(auto()) @map("_id") @db.ObjectId
+  projectId        String             @db.ObjectId  // no longer unique — allows one per party
+  clientId         String             @db.ObjectId
+  freelancerId     String             @db.ObjectId
+  adminId          String?            @db.ObjectId
+  disputeType      String             @default("PAYMENT") // PAYMENT | SCOPE | DEADLINE | QUALITY | REVISION | DELIVERABLES | IP
+  filedBy          String             @default("CLIENT")  // CLIENT | FREELANCER
+  reason           String
+  details          String?
+  evidenceUrls     String[]           @default([])
+  status           DisputeStatus      @default(OPEN)
+  resolution       DisputeResolution?
+  resolutionNote   String?
+  openedAt         DateTime           @default(now())
+  resolvedAt       DateTime?
+  updatedAt        DateTime           @updatedAt
+  relatedDisputeId String?            @db.ObjectId  // links to the other party's dispute on same project
 
-  project    Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  client     User          @relation("DisputeClient", fields: [clientId], references: [id])
-  freelancer User          @relation("DisputeFreelancer", fields: [freelancerId], references: [id])
-  admin      AdminProfile? @relation("DisputeAdmin", fields: [adminId], references: [id])
+  project           Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  client            User          @relation("DisputeClient", fields: [clientId], references: [id])
+  freelancer        User          @relation("DisputeFreelancer", fields: [freelancerId], references: [id])
+  admin             AdminProfile? @relation("DisputeAdmin", fields: [adminId], references: [id])
+  relatedDispute    Dispute?      @relation("RelatedDisputes", fields: [relatedDisputeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  counterDisputes   Dispute[]     @relation("RelatedDisputes")
 
   @@map("disputes")
 }
