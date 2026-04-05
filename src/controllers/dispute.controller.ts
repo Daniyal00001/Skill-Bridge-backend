@@ -64,13 +64,12 @@ export const getAllDisputes = async (req: Request, res: Response) => {
     ]);
 
     // Stats counts across all disputes
-    const [open, underReview, waitingForResponse, resolved, escalated, closed] =
+    const [open, underReview, waitingForResponse, resolved, closed] =
       await Promise.all([
         prisma.dispute.count({ where: { status: 'OPEN' } }),
         prisma.dispute.count({ where: { status: 'UNDER_REVIEW' } }),
         prisma.dispute.count({ where: { status: 'WAITING_FOR_RESPONSE' } }),
         prisma.dispute.count({ where: { status: 'RESOLVED' } }),
-        prisma.dispute.count({ where: { status: 'ESCALATED' } }),
         prisma.dispute.count({ where: { status: 'CLOSED' } }),
       ]);
 
@@ -78,7 +77,7 @@ export const getAllDisputes = async (req: Request, res: Response) => {
       success: true,
       disputes,
       pagination: { total, page: parseInt(page as string), limit: parseInt(limit as string) },
-      stats: { open, underReview, waitingForResponse, resolved, escalated, closed },
+      stats: { open, underReview, waitingForResponse, resolved, closed },
     });
   } catch (err: any) {
     console.error('getAllDisputes error:', err);
@@ -97,7 +96,7 @@ export const getDisputeById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const dispute = await prisma.dispute.findUnique({
-      where: { id },
+      where: { id: id as string },
       include: {
         project: {
           include: {
@@ -173,7 +172,7 @@ export const getDisputeById = async (req: Request, res: Response) => {
 export const updateDisputeStatus = async (req: Request, res: Response) => {
   if (!ADMIN_ONLY(req, res)) return;
 
-  const VALID_STATUSES = ['OPEN', 'UNDER_REVIEW', 'WAITING_FOR_RESPONSE', 'RESOLVED', 'ESCALATED', 'CLOSED'];
+  const VALID_STATUSES = ['OPEN', 'UNDER_REVIEW', 'WAITING_FOR_RESPONSE', 'RESOLVED', 'CLOSED'];
 
   try {
     const { id } = req.params;
@@ -183,7 +182,7 @@ export const updateDisputeStatus = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: `Invalid status. Allowed: ${VALID_STATUSES.join(', ')}` });
     }
 
-    const dispute = await prisma.dispute.findUnique({ where: { id } });
+    const dispute = await prisma.dispute.findUnique({ where: { id: id as string } });
     if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
 
     // Get admin profile id
@@ -192,7 +191,7 @@ export const updateDisputeStatus = async (req: Request, res: Response) => {
     });
 
     const updated = await prisma.dispute.update({
-      where: { id },
+      where: { id: id as string },
       data: {
         status: status as any,
         ...(adminProfile ? { adminId: adminProfile.id } : {}),
@@ -234,7 +233,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
     }
 
     const dispute = await prisma.dispute.findUnique({
-      where: { id },
+      where: { id: id as string },
       include: { project: true },
     });
     if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
@@ -244,7 +243,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
     });
 
     const updated = await prisma.dispute.update({
-      where: { id },
+      where: { id: id as string },
       data: {
         status: 'RESOLVED' as any,
         resolution: resolution as any,
@@ -271,7 +270,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
           adminProfileId: adminProfile.id,
           action: 'RESOLVED_DISPUTE',
           targetType: 'Dispute',
-          targetId: id,
+          targetId: id as string,
           note: `Resolution: ${resolution}. ${resolutionNote || ''}`,
         },
       });
@@ -434,8 +433,8 @@ export const getMyDispute = async (req: Request, res: Response) => {
     // Find any dispute for this project where the requester is either the client or the freelancer
     const dispute = await prisma.dispute.findFirst({
       where: {
-        projectId,
-        OR: [{ clientId: userId }, { freelancerId: userId }],
+        projectId: projectId as string,
+        OR: [{ clientId: userId as string }, { freelancerId: userId as string }],
       },
       include: {
         project: { select: { id: true, title: true, budget: true } },
@@ -488,7 +487,7 @@ export const addDisputeNote = async (req: Request, res: Response) => {
     }
 
     // Verify dispute exists
-    const dispute = await prisma.dispute.findUnique({ where: { id } });
+    const dispute = await prisma.dispute.findUnique({ where: { id: id as string } });
     if (!dispute) {
       return res.status(404).json({ success: false, message: 'Dispute not found' });
     }
@@ -499,7 +498,7 @@ export const addDisputeNote = async (req: Request, res: Response) => {
         adminProfileId: adminProfile.id,
         action: 'ADD_DISPUTE_NOTE',
         targetType: 'Dispute',
-        targetId: id,
+        targetId: id as string,
         note,
       },
     });
