@@ -108,8 +108,14 @@ export const getAdminUserProfile = async (req: Request, res: Response) => {
           include: {
             projects: {
               take: 5,
-              orderBy: { createdAt: 'desc' },
-              select: { id: true, title: true, status: true, budget: true, createdAt: true }
+              orderBy: { createdAt: "desc" },
+              include: {
+                contract: {
+                  include: {
+                    milestones: { orderBy: { order: "asc" } }
+                  }
+                }
+              }
             },
             _count: {
               select: { projects: true }
@@ -122,6 +128,18 @@ export const getAdminUserProfile = async (req: Request, res: Response) => {
             portfolioItems: true,
             educations: true,
             certificates: true,
+            contracts: {
+              take: 5,
+              orderBy: { createdAt: "desc" },
+              include: {
+                project: {
+                  select: { id: true, title: true, status: true }
+                },
+                milestones: {
+                  orderBy: { order: "asc" }
+                }
+              }
+            },
             _count: {
               select: { 
                 gigs: true,
