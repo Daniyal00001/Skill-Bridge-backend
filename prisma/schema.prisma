@@ -812,6 +812,7 @@ model Dispute {
   disputeType      String             @default("PAYMENT") // PAYMENT | SCOPE | DEADLINE | QUALITY | REVISION | DELIVERABLES | IP
   filedBy          String             @default("CLIENT")  // CLIENT | FREELANCER
   reason           String
+  summary          String?
   details          String?
   evidenceUrls     String[]           @default([])
   status           DisputeStatus      @default(OPEN)

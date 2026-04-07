@@ -224,6 +224,36 @@ export const getDisputeById = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// UPDATE DISPUTE SUMMARY (Admin)
+// PATCH /api/disputes/:id/summary
+// ─────────────────────────────────────────────────────────────
+export const updateDisputeSummary = async (req: Request, res: Response) => {
+  if (!ADMIN_ONLY(req, res)) return;
+
+  try {
+    const { id } = req.params;
+    const { summary } = req.body;
+
+    if (summary === undefined) {
+      return res.status(400).json({ success: false, message: 'Summary is required' });
+    }
+
+    const dispute = await prisma.dispute.update({
+      where: { id },
+      data: { summary },
+      include: {
+        admin: { select: { fullName: true } }
+      }
+    });
+
+    return res.json({ success: true, dispute });
+  } catch (err: any) {
+    console.error('updateDisputeSummary error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
 // UPDATE DISPUTE STATUS (Admin)
 // PATCH /api/disputes/:id/status
 // body: { status: DisputeStatus }

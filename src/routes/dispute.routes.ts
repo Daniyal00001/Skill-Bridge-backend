@@ -5,6 +5,7 @@ import {
   getDisputeById,
   updateDisputeStatus,
   resolveDispute,
+  updateDisputeSummary,
   createDispute,
   getMyDispute,
   addDisputeNote,
@@ -33,6 +34,7 @@ router.get('/:id', requireRole('ADMIN'), getDisputeById);
 router.patch('/:id/status', requireRole('ADMIN'), updateDisputeStatus);
 
 // Resolve a dispute (FAVOR_CLIENT, FAVOR_FREELANCER, etc.)
+router.patch('/:id/summary', requireRole('ADMIN'), updateDisputeSummary);
 router.patch('/:id/resolve', requireRole('ADMIN'), resolveDispute);
 
 // Add internal mediation note
