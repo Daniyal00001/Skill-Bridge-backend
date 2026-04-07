@@ -88,3 +88,102 @@ export const updateSkillStatus = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+// ─────────────────────────────────────────────────────────────
+// GET USER PROFILE (Admin)
+// GET /api/admin/users/:id/profile
+// ─────────────────────────────────────────────────────────────
+export const getAdminUserProfile = async (req: Request, res: Response) => {
+  try {
+    const { id: userId } = req.params;
+
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        clientProfile: {
+          include: {
+            projects: {
+              take: 5,
+              orderBy: { createdAt: 'desc' },
+              select: { id: true, title: true, status: true, budget: true, createdAt: true }
+            },
+            _count: {
+              select: { projects: true }
+            }
+          }
+        },
+        freelancerProfile: {
+          include: {
+            skills: { include: { skill: true } },
+            portfolioItems: true,
+            educations: true,
+            certificates: true,
+            _count: {
+              select: { 
+                gigs: true,
+                contracts: true
+              }
+            }
+          }
+        },
+        reviewsReceived: {
+          take: 5,
+          orderBy: { submittedAt: 'desc' },
+          include: { giver: { select: { name: true, profileImage: true } } }
+        },
+        disputesAsClient: {
+          take: 5,
+          orderBy: { openedAt: 'desc' },
+          select: { id: true, status: true, reason: true, openedAt: true }
+        },
+        disputesAsFreelancer: {
+          take: 5,
+          orderBy: { openedAt: 'desc' },
+          select: { id: true, status: true, reason: true, openedAt: true }
+        },
+        _count: {
+          select: {
+            reviewsReceived: true,
+            disputesAsClient: true,
+            disputesAsFreelancer: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Return a unified profile object
+    return res.status(200).json({ 
+      success: true, 
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        profileImage: user.profileImage,
+        createdAt: user.createdAt,
+        isEmailVerified: user.isEmailVerified,
+        isIdVerified: user.isIdVerified,
+        isPhoneVerified: user.isPhoneVerified,
+        isPaymentVerified: user.isPaymentVerified,
+        lastActiveAt: user.lastActiveAt,
+        clientProfile: user.clientProfile,
+        freelancerProfile: user.freelancerProfile,
+        reviews: user.reviewsReceived,
+        disputeHistory: [...user.disputesAsClient, ...user.disputesAsFreelancer].sort((a, b) => 
+          new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime()
+        )
+      }
+    });
+  } catch (error: any) {
+    console.error("Admin Get User Profile Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
