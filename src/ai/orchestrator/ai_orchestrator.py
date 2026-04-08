@@ -7,6 +7,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+from datetime import datetime
 from shared.constants import AgentStage, ExpertiseLevel
 from shared.agent_types import AgentInput, AgentOutput
 
@@ -23,6 +24,7 @@ class AiOrchestrator:
         matching_service,
         negotiation_service,
         contract_service,
+        memory_service,
         llm_service,
     ):
         self.session_service = session_service
@@ -31,48 +33,124 @@ class AiOrchestrator:
         self.matching_service = matching_service
         self.negotiation_service = negotiation_service
         self.contract_service = contract_service
+        self.memory_service = memory_service
         self.llm = llm_service
 
     async def run(self, input: AgentInput) -> AgentOutput:
         session = await self.session_service.get_or_create(
-            input.sessionId, input.clientName
+            input.sessionId, input.clientName, input.clientId
         )
+        
+        # 🧠 LONG-TERM (30-DAY) PERSISTENT MEMORY
+        memory = None
+        if input.clientId:
+            memory = await self.memory_service.get(input.clientId)
+            if memory:
+                session["persistentMemory"] = memory.dict()
+                print(f"🧠 Persistent memory loaded for user: {input.clientId}")
+
+        # 🧠 30-DAY SESSION MEMORY (Historical session summaries)
+        if session.get("clientId"):
+            recent_history = await self.session_service.get_recent_history(session["clientId"])
+            # Format history for LLM context
+            memory_summary = "\n".join([
+                f"- {h.get('project', {}).get('projectType')}: {h.get('project', {}).get('budgetMax')}$"
+                for h in recent_history if h.get("project")
+            ])
+            session["memoryContext"] = memory_summary
+
         print(f"\n🤖 Stage: {session['stage']} | Session: {session['sessionId']}")
 
         stage = session["stage"]
 
         if stage == AgentStage.UNDERSTAND:
-            return await self._handle_understand(session, input.message)
+            result = await self._handle_understand(session, input.message)
         elif stage == AgentStage.ANALYZE:
-            return await self._handle_analyze(session, input.message)
+            result = await self._handle_analyze(session, input.message)
         elif stage in (AgentStage.MATCH, AgentStage.OUTREACH):
-            return await self._handle_match(session, input.message, input.selectedFreelancerId)
+            result = await self._handle_match(session, input.message, input.selectedFreelancerId)
         elif stage == AgentStage.NEGOTIATE:
-            return await self._handle_negotiate(session, input.freelancerResponses or [])
+            result = await self._handle_negotiate(session, input.freelancerResponses or [])
         elif stage == AgentStage.CONTRACT:
-            return await self._handle_contract(session)
+            result = await self._handle_contract(session)
         else:
-            return AgentOutput(
+            result = AgentOutput(
                 sessionId=session["sessionId"],
                 stage=session["stage"],
                 reply="Processing...",
             )
+
+        # ── 6. PERSISTENT MEMORY UPDATE (Long-term) ───────────────────
+        await self._post_process_memory(input.clientId, session, result)
+
+        # ── 7. ENSURE OUTPUT HAS HISTORY AND TITLE ───────────────────
+        # Ensure result has the current session state
+        result.title = session.get("title", "New Chat")
+        
+        # Format history as LLMMessages
+        from shared.agent_types import LLMMessage
+        history_objs = []
+        for m in session.get("history", []):
+            history_objs.append(LLMMessage(role=m.get("role", "user"), content=m.get("content", "")))
+        result.history = history_objs
+
+        return result
+
+    async def _post_process_memory(self, client_id: str, session: Dict[str, Any], result: AgentOutput):
+        if not client_id:
+            return
+
+        new_data = {}
+        
+        # 1. Update budget preferences from project data
+        if result.project:
+            new_data["budgetRange"] = {
+                "min": result.project.budgetMin or 0,
+                "max": result.project.budgetMax or 0
+            }
+        
+        # 2. Update expertise level detection
+        history = session.get("history", [])
+        if len(history) > 2:
+            # We could do a more complex analysis, for now just placeholder for learning
+            pass
+
+        # 3. Track hired freelancers and project history
+        if result.stage in (AgentStage.MATCH, AgentStage.DONE):
+            # Extract a brief summary of the CURRENT project to remember for 30 days
+            if result.project:
+                summary = f"{result.project.projectType} on {result.project.platform} with budget ${result.project.budgetMax}"
+                # Prevent duplicates (check if this project summary is already in pastProjects)
+                if not any(p.get("summary") == summary for p in session.get("memory", {}).get("pastProjects", [])):
+                    new_data["pastProject"] = {
+                        "summary": summary,
+                        "date": datetime.now().isoformat(),
+                        "stage": str(result.stage)
+                    }
+
+            negotiation_state = session.get("negotiationState") or {}
+            results = negotiation_state.get("results") or []
+            accepted = next((r for r in results if r["status"] == "ACCEPTED"), None)
+            if accepted:
+                new_data["hiredFreelancer"] = accepted["freelancerId"]
+        
+        updated_memory = await self.memory_service.update_preferences(client_id, new_data)
+        result.memory = updated_memory
+
 
     # ── CONTRACT stage ────────────────────────────────────────
     async def _handle_contract(self, session: Dict[str, Any]) -> AgentOutput:
         negotiation_state = session.get("negotiationState") or {}
         results = negotiation_state.get("results") or []
         
-        # Determine which freelancer to contract with
         accepted = next((r for r in results if r["status"] == "ACCEPTED"), None)
         if not accepted:
             return AgentOutput(
                 sessionId=session["sessionId"],
                 stage=AgentStage.NEGOTIATE,
-                reply="No freelancer has accepted yet. Please finish negotiation first.",
+                reply="No freelancer has accepted yet.",
             )
 
-        # Find the full match profile
         matches = session.get("matches") or []
         target = next((m for m in matches if m["id"] == accepted["freelancerId"]), matches[0])
 
@@ -87,146 +165,114 @@ class AiOrchestrator:
         return AgentOutput(
             sessionId=session["sessionId"],
             stage=AgentStage.DONE,
-            reply="The contract is ready! You can review and finalize it below.",
+            reply="🤝 Deal closed! The contract is generated and ready for your signature in the dashboard.",
             project=session.get("project"),
             matches=session.get("matches"),
             negotiationSummary=results,
             contractText=contract_text,
+            chatRoomId=negotiation_state.get("roomId")
         )
 
     # ── UNDERSTAND stage ──────────────────────────────────────
     async def _handle_understand(self, session: Dict[str, Any], message: str) -> AgentOutput:
-        reply = await self.conversation_service.handle(session, message)
+        # 1. 🧠 EXTRACT FIRST: Pull data from the user message
         extraction = await self.extraction_service.extract(session)
-
-        persona = session.get("persona") or {}
-        expertise_level = persona.get("expertiseLevel") or ExpertiseLevel.BEGINNER
         
-        # Dynamic MIN_ROUNDS based on Persona
-        min_rounds = 2 # default
-        user_type = persona.get("userType")
-        urgency = persona.get("urgency")
+        # Get latest project data
+        updated_session = await self.session_service.get(session["sessionId"])
+        project_data = updated_session.get("project") or {}
+
+        # 2. 💬 CONVERSE SECOND: Use updated data to decide what to ask next
+        reply = await self.conversation_service.handle(updated_session, message)
+
+        # 🎯 DECISION: Should we trigger matching?
+        persona = session.get("persona", {})
+        expertise = persona.get("expertiseLevel", "INTERMEDIATE")
         
-        if urgency == "high" and expertise_level == ExpertiseLevel.ADVANCED:
-            min_rounds = 1
-        elif user_type == "confused" and expertise_level == ExpertiseLevel.BEGINNER:
-            min_rounds = 4
-        elif user_type == "business_owner":
-            min_rounds = 2
-        elif user_type == "experienced_client":
-            min_rounds = 1
-        else:
-            min_rounds = {
-                ExpertiseLevel.BEGINNER: 3,
-                ExpertiseLevel.INTERMEDIATE: 2,
-                ExpertiseLevel.ADVANCED: 1
-            }.get(expertise_level, 2)
+        # Requirement: BEGINNER (3), INTERMEDIATE (2), ADVANCED (1)
+        min_rounds_map = {
+            "BEGINNER": 3,
+            "INTERMEDIATE": 2,
+            "ADVANCED": 1
+        }
+        min_rounds = min_rounds_map.get(expertise, 2)
+        
+        # If we have memory context from a previous session, we can expedite by 1 round
+        if session.get("memoryContext"):
+            min_rounds = max(1, min_rounds - 1)
 
-        conversation_round = len(session.get("history", [])) // 2
-        min_rounds_met = conversation_round >= min_rounds
-
-        print(f"👤 Persona: {user_type} | 💬 Round: {conversation_round} | MinRequired: {min_rounds}")
-        print(f"📊 isComplete: {extraction.isComplete} | confidence: {extraction.confidence}")
-
+        conversation_round = len(updated_session.get("history", [])) // 2
+        
+        # Check intent and completeness
         should_match = await self._should_trigger_match(
-            session,
-            message,
-            reply,
-            extraction.isComplete,
-            extraction.confidence,
-            min_rounds_met,
+            updated_session, message, reply, extraction.isComplete, extraction.confidence, 
+            conversation_round >= min_rounds
         )
 
         if should_match:
-            print("✅ LLM decided: Triggering MATCH stage...")
+            print("🚀 Intent/Completeness Met: TRIGGERING MATCH STAGE...")
             await self.session_service.update_stage(session["sessionId"], AgentStage.MATCH)
-
-            updated_session = await self.session_service.get(session["sessionId"])
-            match_session = {
-                **updated_session,
-                "project": {
-                    **(updated_session.get("project") or {}),
-                    **(extraction.project or {}),
-                },
-            }
-
-            match_result = await self.matching_service.handle(match_session)
-            matches = match_result["matches"]
-            print(f"🎯 Matches found: {len(matches)}")
-
+            
+            match_result = await self.matching_service.handle(updated_session)
+            
             return AgentOutput(
                 sessionId=session["sessionId"],
                 stage=AgentStage.MATCH,
                 reply=match_result["reply"],
-                project=extraction.project,
-                matches=matches,
+                project=project_data,
+                matches=match_result["matches"],
             )
 
         return AgentOutput(
             sessionId=session["sessionId"],
             stage=AgentStage.UNDERSTAND,
             reply=reply,
-            project=extraction.project,
+            project=project_data,
         )
 
-    # ── LLM decides if matching should trigger ────────────────
     async def _should_trigger_match(
-        self,
-        session: Dict[str, Any],
-        user_message: str,
-        ai_reply: str,
-        is_complete: bool,
-        confidence: float,
-        min_rounds_met: bool,
+        self, 
+        session: Dict[str, Any], 
+        user_message: str, 
+        ai_reply: str, 
+        is_complete: bool, 
+        confidence: float, 
+        min_rounds_met: bool
     ) -> bool:
-        if not min_rounds_met:
+        # Base safety: at least some rounds of discovery
+        if not min_rounds_met: 
             return False
-        if is_complete and confidence >= 80:
+            
+        # 1. Perfect data match
+        if is_complete and confidence >= 70: 
             return True
-
+            
+        # 2. LLM Intent Detection: Did user explicitly ask for freelancers/matching?
         try:
             prompt = f"""
-You are deciding whether to trigger freelancer matching for a client conversation.
+Analyze the user's intent to see if they want to move to freelancer matching now.
 
-EXTRACTED PROJECT DATA:
-{json.dumps(session.get("project"), indent=2)}
+CURRENT PROJECT STATUS:
+- Complete: {is_complete}
+- Data Confidence: {confidence}% (Fields: {json.dumps(session.get("project"))})
 
 LAST USER MESSAGE: "{user_message}"
 LAST AI REPLY: "{ai_reply}"
-IS COMPLETE: {is_complete}
-CONFIDENCE: {confidence}%
 
-Should we trigger freelancer matching now? Consider:
-1. Do we have projectType, features, budget AND timeline?
-2. Is the client ready to see freelancers?
-3. Did the AI signal it has everything needed?
-4. Did the user ask to find/show freelancers?
+DECIDE: Should we show freelancers matching results now?
+Consider 'true' if:
+1. The user explicitly asked to "show freelancers", "find someone", "let's hire", "matching", etc.
+2. The user has provided enough basic info (Goal + Budget) and seems ready for the next step.
 
-RETURN ONLY: true or false"""
-
+RETURN ONLY: true OR false"""
             result = await self.llm.call([{"role": "user", "content": prompt}])
             decision = "true" in result.strip().lower()
-            print(f"🤖 LLM match decision: {decision}")
+            if decision: print("💡 LLM detected intent to match.")
             return decision
-
-        except Exception:
-            print("❌ LLM match decision failed, using extraction result")
+        except:
             return is_complete and confidence >= 50
 
-    # ── ANALYZE stage ─────────────────────────────────────────
-    async def _handle_analyze(self, session: Dict[str, Any], message: str) -> AgentOutput:
-        await self.session_service.update_stage(session["sessionId"], AgentStage.MATCH)
-        result = await self.matching_service.handle({**session, "stage": AgentStage.MATCH})
-
-        return AgentOutput(
-            sessionId=session["sessionId"],
-            stage=AgentStage.MATCH,
-            reply=result["reply"],
-            project=session.get("project"),
-            matches=result["matches"],
-        )
-
-    # ── MATCH stage ───────────────────────────────────────────
+    # ── MATCH/HIRE stage ───────────────────────────────────────────
     async def _handle_match(
         self,
         session: Dict[str, Any],
@@ -234,18 +280,17 @@ RETURN ONLY: true or false"""
         selected_freelancer_id: Optional[str] = None,
     ) -> AgentOutput:
         wants_to_hire = bool(
-            re.search(r"hire|want.*hire|let.*hire|go.*with|choose|select", message, re.IGNORECASE)
+            re.search(r"hire|want.*hire|let.*hire|go.*with|choose|select|pick", message, re.IGNORECASE)
         )
 
         if wants_to_hire and session.get("matches"):
-            print(f"🤝 Starting negotiation | Freelancer: {selected_freelancer_id or 'top match'}")
             await self.session_service.update_stage(session["sessionId"], AgentStage.NEGOTIATE)
-
             updated_session = await self.session_service.get(session["sessionId"])
             result = await self.negotiation_service.handle(
                 updated_session, [], selected_freelancer_id
             )
 
+            # Redirect info included in reply
             return AgentOutput(
                 sessionId=session["sessionId"],
                 stage=AgentStage.NEGOTIATE,
@@ -253,6 +298,7 @@ RETURN ONLY: true or false"""
                 project=session.get("project"),
                 matches=session.get("matches"),
                 negotiationSummary=result["results"],
+                chatRoomId=result.get("chatRoomId")
             )
 
         result = await self.matching_service.handle(session)
@@ -272,9 +318,13 @@ RETURN ONLY: true or false"""
 
         return AgentOutput(
             sessionId=session["sessionId"],
-            stage=AgentStage.NEGOTIATE,
+            stage=AgentStage.NEGOTIATE if result.get("status") != "ACCEPTED" else AgentStage.CONTRACT,
             reply=result["reply"],
             project=session.get("project"),
             matches=session.get("matches"),
             negotiationSummary=result["results"],
+            chatRoomId=session.get("negotiationState", {}).get("roomId")
         )
+
+    async def _handle_analyze(self, session: Dict[str, Any], message: str) -> AgentOutput:
+        return await self._handle_match(session, message)

@@ -67,6 +67,6 @@ RETURN STRICT JSON ONLY:
 {{
   "isComplete": boolean,
   "missingFields": string[],
-  "confidence": number (0.0 to 1.0)
+  "confidence": number (0-100)
 }}
-""".strip()
+""".strip()

@@ -23,6 +23,13 @@ class ConversationService:
             session["persona"] = await self.detect_user_persona_llm(user_message)
             print(f"👤 Persona detected: {session['persona'].get('userType', 'unknown')}")
 
+        # 1.5 Generate Title if first message
+        if not session.get("title") or session.get("title") == "New Chat":
+            title_prompt = f"Summarize this project request into a 3-4 word title. Respond with ONLY the title. Request: {user_message}"
+            title = await self.llm.call([{"role": "user", "content": title_prompt}])
+            session["title"] = title.strip().strip('"').strip("'")
+            print(f"📝 Title generated: {session['title']}")
+
         # 2. Conversation round
         history = session.get("history", [])
         conversation_round = len(history) // 2
@@ -32,12 +39,14 @@ class ConversationService:
             session["persona"],
             session.get("project", {}),
             session.get("clientName", "Client"),
+            session,
             conversation_round
         )
 
-        # 4. Messages
+        # 4. Limit history for input safety (last 20 messages)
+        pruned_history = history[-20:]
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(history)
+        messages.extend(pruned_history)
         messages.append({"role": "user", "content": user_message})
 
         # 5. LLM call

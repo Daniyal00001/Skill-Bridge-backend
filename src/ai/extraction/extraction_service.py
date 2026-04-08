@@ -54,10 +54,14 @@ class ExtractionService:
                 print(f"⚠️ Extraction: DB skill fetch failed: {e}")
 
         project = await self._extract_project_data(session, skill_names)
-
-        # Merge into session
         existing_project = session.get("project", {})
-        merged = {**existing_project, **project}
+        
+        # Smart merge: Only update if new data is non-null
+        merged = {**existing_project}
+        for k, v in project.items():
+            if v is not None and v != [] and v != "":
+                merged[k] = v
+        
         session["project"] = merged
         await self.session_service.save(session)
 

@@ -186,6 +186,10 @@ model User {
   phoneOtp          String?
   phoneOtpExpiry    DateTime?
   phoneOtpLastSent  DateTime?
+  // Violation tracking
+  violationCount    Int       @default(0)
+  lastViolationAt   DateTime?
+  isFlagged         Boolean   @default(false)
 
   // Relations
   clientProfile     ClientProfile?
@@ -739,6 +743,7 @@ model ChatRoom {
   projectId           String?  @db.ObjectId
   freelancerProfileId String?  @db.ObjectId
   clientProfileId     String?  @db.ObjectId
+  isActiveAI          Boolean  @default(false)
   createdAt           DateTime @default(now())
 
   contract          Contract?          @relation(fields: [contractId], references: [id], onDelete: Cascade)
@@ -764,6 +769,7 @@ model Message {
   type       MessageType @default(TEXT)
   fileUrl    String? // if type = FILE
   isRead     Boolean     @default(false)
+  isAiMessage Boolean     @default(false)
   sentAt     DateTime    @default(now())
 
   chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
@@ -795,6 +801,23 @@ model Review {
   @@unique([contractId, giverId]) // one review per person per contract
   @@map("reviews")
 }
+
+// ============================================================
+// AI PERSISTENT MEMORY (Long-term learning across sessions)
+// ============================================================
+
+model AiMemory {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @unique @db.ObjectId
+  memories  Json     // structured memory object
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime // TTL for auto-cleanup (e.g. 30 days)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_memories")
+}
+
 
 // ============================================================
 // DISPUTE
@@ -976,3 +999,39 @@ model BrowseInteraction {
   @@map("browse_interactions")
 
 }
+
+model AiMemory {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  type      String   // PREFERENCE, DEAL, CONTEXT
+  content   Json
+  createdAt DateTime @default(now())
+
+  @@map("ai_memory")
+}
+
+model NegotiationInsight {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatRoomId      String   @db.ObjectId @unique
+  initialPrice    Float
+  finalPrice      Float?
+  discount        Float?
+  durationMinutes Int?
+  createdAt       DateTime @default(now())
+
+  @@map("negotiation_insights")
+}
+
+model FreelancerEvaluation {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String   @db.ObjectId
+  chatRoomId          String?  @db.ObjectId
+  score               Int      // 0-100
+  communication       Int      // 1-10
+  priceFit            Int      // 1-10
+  skillMatch          Int      // 1-10
+  evaluatedAt         DateTime @default(now())
+
+  @@map("freelancer_evaluations")
+}
+

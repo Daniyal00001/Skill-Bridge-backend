@@ -6,6 +6,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
 
 from shared.constants import (
     AgentStage, 
@@ -26,6 +27,19 @@ class UserPersona(BaseModel):
     communicationStyle: CommunicationStyle = CommunicationStyle.FORMAL
     primaryGoal: str = ""
 
+# ── Persistent Memory (Long-term Context) ────────────────────
+class PersistentMemory(BaseModel):
+    userId: str
+    expertiseLevel: str = "beginner"
+    communicationStyle: str = "formal"
+    budgetRange: Dict[str, float] = {"min": 0, "max": 0}
+    preferredSkills: List[str] = []
+    pastProjects: List[Dict[str, Any]] = []
+    hiredFreelancers: List[str] = []
+    rejectedFreelancers: List[str] = []
+    totalSessions: int = 0
+    lastActiveAt: datetime = Field(default_factory=datetime.now)
+
 # ── LLM Message ───────────────────────────────────────────────
 class LLMMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
@@ -43,6 +57,9 @@ class ProjectRequirements(BaseModel):
     techPreferences: List[str] = []
     expertiseNeeded: Optional[Literal["entry", "intermediate", "senior"]] = None
     additionalNotes: Optional[str] = None
+
+    class Config:
+        extra = "ignore"
 
     @field_validator("expertiseNeeded", mode="before")
     @classmethod
@@ -67,6 +84,9 @@ class FreelancerProfile(BaseModel):
     availability: bool = True
     specializations: List[str] = []
 
+    class Config:
+        extra = "ignore"
+
 
 # ── Matched Freelancer ────────────────────────────────────────
 class MatchedFreelancer(FreelancerProfile):
@@ -74,11 +94,14 @@ class MatchedFreelancer(FreelancerProfile):
     estimatedTotal: int = 0
     matchReason: str = ""
 
+    class Config:
+        extra = "ignore"
+
 
 # ── Freelancer Response ───────────────────────────────────────
 class FreelancerResponse(BaseModel):
     freelancerId: str
-    freelancerName: str
+    freelancerName: Optional[str] = "Freelancer"
     replyText: str
     proposedPrice: Optional[float] = None
     isAvailable: Optional[bool] = None
@@ -87,7 +110,7 @@ class FreelancerResponse(BaseModel):
 # ── Negotiation Result ────────────────────────────────────────
 class NegotiationResult(BaseModel):
     freelancerId: str
-    freelancerName: str
+    freelancerName: Optional[str] = "Freelancer"
     status: Literal["ACCEPTED", "PENDING", "DECLINED", "COUNTERED", "NO_REPLY", "QUESTIONS"]
     finalPrice: Optional[float] = None
     aiReply: Optional[str] = None
@@ -114,15 +137,21 @@ class NegotiationState(BaseModel):
 # ── Agent Session ─────────────────────────────────────────────
 class AgentSession(BaseModel):
     sessionId: str
+    title: Optional[str] = "New Chat"
     clientId: Optional[str] = None
     clientName: Optional[str] = None
     stage: AgentStage = AgentStage.UNDERSTAND
     persona: Optional[UserPersona] = None
     history: List[LLMMessage] = []
+
+    class Config:
+        extra = "ignore"
     project: Optional[ProjectRequirements] = None
     matches: Optional[List[MatchedFreelancer]] = None
     negotiationState: Optional[NegotiationState] = None
+    memory: Optional[PersistentMemory] = None
     contractText: Optional[str] = None
+    chatRoomId: Optional[str] = None
     createdAt: str = ""
     updatedAt: str = ""
 
@@ -132,6 +161,7 @@ class AgentInput(BaseModel):
     sessionId: str
     message: str
     clientName: Optional[str] = "Client"
+    clientId: Optional[str] = None
     freelancerResponses: Optional[List[FreelancerResponse]] = []
     selectedFreelancerId: Optional[str] = None
 
@@ -145,3 +175,7 @@ class AgentOutput(BaseModel):
     matches: Optional[List[MatchedFreelancer]] = None
     negotiationSummary: Optional[List[NegotiationResult]] = None
     contractText: Optional[str] = None
+    chatRoomId: Optional[str] = None
+    memory: Optional[PersistentMemory] = None
+    title: Optional[str] = None
+    history: List[LLMMessage] = []

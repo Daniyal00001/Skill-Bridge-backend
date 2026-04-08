@@ -16,7 +16,7 @@ export const getProjectTokenCost = async (req: Request, res: Response) => {
     const { projectId } = req.params
 
     const project = await prisma.project.findUnique({
-      where: { id: projectId },
+      where: { id: projectId as string },
       select: { budget: true, budgetType: true, experienceLevel: true, proposalCount: true, size: true }
     })
 
@@ -100,7 +100,7 @@ export const submitProposal = async (req: Request, res: Response) => {
 
     // Get project details
     const project = await prisma.project.findUnique({
-      where: { id: projectId },
+      where: { id: projectId as string },
       select: {
         id: true,
         budget: true,
@@ -129,7 +129,7 @@ export const submitProposal = async (req: Request, res: Response) => {
     const existing = await prisma.proposal.findUnique({
       where: {
         projectId_freelancerProfileId: {
-          projectId,
+          projectId: projectId as string,
           freelancerProfileId: freelancerProfile.id,
         }
       }
@@ -172,7 +172,7 @@ export const submitProposal = async (req: Request, res: Response) => {
       // 2. Create proposal
       const proposal = await tx.proposal.create({
         data: {
-          projectId,
+          projectId: projectId as string,
           freelancerProfileId: freelancerProfile.id,
           proposedPrice: Number(bidAmount),
           deliveryTime: Number(deliveryDays),
@@ -204,24 +204,24 @@ export const submitProposal = async (req: Request, res: Response) => {
           reason: 'PROPOSAL_SUBMITTED',
           amount: tokenCost,
           balanceAfter: newBalance,
-          description: `Proposal submitted for: ${proposal.project.title}`,
+          description: `Proposal submitted for: ${(proposal as any).project.title}`,
           relatedProposalId: proposal.id,
         }
       })
 
       // 4. Increment proposal count on project
       await tx.project.update({
-        where: { id: projectId },
+        where: { id: projectId as string },
         data: { proposalCount: { increment: 1 } }
       })
 
       // 5. Notify client
-      const clientUserId = proposal.project.clientProfile.userId
+      const clientUserId = (proposal as any).project.clientProfile.userId
       await notificationService.createNotification({
         userId: clientUserId,
         type: 'PROPOSAL_RECEIVED',
         title: 'New Proposal Received',
-        body: `A freelancer submitted a proposal for: ${proposal.project.title}`,
+        body: `A freelancer submitted a proposal for: ${(proposal as any).project.title}`,
         link: `/client/projects/${projectId}/proposals`,
       }, tx)
 
@@ -336,7 +336,7 @@ export const getProjectProposals = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Client profile not found.' })
     }
 
-    const project = await prisma.project.findUnique({ where: { id: projectId } })
+    const project = await prisma.project.findUnique({ where: { id: projectId as string } })
     if (!project) {
       return res.status(404).json({ success: false, message: 'Project not found.' })
     }
@@ -346,7 +346,7 @@ export const getProjectProposals = async (req: Request, res: Response) => {
     }
 
     const proposalsRaw = await prisma.proposal.findMany({
-      where: { projectId },
+      where: { projectId: projectId as string },
       include: {
         freelancerProfile: {
           include: {
@@ -429,7 +429,7 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
     }
 
     const proposal = await prisma.proposal.findUnique({
-      where: { id },
+      where: { id: id as string },
       include: {
         project: { select: { clientProfileId: true, title: true, id: true } },
         freelancerProfile: { select: { userId: true, id: true, skillTokenBalance: true } }
@@ -440,7 +440,7 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Proposal not found.' })
     }
 
-    if (proposal.project.clientProfileId !== clientProfile.id) {
+    if ((proposal as any).project.clientProfileId !== clientProfile.id) {
       return res.status(403).json({ success: false, message: 'Not authorized.' })
     }
 
@@ -453,7 +453,7 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
       await prisma.$transaction(async (tx) => {
         // Accept this proposal and clear negotiation state
         await tx.proposal.update({ 
-          where: { id }, 
+          where: { id: id as string }, 
           data: { 
             status: 'ACCEPTED',
             negotiationStatus: null,
@@ -466,7 +466,7 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
         await tx.proposal.updateMany({
           where: {
             projectId: proposal.projectId,
-            id: { not: id },
+            id: { not: id as string },
             status: { in: ['PENDING', 'SHORTLISTED'] }
           },
           data: { status: 'REJECTED' }
@@ -516,7 +516,7 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
         const contract = await tx.contract.create({
           data: {
             projectId: proposal.projectId,
-            freelancerProfileId: proposal.freelancerProfileId,
+            freelancerProfileId: proposal.freelancerProfileId as string,
             agreedPrice: rawMilestones.length > 0
               ? rawMilestones.reduce((s: number, m: any) => s + Number(m.amount), 0)
               : proposal.proposedPrice,
@@ -562,20 +562,20 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
 
         // Update client hire stats if the contract is immediately active
         if (contractStatus === 'ACTIVE') {
-          await updateClientStats(tx, proposal.project.clientProfileId)
+          await updateClientStats(tx as any, (proposal as any).project.clientProfileId)
         }
 
         const notificationTitle = milestonesModifiedByClient 
           ? '🎁 You have a new contract offer!' 
           : '🎉 Your Proposal Was Accepted!'
         const notificationBody = milestonesModifiedByClient
-          ? `Client hired you for "${proposal.project.title}" but modified the milestones. Review and approve to start work.`
+          ? `Client hired you for "${(proposal as any).project.title}" but modified the milestones. Review and approve to start work.`
           : rawMilestones.length === 0
-            ? `Congratulations! Your proposal for "${proposal.project.title}" was accepted. Work can begin immediately.`
-            : `Congratulations! Your proposal for "${proposal.project.title}" was accepted. A contract has been created.`
+            ? `Congratulations! Your proposal for "${(proposal as any).project.title}" was accepted. Work can begin immediately.`
+            : `Congratulations! Your proposal for "${(proposal as any).project.title}" was accepted. A contract has been created.`
 
         await notificationService.createNotification({
-          userId: proposal.freelancerProfile.userId,
+          userId: (proposal as any).freelancerProfile.userId,
           type: 'PROPOSAL_ACCEPTED',
           title: notificationTitle,
           body: notificationBody,
@@ -584,26 +584,26 @@ export const updateProposalStatus = async (req: Request, res: Response) => {
       })
 
     } else if (status === 'SHORTLISTED') {
-      await prisma.proposal.update({ where: { id }, data: { status: 'SHORTLISTED' } })
+      await prisma.proposal.update({ where: { id: id as string }, data: { status: 'SHORTLISTED' } })
 
       // Notify freelancer
       await notificationService.createNotification({
-        userId: proposal.freelancerProfile.userId,
+        userId: (proposal as any).freelancerProfile.userId,
         type: 'PROPOSAL_SHORTLISTED',
         title: 'Your Proposal Was Shortlisted!',
-        body: `Your proposal for "${proposal.project.title}" has been shortlisted. The client is reviewing it closely.`,
+        body: `Your proposal for "${(proposal as any).project.title}" has been shortlisted. The client is reviewing it closely.`,
         link: `/freelancer/proposals`,
       })
 
     } else {
       // REJECTED
-      await prisma.proposal.update({ where: { id }, data: { status: 'REJECTED' } })
+      await prisma.proposal.update({ where: { id: id as string }, data: { status: 'REJECTED' } })
 
       await notificationService.createNotification({
-        userId: proposal.freelancerProfile.userId,
+        userId: (proposal as any).freelancerProfile.userId,
         type: 'PROPOSAL_REJECTED',
         title: 'Proposal Update',
-        body: `Your proposal for "${proposal.project.title}" was not selected this time. Keep applying!`,
+        body: `Your proposal for "${(proposal as any).project.title}" was not selected this time. Keep applying!`,
         link: `/freelancer/proposals`,
       })
     }
@@ -637,7 +637,7 @@ export const withdrawProposal = async (req: Request, res: Response) => {
     }
 
     const proposal = await prisma.proposal.findFirst({
-      where: { id: req.params.id, freelancerProfileId: freelancerProfile.id },
+      where: { id: req.params.id as string, freelancerProfileId: freelancerProfile.id },
       include: { project: { select: { title: true, clientProfile: { select: { userId: true } } } } }
     })
 
@@ -691,9 +691,9 @@ export const withdrawProposal = async (req: Request, res: Response) => {
       }
 
       // Notify the client
-      if (proposal.project.clientProfile?.userId) {
+      if ((proposal as any).project?.clientProfile?.userId) {
         await notificationService.createNotification({
-          userId: proposal.project.clientProfile.userId,
+          userId: (proposal as any).project.clientProfile.userId,
           type: 'SYSTEM_ALERT',
           title: 'Proposal Withdrawn',
           body: `A freelancer has withdrawn their proposal for "${(proposal as any).project?.title || 'the project'}".`,
@@ -759,7 +759,7 @@ export const proposeMilestoneChanges = async (req: Request, res: Response): Prom
     // I need to fetch the freelancer's userId first.
     
     const freelancer = await prisma.freelancerProfile.findUnique({
-      where: { id: proposal.freelancerProfileId },
+      where: { id: proposal.freelancerProfileId as string },
       select: { userId: true }
     })
 
@@ -878,7 +878,7 @@ export const requestRevisionChanges = async (req: Request, res: Response): Promi
 
     // Notify freelancer
     const freelancer = await prisma.freelancerProfile.findUnique({
-      where: { id: proposal.freelancerProfileId },
+      where: { id: proposal.freelancerProfileId as string },
       select: { userId: true }
     })
 
@@ -910,7 +910,7 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
     const { id } = req.params
 
     const proposalRaw = await prisma.proposal.findUnique({
-      where: { id },
+      where: { id: id as string },
       include: {
         freelancerProfile: {
           include: {
@@ -920,7 +920,7 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
         },
         project: {
           include: { 
-            clientProfile: true,
+            clientProfile: { include: { user: { select: { profileImage: true } } } },
             contract: { select: { id: true, createdAt: true } } 
           }
         }
@@ -933,15 +933,15 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
 
     // Authorization: Either the client who owns the project OR the freelancer who submitted it
     const clientProfile = await prisma.clientProfile.findUnique({ where: { userId } })
-    const isOwnerClient = clientProfile && proposalRaw.project.clientProfileId === clientProfile.id
-    const isOwnerFreelancer = proposalRaw.freelancerProfile.userId === userId
+    const isOwnerClient = clientProfile && (proposalRaw as any).project.clientProfileId === clientProfile.id
+    const isOwnerFreelancer = (proposalRaw as any).freelancerProfile.userId === userId
 
     if (!isOwnerClient && !isOwnerFreelancer) {
       return res.status(403).json({ success: false, message: 'Not authorized.' })
     }
 
     // Format skills
-    const sIds = proposalRaw.freelancerProfile.skills.map((s: any) => s.skillId)
+    const sIds = (proposalRaw as any).freelancerProfile.skills.map((s: any) => s.skillId)
     let skillsNames: string[] = []
     if (sIds.length > 0) {
       const sData = await prisma.skill.findMany({
@@ -964,24 +964,24 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
       generalRevisionLimit: proposalRaw.generalRevisionLimit || null,
       clientRequestedRevisions: (proposalRaw as any).clientRequestedRevisions ?? null,
       createdAt: proposalRaw.submittedAt,
-      contract: proposalRaw.project?.contract || null,
+      contract: (proposalRaw as any).project?.contract || null,
       project: {
-        id: proposalRaw.project.id,
-        title: proposalRaw.project.title,
-        budget: proposalRaw.project.budget,
-        budgetType: proposalRaw.project.budgetType,
+        id: (proposalRaw as any).project.id,
+        title: (proposalRaw as any).project.title,
+        budget: (proposalRaw as any).project.budget,
+        budgetType: (proposalRaw as any).project.budgetType,
         client: {
-          name: proposalRaw.project.clientProfile.fullName,
-          profileImage: proposalRaw.project.clientProfile.user?.profileImage,
+          name: (proposalRaw as any).project.clientProfile.fullName,
+          profileImage: (proposalRaw as any).project.clientProfile.user?.profileImage,
         }
       },
       freelancer: {
-        id: proposalRaw.freelancerProfile.id,
-        name: proposalRaw.freelancerProfile.user?.name,
-        profileImage: proposalRaw.freelancerProfile.user?.profileImage,
-        title: proposalRaw.freelancerProfile.tagline,
-        experienceLevel: proposalRaw.freelancerProfile.experienceLevel,
-        location: proposalRaw.freelancerProfile.location,
+        id: (proposalRaw as any).freelancerProfile.id,
+        name: (proposalRaw as any).freelancerProfile.user?.name,
+        profileImage: (proposalRaw as any).freelancerProfile.user?.profileImage,
+        title: (proposalRaw as any).freelancerProfile.tagline,
+        experienceLevel: (proposalRaw as any).freelancerProfile.experienceLevel,
+        location: (proposalRaw as any).freelancerProfile.location,
         skills: skillsNames,
       }
     }
