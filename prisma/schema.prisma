@@ -814,21 +814,6 @@ model Review {
   @@map("reviews")
 }
 
-// ============================================================
-// AI PERSISTENT MEMORY (Long-term learning across sessions)
-// ============================================================
-
-model AiMemory {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @unique @db.ObjectId
-  memories  Json     // structured memory object
-  updatedAt DateTime @updatedAt
-  expiresAt DateTime // TTL for auto-cleanup (e.g. 30 days)
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("ai_memories")
-}
 
 
 // ============================================================
