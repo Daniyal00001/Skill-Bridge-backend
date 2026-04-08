@@ -309,13 +309,11 @@ export const initChatSocket = (
       try {
         await markMessagesAsRead(roomId, userId);
         // Notify everyone in the active room
-        ioInstance
-          .to(roomId)
-          .emit("messages_seen", {
-            roomId,
-            seenByUserId: userId,
-            seenAt: new Date(),
-          });
+        ioInstance.to(roomId).emit("messages_seen", {
+          roomId,
+          seenByUserId: userId,
+          seenAt: new Date(),
+        });
 
         // Also explicitly notify the other user in their personal channel
         const room = await prisma.chatRoom.findUnique({
@@ -335,13 +333,11 @@ export const initChatSocket = (
           }
 
           if (otherUserId) {
-            ioInstance
-              .to(`user:${otherUserId}`)
-              .emit("messages_seen", {
-                roomId,
-                seenByUserId: userId,
-                seenAt: new Date(),
-              });
+            ioInstance.to(`user:${otherUserId}`).emit("messages_seen", {
+              roomId,
+              seenByUserId: userId,
+              seenAt: new Date(),
+            });
           }
         }
 

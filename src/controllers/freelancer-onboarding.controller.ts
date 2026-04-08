@@ -33,6 +33,8 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
             profileImage: true,
             isEmailVerified: true,
             isIdVerified: true,
+            idVerificationStatus: true,
+            idRejectionReason: true,
             phoneNumber: true,
           },
         },
@@ -44,7 +46,62 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
         .status(404)
         .json({ success: false, message: "Profile not found" });
 
-    // Manually fetch and attach skills to handle potentially deleted/inconsistent records safely
+    // ── Fetch Related Data for Metrics ──────────────────────
+    const contracts = await prisma.contract.findMany({
+      where: { freelancerProfileId: profile.id },
+      include: {
+        project: {
+          select: { title: true, budget: true, budgetType: true }
+        },
+        freelancerProfile: {
+           include: { user: { select: { name: true } } }
+        }
+      }
+    });
+
+    const reviews = await prisma.review.findMany({
+      where: { 
+        receiverId: userId,
+        isRevealed: true 
+      },
+      include: {
+        giver: {
+          select: { name: true }
+        }
+      }
+    });
+
+    // ── Calculate Metrics ──────────────────────────────────
+    const completedContracts = contracts.filter(c => c.status === "COMPLETED");
+    const cancelledContracts = contracts.filter(c => c.status === "CANCELLED"); // Assuming CANCELLED exists
+    
+    const projectsCompleted = completedContracts.length;
+    const totalEarnings = completedContracts.reduce((sum, c) => sum + (c.agreedPrice || 0), 0);
+    
+    // Job Success: (Completed / (Completed + Cancelled))
+    // Default to 100% for new profiles
+    let jobSuccess = 100;
+    const closedCount = projectsCompleted + cancelledContracts.length;
+    if (closedCount > 0) {
+      jobSuccess = Math.round((projectsCompleted / closedCount) * 100);
+    }
+
+    // ── Format Work History ────────────────────────────────
+    // Link COMPLETED contracts with their reviews
+    const workHistory = completedContracts.map(contract => {
+      const review = reviews.find(r => r.contractId === contract.id);
+      return {
+        id: contract.id,
+        title: contract.project?.title || "Project Detail Secure",
+        amount: contract.agreedPrice,
+        rating: review?.rating || null,
+        comment: review?.comment || null,
+        date: new Date(contract.endDate || contract.updatedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        client: review?.giver?.name || "Verified Client"
+      };
+    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // ── Manually fetch and attach skills ──────────────────
     const skillIds = profile.skills.map((s: any) => s.skillId);
     if (skillIds.length > 0) {
       const skillsData = await prisma.skill.findMany({
@@ -59,7 +116,18 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
         .filter((s: any) => s.skill);
     }
 
-    return res.status(200).json({ success: true, data: profile });
+    // Prepare final payload
+    const data = {
+      ...profile,
+      projectsCompleted,
+      totalEarnings: `$${totalEarnings.toLocaleString()}`,
+      jobSuccess: `${jobSuccess}%`,
+      workHistory,
+      reviewsAvg: profile.averageRating?.toFixed(1) || "5.0",
+      reviewsTotal: profile.totalReviews || reviews.length
+    };
+
+    return res.status(200).json({ success: true, data });
   } catch (error) {
     console.error("Get My Profile error:", error);
     return res
@@ -416,7 +484,7 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
       const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer, files["idDocument"][0].originalname, files["idDocument"][0].mimetype);
       await prisma.user.update({
         where: { id: userId },
-        data: { idDocumentUrl: idUrl, isIdVerified: true }, // Mock verified immediately
+        data: { idDocumentUrl: idUrl, idVerificationStatus: "PENDING" }, 
       });
       updates.idDocumentUrl = idUrl;
     }
@@ -592,6 +660,8 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
     if (idDocumentUrl === null || idDocumentUrl === "") {
       userUpdateData.idDocumentUrl = null;
       userUpdateData.isIdVerified = false;
+      userUpdateData.idVerificationStatus = "UNSUBMITTED";
+      userUpdateData.idRejectionReason = null;
     }
     if (profileImage === null || profileImage === "") {
       userUpdateData.profileImage = null;

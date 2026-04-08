@@ -88,3 +88,215 @@ export const updateSkillStatus = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+// ─────────────────────────────────────────────────────────────
+// GET USER PROFILE (Admin)
+// GET /api/admin/users/:id/profile
+// ─────────────────────────────────────────────────────────────
+export const getAdminUserProfile = async (req: Request, res: Response) => {
+  try {
+    const { id: userId } = req.params;
+
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        clientProfile: {
+          include: {
+            projects: {
+              take: 5,
+              orderBy: { createdAt: "desc" },
+              include: {
+                contract: {
+                  include: {
+                    milestones: { orderBy: { order: "asc" } }
+                  }
+                }
+              }
+            },
+            _count: {
+              select: { projects: true }
+            }
+          }
+        },
+        freelancerProfile: {
+          include: {
+            skills: { include: { skill: true } },
+            portfolioItems: true,
+            educations: true,
+            certificates: true,
+            contracts: {
+              take: 5,
+              orderBy: { createdAt: "desc" },
+              include: {
+                project: {
+                  select: { id: true, title: true, status: true }
+                },
+                milestones: {
+                  orderBy: { order: "asc" }
+                }
+              }
+            },
+            _count: {
+              select: { 
+                gigs: true,
+                contracts: true
+              }
+            }
+          }
+        },
+        reviewsReceived: {
+          take: 5,
+          orderBy: { submittedAt: 'desc' },
+          include: { giver: { select: { name: true, profileImage: true } } }
+        },
+        disputesAsClient: {
+          take: 5,
+          orderBy: { openedAt: 'desc' },
+          select: { id: true, status: true, reason: true, openedAt: true }
+        },
+        disputesAsFreelancer: {
+          take: 5,
+          orderBy: { openedAt: 'desc' },
+          select: { id: true, status: true, reason: true, openedAt: true }
+        },
+        _count: {
+          select: {
+            reviewsReceived: true,
+            disputesAsClient: true,
+            disputesAsFreelancer: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    // Return a unified profile object
+    return res.status(200).json({ 
+      success: true, 
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        profileImage: user.profileImage,
+        createdAt: user.createdAt,
+        isEmailVerified: user.isEmailVerified,
+        isIdVerified: user.isIdVerified,
+        isPhoneVerified: user.isPhoneVerified,
+        isPaymentVerified: user.isPaymentVerified,
+        lastActiveAt: user.lastActiveAt,
+        clientProfile: user.clientProfile,
+        freelancerProfile: user.freelancerProfile,
+        reviews: user.reviewsReceived,
+        disputeHistory: [...user.disputesAsClient, ...user.disputesAsFreelancer].sort((a, b) => 
+          new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime()
+        )
+      }
+    });
+  } catch (error: any) {
+    console.error("Admin Get User Profile Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// GET PENDING IDENTITY VERIFICATIONS
+// GET /api/admin/verifications/pending
+// ─────────────────────────────────────────────────────────────
+export const getPendingVerifications = async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
+    }
+
+    const users = await prisma.user.findMany({
+      where: {
+        idVerificationStatus: "PENDING"
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        idDocumentUrl: true,
+        createdAt: true,
+        idVerificationStatus: true,
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    return res.status(200).json({ success: true, users });
+  } catch (error: any) {
+    console.error("Admin Get Pending Verifications Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// APPROVE IDENTITY VERIFICATION
+// POST /api/admin/verifications/approve/:userId
+// ─────────────────────────────────────────────────────────────
+export const approveVerification = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        isIdVerified: true,
+        idVerificationStatus: "APPROVED",
+        idRejectionReason: null
+      }
+    });
+
+    return res.status(200).json({ success: true, message: "User identity verified successfully", user });
+  } catch (error: any) {
+    console.error("Admin Approve Verification Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// REJECT IDENTITY VERIFICATION
+// POST /api/admin/verifications/reject/:userId
+// ─────────────────────────────────────────────────────────────
+export const rejectVerification = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+    
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
+    }
+
+    const userToReject = await prisma.user.findUnique({ where: { id: userId }});
+    if (!userToReject) return res.status(404).json({ success: false, message: "User not found" });
+
+    // Assuming we do NOT delete the image from Cloudinary so we have a record, OR we can delete it. Let's not delete it for safety, or actually let's just clear the URL. The implementation plan says "clear URL".
+    // I won't delete it from Cloudinary here to avoid complex imports if not needed, just DB clear.
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        isIdVerified: false,
+        idVerificationStatus: "REJECTED",
+        idRejectionReason: reason || "Document invalid or unclear",
+        idDocumentUrl: null
+      }
+    });
+
+    return res.status(200).json({ success: true, message: "User identity rejected", user });
+  } catch (error: any) {
+    console.error("Admin Reject Verification Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

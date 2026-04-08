@@ -18,6 +18,7 @@ async function resolveContractAccess(contractId: string, userId: string, role: '
       project: {
         include: {
           clientProfile: { select: { userId: true, fullName: true } },
+          disputes: { orderBy: { openedAt: 'desc' } }
         }
       },
       freelancerProfile: {
@@ -84,7 +85,7 @@ export const getMyContracts = async (req: Request, res: Response) => {
         id: c.id,
         projectId: c.projectId,
         title: c.project.title,
-        status: c.status,
+        status: (c.project.status === 'DISPUTED') ? 'DISPUTED' : c.status,
         totalAmount,
         earnedAmount: approvedAmount,
         escrowAmount,
@@ -127,6 +128,7 @@ export const getContractByProject = async (req: Request, res: Response) => {
         project: {
           include: {
             clientProfile: { select: { userId: true, fullName: true } },
+            disputes: { orderBy: { openedAt: 'desc' } }
           }
         },
         freelancerProfile: {
@@ -174,6 +176,7 @@ export const getContractById = async (req: Request, res: Response) => {
         project: {
           include: {
             clientProfile: { select: { userId: true, fullName: true } },
+            disputes: { orderBy: { openedAt: 'desc' } }
           }
         },
         freelancerProfile: {
@@ -753,27 +756,52 @@ function formatContract(contract: any) {
     .filter((p: any) => p.status === 'HELD_IN_ESCROW')
     .reduce((sum: number, p: any) => sum + p.amount, 0)
 
+  const dispute = contract.project?.disputes?.[0]
+  const disputeInfo = dispute ? {
+    id: dispute.id,
+    status: dispute.status,
+    resolution: dispute.resolution,
+    resolutionNote: dispute.resolutionNote,
+    resolvedAt: dispute.resolvedAt
+  } : null
+
   return {
     id: contract.id,
-    projectId: contract.project.id,
-    projectTitle: contract.project.title,
-    clientName: contract.project.clientProfile.fullName,
-    freelancerName: contract.freelancerProfile.user?.name,
-    freelancerImage: contract.freelancerProfile.user?.profileImage,
+    projectId: contract.project?.id,
+    projectTitle: contract.project?.title,
+    clientName: contract.project?.clientProfile?.fullName,
+    freelancerName: contract.freelancerProfile?.user?.name,
+    freelancerImage: contract.freelancerProfile?.user?.profileImage,
     freelancerId: contract.freelancerProfileId,
     agreedPrice: contract.agreedPrice,
-    status: contract.status,
+    status: (contract.project?.status === 'DISPUTED') ? 'DISPUTED' : contract.status,
     startDate: contract.startDate,
     endDate: contract.endDate,
     milestonesModifiedByClient: contract.milestonesModifiedByClient ?? false,
-    milestones: contract.milestones.map((m: any) => ({
-      ...m,
-      history: Array.isArray(m.history) ? m.history : []
-    })),
+    milestones: contract.milestones.map((m: any) => {
+      const history = Array.isArray(m.history) ? [...m.history] : []
+      
+      // Inject dispute resolution into history if it exists and milestone was funded
+      if (disputeInfo && disputeInfo.status === 'RESOLVED' && ['FUNDED', 'IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED', 'APPROVED'].includes(m.status)) {
+        history.push({
+          type: 'DISPUTE_RESOLUTION',
+          timestamp: disputeInfo.resolvedAt || new Date(),
+          content: `Admin Resolution: ${disputeInfo.resolution?.replace(/_/g, ' ')}. ${disputeInfo.resolutionNote || ''}`,
+          actorName: 'System Admin',
+          actorRole: 'ADMIN'
+        })
+      }
+
+      return {
+        ...m,
+        history
+      }
+    }),
     totalMilestoneAmount,
     releasedAmount,
     escrowAmount,
     pendingAmount: totalMilestoneAmount - releasedAmount - escrowAmount,
+    disputeInfo
   }
 }
 
