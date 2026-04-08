@@ -1,6 +1,63 @@
 import { prisma } from '../../config/prisma'
 import redis from '../../config/redis'
-import { SendMessagePayload, PaginatedMessages, MessageWithSender, ChatRoomWithParticipants } from './chat.types'
+export interface SendMessagePayload {
+  chatRoomId: string
+  senderId: string
+  content: string
+  type?: 'TEXT' | 'FILE' | 'SYSTEM'
+  fileUrl?: string
+  fileName?: string
+  fileSize?: number
+  fileMimeType?: string
+  isAiMessage?: boolean
+}
+
+export interface MessageWithSender {
+  id: string
+  chatRoomId: string
+  senderId: string
+  content: string
+  type: 'TEXT' | 'FILE' | 'SYSTEM'
+  fileUrl?: string | null
+  fileName?: string
+  fileSize?: number
+  fileMimeType?: string
+  isRead: boolean
+  isAiMessage?: boolean
+  sentAt: Date
+  sender: {
+    id: string
+    name: string
+    profileImage?: string | null
+    role?: string | null
+  }
+}
+
+export interface PaginatedMessages {
+  messages: MessageWithSender[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+export interface ChatRoomWithParticipants {
+  id: string
+  contractId?: string | null
+  projectId?: string | null
+  clientProfileId?: string | null
+  freelancerProfileId?: string | null
+  isActiveAI?: boolean
+  createdAt: Date
+  lastMessage?: MessageWithSender | null
+  unreadCount: number
+  isMuted?: boolean
+  otherUser?: {
+    id: string
+    name: string
+    avatar?: string | null
+    role: string
+    lastActiveAt?: Date | null
+  }
+}
 
 const MUTE_KEY = (userId: string, roomId: string) => `muted:${userId}:${roomId}`
 const RESTRICT_KEY = (roomId: string, userId: string) => `restricted:${roomId}:${userId}`
@@ -276,6 +333,7 @@ export const saveMessage = async (payload: SendMessagePayload): Promise<MessageW
       content: sanitizedContent || '',
       type: (payload.type ?? 'TEXT') as any,
       fileUrl: payload.fileUrl ?? null,
+      isAiMessage: payload.isAiMessage ?? false,
     },
     include: {
       sender: { select: { id: true, name: true, profileImage: true, role: true } },
@@ -304,6 +362,7 @@ export const saveMessage = async (payload: SendMessagePayload): Promise<MessageW
     fileSize: payload.fileSize,
     fileMimeType: payload.fileMimeType,
     isRead: message.isRead,
+    isAiMessage: message.isAiMessage,
     sentAt: message.sentAt,
     sender: message.sender as MessageWithSender['sender'],
   }

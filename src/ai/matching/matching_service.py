@@ -41,6 +41,26 @@ CATEGORY_MAP: Dict[str, str] = {
     "mongodb": "Web Development",
     "express": "Web Development",
     "node.js": "Web Development",
+    "javascript": "Web Development",
+    "typescript": "Web Development",
+    "machine learning": "AI & Machine Learning",
+    "deep learning": "AI & Machine Learning",
+    "chatbot": "AI & Machine Learning",
+    "llm": "AI & Machine Learning",
+    "automation": "DevOps & Cloud",
+    "azure": "DevOps & Cloud",
+    "gcp": "DevOps & Cloud",
+    "postgresql": "Database & Storage",
+    "mysql": "Database & Storage",
+    "redis": "Database & Storage",
+    "app": "Mobile Development",
+    "mobile": "Mobile Development",
+    "android": "Mobile Development",
+    "ios": "Mobile Development",
+    "design": "UI/UX Design",
+    "ux": "UI/UX Design",
+    "ui": "UI/UX Design",
+    "graphics": "UI/UX Design",
 }
 
 
@@ -224,16 +244,21 @@ class MatchingService:
         if "skills_data" in row:
             skills = [s.get("name", "") for s in row["skills_data"] if s.get("name")]
 
+        # Handle various name fields
+        first_name = row.get("firstName") or ""
+        last_name = row.get("lastName") or ""
+        full_name = row.get("fullName") or f"{first_name} {last_name}".strip() or "Unknown Freelancer"
+
         return FreelancerProfile(
             id=str(row["_id"]),
-            name=row.get("fullName", "Unknown Freelancer"),
-            location=row.get("location", ""),
+            name=full_name,
+            location=row.get("location", "Remote"),
             skills=skills,
-            rating=4.5, # Placeholder rating
-            hourlyRate=row.get("hourlyRate", 0.0),
-            completedProjects=0,
+            rating=row.get("rating") or 4.5,
+            hourlyRate=row.get("hourlyRate") or 0.0,
+            completedProjects=row.get("completedProjects") or 0,
             bio=row.get("bio", ""),
-            availability=row.get("availability") == "AVAILABLE",
+            availability=row.get("availability") in ["AVAILABLE", True],
             specializations=row.get("preferredCategories", []),
         )
 
@@ -266,7 +291,7 @@ class MatchingService:
     ) -> str:
         names = "\n".join([
             f"{i + 1}. **{m.name}** — Score: {m.matchScore}/100 · {m.matchReason}"
-            for i, m in enumerate(matches[:3])
+            for i, m in enumerate(matches[:5])
         ])
         return (
             f"Found {len(matches)} freelancers for your {project_type or 'project'}!\n\n"

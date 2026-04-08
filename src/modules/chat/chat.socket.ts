@@ -10,7 +10,7 @@ import {
   doesRoomBelongToUser,
   getUnreadRoomsCount,
 } from "./chat.service";
-import { MessageWithSender } from "./chat.types";
+import { MessageWithSender } from "./chat.service";
 import * as notificationService from "../../services/notification.service";
 
 // Track online users: userId → Set of socketIds
@@ -201,6 +201,59 @@ export const initChatSocket = (
 
             if (recipientId) {
               ioInstance.to(`user:${recipientId}`).emit("new_message", message);
+
+              // 🚀 TRIGGER AI AUTOPILOT — when freelancer replies in an AI-managed room
+              const senderIsFreelancer = room.freelancerProfile?.userId === userId;
+              if (room.isActiveAI && senderIsFreelancer) {
+                console.log(`🤖 AI Autopilot triggered for room ${roomId}`);
+
+                // Look up the real AI session linked to this chat room
+                // The session stores the roomId inside negotiationState.roomId
+                setImmediate(async () => {
+                  try {
+                    const axios = require("axios");
+
+                    // Step 1: Find the AI session that owns this room
+                    const sessionRes = await axios.get(
+                      `http://localhost:8000/api/assistant/session-by-room/${roomId}`
+                    );
+                    const { sessionId, freelancerProfileId, clientId } = sessionRes.data;
+
+                    if (!sessionId) {
+                      console.warn(`[AI Autopilot] No session found for room ${roomId}`);
+                      return;
+                    }
+
+                    // Step 2: Call AI with proper freelancer response payload
+                    const aiResponse = await axios.post("http://localhost:8000/api/assistant/negotiation/reply", {
+                      sessionId,
+                      chatRoomId: roomId,
+                      freelancerId: freelancerProfileId,
+                      replyText: content
+                    });
+
+                    // Step 3: Broadcast the AI reply back into the chat room via socket
+                    const aiReply = aiResponse.data?.reply;
+                    if (aiReply) {
+                      // Save AI reply as a real message — using already-imported saveMessage
+                      const clientUserId = room.clientProfile?.userId || recipientId;
+                      if (clientUserId) {
+                        const savedAiMsg = await saveMessage({
+                          chatRoomId: roomId,
+                          senderId: clientUserId,
+                          content: aiReply,
+                          type: "TEXT",
+                          isAiMessage: true,
+                        });
+                        ioInstance.to(roomId).emit("new_message", savedAiMsg);
+                        console.log(`[AI Autopilot] AI reply sent to room ${roomId}`);
+                      }
+                    }
+                  } catch (err: any) {
+                    console.error("[AI Autopilot] Error:", err.message);
+                  }
+                });
+              }
 
               // 3. Update recipient's unread count badge
               const unreadCount = await getUnreadRoomsCount(recipientId);

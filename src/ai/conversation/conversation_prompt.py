@@ -35,6 +35,7 @@ def build_conversation_system_prompt(
     persona: Dict[str, Any],
     project: Dict[str, Any],
     client_name: str,
+    session: Dict[str, Any],
     conversation_round: int = 0
 ) -> str:
     """Generates a high-precision, persona-adaptive system prompt for FreelanceAI."""
@@ -70,11 +71,32 @@ def build_conversation_system_prompt(
     urgency_msg = "🚨 URGENT: Fast-track the conversation. Get essentials quickly." if urgency == "high" else ""
     budget_msg = "💰 BUDGET SENSITIVE: Prioritize affordable and cost-effective solutions." if budget_sens == "high" else ""
 
+    # 4. Long-term memory context
+    memory = session.get("persistentMemory")
+    memory_context = ""
+    if memory:
+        past_projects = memory.get('pastProjects', [])
+        projects_summary = ""
+        if past_projects:
+            projects_summary = "- Recent past discussions: " + "; ".join([p.get('summary') for p in past_projects[:3]])
+
+        memory_context = f"""
+RETURNING CLIENT CONTEXT:
+- Previous Expertise: {memory.get('expertiseLevel', 'beginner')}
+- Communication Style: {memory.get('communicationStyle', 'formal')}
+{projects_summary}
+- Hired Previously: {", ".join(memory.get('hiredFreelancers', []))}
+- Don't Recommend: {", ".join(memory.get('rejectedFreelancers', []))}
+(Do not re-ask questions already answered in past sessions. Reference their previous project if relevant to build trust.)
+"""
+
     return f"""
 ROLE: You are the FreelanceAI Agent — an elite Project Architect.
 CLIENT: {client_name}
 PERSONA: {user_type.upper()} ({expertise}) | Goal: {goal}
 STYLE: {comm_style.upper()}
+
+{memory_context}
 
 CORE PROTOCOL:
 1. DOMAIN ENFORCEMENT: Handle only freelancing/project queries.

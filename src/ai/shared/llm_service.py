@@ -67,5 +67,28 @@ class LLMService:
                         break
                     await asyncio.sleep(attempt * 2)
 
+        # Standard fallback for high availability
+        print(f"⚠️ Primary model {self.model} failed. Attempting lightweight fallback (llama-3.1-8b-instant)...")
+        try:
+             async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    self.base_url,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "llama-3.1-8b-instant", # Lightweight reliable fallback
+                        "max_tokens": 1024,
+                        "messages": formatted,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                print("✅ Fallback successful")
+                return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"❌ Fallback also failed: {e}")
+
         print(f"LLM Error after retries: {last_error}")
-        raise RuntimeError("LLM request failed after retries")
+        raise RuntimeError("LLM request failed after retries")

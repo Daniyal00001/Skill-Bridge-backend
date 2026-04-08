@@ -7,7 +7,7 @@ from enum import Enum
 
 # ── LLM Config ───────────────────────────────────────────────
 LLM_MODEL = "llama-3.3-70b-versatile"
-LLM_MAX_TOKENS = 500
+LLM_MAX_TOKENS = 4096
 LLM_BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # ── Agent Stages ─────────────────────────────────────────────
