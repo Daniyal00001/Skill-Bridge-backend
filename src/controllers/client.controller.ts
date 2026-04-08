@@ -48,6 +48,11 @@ export const getMyProfile = async (req: Request, res: Response) => {
         .json({ success: false, message: "Client profile not found" });
     }
 
+    const user = {
+      ...clientProfile.user,
+      hasPassword: !!(await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } }))?.passwordHash
+    };
+
     // Calculate metrics for profile display
     const clientId = clientProfile.id;
     const [totalProjects, hiredProjectsCount, totalSpentRes] =
@@ -75,6 +80,7 @@ export const getMyProfile = async (req: Request, res: Response) => {
       success: true,
       profile: {
         ...clientProfile,
+        user,
         metrics: {
           totalProjects,
           hireRate,

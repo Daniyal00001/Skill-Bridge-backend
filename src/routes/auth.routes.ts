@@ -10,6 +10,7 @@ import {
   forgotPassword,
   resetPassword,
   completeGoogleSignup,
+  changePassword,
 } from '../controllers/auth.controller'
 import passport from '../config/passport'
 import { protect } from '../middlewares/auth.middleware'
@@ -25,6 +26,7 @@ router.post('/logout', logout)
 router.post('/forgot-password', forgotPassword)
 router.post('/reset-password', resetPassword)
 router.post('/complete-google-signup', protect, completeGoogleSignup)
+router.put('/change-password', protect, changePassword)
 
 // Google OAuth
 router.get('/google', passport.authenticate('google', {

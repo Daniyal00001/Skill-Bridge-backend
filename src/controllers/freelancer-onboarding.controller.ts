@@ -36,6 +36,7 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
             idVerificationStatus: true,
             idRejectionReason: true,
             phoneNumber: true,
+            googleId: true,
           },
         },
       },
@@ -119,6 +120,10 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
     // Prepare final payload
     const data = {
       ...profile,
+      user: {
+        ...profile.user,
+        hasPassword: !!(await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } }))?.passwordHash
+      },
       projectsCompleted,
       totalEarnings: `$${totalEarnings.toLocaleString()}`,
       jobSuccess: `${jobSuccess}%`,

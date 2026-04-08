@@ -882,3 +882,65 @@ export const resetPassword = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Internal server error.' })
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// CHANGE PASSWORD (Logged In)
+// ─────────────────────────────────────────────────────────────
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'New password is required.' 
+      });
+    }
+
+    // Signup-style password validation
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/;
+    if (newPassword.length < 8 || newPassword.length > 100 || !passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be 8-100 chars and include uppercase, lowercase, a number, and a special character (@$!%*?&).'
+      });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // Logic: If user has a password, they MUST provide currentPassword to change it.
+    // If user has NO password (Google user), they can set one without currentPassword.
+    if (user.passwordHash) {
+      if (!currentPassword) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Current password is required to change your password.' 
+        });
+      }
+
+      const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: 'Incorrect current password.' });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: hashedPassword },
+    });
+
+    return res.status(200).json({ 
+      success: true, 
+      message: user.passwordHash ? 'Password updated successfully.' : 'Password set successfully! You can now login using both Google and Email/Password.' 
+    });
+
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
+}
