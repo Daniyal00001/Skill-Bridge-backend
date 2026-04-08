@@ -91,12 +91,15 @@ export const createNotification = async (payload: CreateNotificationPayload, tx?
     // Emit real-time event via Socket.IO
     const io = getIO()
     if (io) {
-      io.to(`user:${payload.userId}`).emit('new_notification', notification)
+      const roomName = `user:${payload.userId.toString()}`
+      console.log(`[NotificationService] Emitting to ${roomName}: ${payload.title}`)
+      
+      io.to(roomName).emit('new_notification', notification)
       
       const unreadCount = await client.notification.count({
         where: { userId: payload.userId, isRead: false }
       })
-      io.to(`user:${payload.userId}`).emit('unread_notifications_count', { count: unreadCount })
+      io.to(roomName).emit('unread_notifications_count', { count: unreadCount })
     }
 
     return notification
