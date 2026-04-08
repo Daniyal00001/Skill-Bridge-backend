@@ -228,6 +228,7 @@ export const getPendingVerifications = async (req: Request, res: Response) => {
         idDocumentUrl: true,
         createdAt: true,
         idVerificationStatus: true,
+        idRejectionReason: true,
       },
       orderBy: { createdAt: 'asc' }
     });
@@ -235,6 +236,69 @@ export const getPendingVerifications = async (req: Request, res: Response) => {
     return res.status(200).json({ success: true, users });
   } catch (error: any) {
     console.error("Admin Get Pending Verifications Error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// GET ALL IDENTITY VERIFICATIONS (with optional status filter)
+// GET /api/admin/verifications?status=PENDING|APPROVED|REJECTED|ALL
+// ─────────────────────────────────────────────────────────────
+export const getAllVerifications = async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
+    }
+
+    const { status } = req.query;
+
+    // Build where clause — only include users who have submitted a verification
+    const where: any = {
+      idVerificationStatus: { not: "UNSUBMITTED" }
+    };
+
+    if (status && status !== 'ALL') {
+      where.idVerificationStatus = status;
+    }
+
+    const users = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        idDocumentUrl: true,
+        createdAt: true,
+        updatedAt: true,
+        idVerificationStatus: true,
+        idRejectionReason: true,
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    // Return counts per status for tab badges
+    const counts = await prisma.user.groupBy({
+      by: ['idVerificationStatus'],
+      where: { idVerificationStatus: { not: "UNSUBMITTED" } },
+      _count: { idVerificationStatus: true }
+    });
+
+    const statusCounts = {
+      ALL: 0,
+      PENDING: 0,
+      APPROVED: 0,
+      REJECTED: 0,
+    };
+    counts.forEach(c => {
+      const s = c.idVerificationStatus as keyof typeof statusCounts;
+      statusCounts[s] = c._count.idVerificationStatus;
+      statusCounts.ALL += c._count.idVerificationStatus;
+    });
+
+    return res.status(200).json({ success: true, users, statusCounts });
+  } catch (error: any) {
+    console.error("Admin Get All Verifications Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

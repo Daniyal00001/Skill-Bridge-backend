@@ -162,7 +162,7 @@ async function fetchEligibleProjects(
   if (filters.clientVerified) {
     where.clientProfile = {
       user: {
-        OR: [{ isPaymentVerified: true }, { isIdVerified: true }],
+        isIdVerified: true,
       },
     };
   }
@@ -238,10 +238,7 @@ async function fetchEligibleProjects(
           ? {
               id: row.clientProfile.id,
               fullName: row.clientProfile.fullName,
-              isVerified: !!(
-                row.clientProfile.user?.isPaymentVerified ||
-                row.clientProfile.user?.isIdVerified
-              ),
+              isVerified: !!row.clientProfile.user?.isIdVerified,
               averageRating: row.clientProfile.averageRating,
               totalHires: row.clientProfile.totalHires,
               hireRate: row.clientProfile.hireRate,
@@ -614,10 +611,7 @@ export async function getSavedProjects(
           ? {
               id: s.project.clientProfile.id,
               fullName: s.project.clientProfile.fullName,
-              isVerified: !!(
-                (s.project.clientProfile as any).user?.isPaymentVerified ||
-                (s.project.clientProfile as any).user?.isIdVerified
-              ),
+              isVerified: !!(s.project.clientProfile as any).user?.isIdVerified,
               averageRating: s.project.clientProfile.averageRating,
               totalHires: s.project.clientProfile.totalHires,
               hireRate: s.project.clientProfile.hireRate,

@@ -151,11 +151,8 @@ async function fetchEligibleFreelancers(
     where.portfolioItems = { some: {} };
   }
 
-  // Verified filter — via user relation
   if (filters.isVerified) {
-    where.user = {
-      OR: [{ isPaymentVerified: true }, { isIdVerified: true }],
-    };
+    where.user = { isIdVerified: true };
   }
 
   // Skill filter

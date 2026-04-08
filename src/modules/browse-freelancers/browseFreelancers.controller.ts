@@ -94,7 +94,7 @@ export const browseFreelancers = async (
       region: req.query.region as string | undefined,
       minRating,
       hasPortfolio: req.query.hasPortfolio === "true" ? true : undefined,
-      isVerified: req.query.isVerified === "true" ? true : undefined,
+      isVerified: req.query.isIdVerified === "true" ? true : undefined,
       categorySlug: req.query.category as string | undefined,
     };
 

@@ -250,6 +250,8 @@ export const verifyOtp = async (req: Request, res: Response) => {
           role: user.role,
           profileImage: user.profileImage,
           isEmailVerified: user.isEmailVerified,
+          isIdVerified: user.isIdVerified,
+          idVerificationStatus: user.idVerificationStatus,
         },
       },
     })
@@ -390,6 +392,8 @@ export const refresh = async (req: Request, res: Response) => {
         role: true,
         profileImage: true,
         isEmailVerified: true,
+        isIdVerified: true,
+        idVerificationStatus: true,
         isBanned: true,
       },
     })
@@ -425,6 +429,8 @@ export const refresh = async (req: Request, res: Response) => {
           role: user.role,
           profileImage: user.profileImage,
           isEmailVerified: user.isEmailVerified,
+          isIdVerified: user.isIdVerified,
+          idVerificationStatus: user.idVerificationStatus,
         },
       },
     })
@@ -550,6 +556,8 @@ export const login = async (req: Request, res: Response) => {
           role: user.role,
           profileImage: user.profileImage,
           isEmailVerified: user.isEmailVerified,
+          isIdVerified: user.isIdVerified,
+          idVerificationStatus: user.idVerificationStatus,
         },
       },
     })
@@ -733,6 +741,8 @@ export const completeGoogleSignup = async (req: Request, res: Response) => {
           role: user.role,
           profileImage: user.profileImage,
           isEmailVerified: user.isEmailVerified,
+          isIdVerified: user.isIdVerified,
+          idVerificationStatus: user.idVerificationStatus,
         },
       },
     })

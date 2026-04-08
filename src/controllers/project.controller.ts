@@ -319,6 +319,7 @@ export const getAllProjects = async (req: Request, res: Response) => {
       budgetMax, 
       projectSize,
       search,
+      isClientVerified,
       page = 1,
       limit = 25
     } = req.query
@@ -331,6 +332,15 @@ export const getAllProjects = async (req: Request, res: Response) => {
       status: 'OPEN',
       hiringMethod: 'bidding'
     }
+
+    if (isClientVerified === 'true') {
+      where.clientProfile = {
+        user: {
+          isIdVerified: true
+        }
+      }
+    }
+
 
     // Search filter
     if (search) {
@@ -381,7 +391,9 @@ export const getAllProjects = async (req: Request, res: Response) => {
               user: {
                 select: {
                   profileImage: true,
-                  name: true
+                  name: true,
+                  isIdVerified: true,
+                  idVerificationStatus: true,
                 }
               }
             }
@@ -506,7 +518,9 @@ export const getProjectById = async (req: Request, res: Response) => {
             user: {
               select: {
                 profileImage: true,
-                name: true
+                name: true,
+                isIdVerified: true,
+                idVerificationStatus: true,
               }
             }
           }

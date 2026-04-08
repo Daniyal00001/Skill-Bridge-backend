@@ -476,18 +476,38 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
 
     // Upload ID
     if (files["idDocument"] && files["idDocument"][0]) {
+      const idDoc = files["idDocument"][0];
+
+      // 1. Check Status: Only allow if UNSUBMITTED or REJECTED
+      if (profile.user.idVerificationStatus === "PENDING" || profile.user.idVerificationStatus === "APPROVED") {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot upload ID document while status is ${profile.user.idVerificationStatus}.`
+        });
+      }
+
+      // 2. Check File Type: Only allow images (not PDF)
+      const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+      if (!allowedImageTypes.includes(idDoc.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: "Only image files (JPEG, PNG, WEBP) are allowed for identity verification."
+        });
+      }
+
       // Delete old one if exists
       if (profile.user.idDocumentUrl) {
         await deleteFromCloudinary(profile.user.idDocumentUrl);
       }
 
-      const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer, files["idDocument"][0].originalname, files["idDocument"][0].mimetype);
+      const idUrl = await uploadToCloudinary(idDoc.buffer, idDoc.originalname, idDoc.mimetype);
       await prisma.user.update({
         where: { id: userId },
-        data: { idDocumentUrl: idUrl, idVerificationStatus: "PENDING" }, 
+        data: { idDocumentUrl: idUrl, idVerificationStatus: "PENDING" },
       });
       updates.idDocumentUrl = idUrl;
     }
+
 
     // Profile Pic
     if (files["profileImage"] && files["profileImage"][0]) {

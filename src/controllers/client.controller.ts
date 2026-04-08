@@ -386,6 +386,23 @@ export const uploadIdDocument = async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
+    // 1. Check Status: Only allow if UNSUBMITTED or REJECTED
+    if (user.idVerificationStatus === "PENDING" || user.idVerificationStatus === "APPROVED") {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot upload ID document while status is ${user.idVerificationStatus}.` 
+      });
+    }
+
+    // 2. Check File Type: Only allow images (not PDF)
+    const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    if (!allowedImageTypes.includes(files["idDocument"][0].mimetype)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Only image files (JPEG, PNG, WEBP) are allowed for identity verification." 
+      });
+    }
+
     // Delete old one if exists
     if (user.idDocumentUrl) {
       await deleteFromCloudinary(user.idDocumentUrl);
@@ -402,6 +419,7 @@ export const uploadIdDocument = async (req: Request, res: Response) => {
       message: "ID Document uploaded successfully",
       data: { idDocumentUrl: idUrl, idVerificationStatus: "PENDING" }
     });
+
   } catch (error) {
     console.error("Error uploading ID document:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });

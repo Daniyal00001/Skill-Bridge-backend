@@ -18,6 +18,7 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
       maxRate,
       experienceLevel,
       availability,
+      isIdVerified,
       page = 1,
       limit = 25,
       sortBy = "createdAt",
@@ -31,6 +32,11 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
     const where: Prisma.FreelancerProfileWhereInput = {
       user: { isBanned: false },
     };
+
+    if (isIdVerified === "true") {
+      where.user = { ...((where.user as any) || {}), isIdVerified: true };
+    }
+
 
     // Search filter (Name, Tagline, Bio)
     if (search) {
@@ -88,6 +94,8 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
             select: {
               profileImage: true,
               isEmailVerified: true,
+              isIdVerified: true,
+              idVerificationStatus: true,
             },
           },
           skills: {
@@ -240,7 +248,7 @@ export const getFreelancerById = async (req: Request, res: Response) => {
     const { reviewsReceived, ...userWithoutReviews } = freelancer.user as any;
 
     // ── Flatten accepted proposals → recentProjects ───────────
-    const recentProjects = (freelancer.proposals || []).map((p) => p.project);
+    const recentProjects = (freelancer.proposals || []).map((p: any) => p.project);
 
     // ── Build the final response shape ───────────────────────
     const data = {

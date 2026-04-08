@@ -64,7 +64,7 @@ export const browseProjects = async (
       budgetMax: req.query.budgetMax ? Number(req.query.budgetMax) : undefined,
       experienceLevel,
       size,
-      clientVerified: req.query.clientVerified === "true" ? true : undefined,
+      clientVerified: req.query.isClientVerified === "true" ? true : undefined,
       proposalCountMax: req.query.proposalCountMax
         ? Number(req.query.proposalCountMax)
         : undefined,
