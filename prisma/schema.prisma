@@ -201,6 +201,11 @@ model User {
   lastViolationAt   DateTime?
   isFlagged         Boolean   @default(false)
 
+  // Notification Preferences
+  projectNotifications Boolean  @default(true)
+  messageNotifications Boolean  @default(true)
+  accountNotifications Boolean  @default(true)
+
   // Relations
   clientProfile     ClientProfile?
   freelancerProfile FreelancerProfile?

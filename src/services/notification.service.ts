@@ -10,16 +10,81 @@ export interface CreateNotificationPayload {
   link?: string
 }
 
+
+const getPreferenceField = (type: NotificationType): string => {
+  switch (type) {
+    case 'MESSAGE_RECEIVED':
+      return 'messageNotifications';
+    case 'PROPOSAL_RECEIVED':
+    case 'PROPOSAL_ACCEPTED':
+    case 'PROPOSAL_REJECTED':
+    case 'PROPOSAL_SHORTLISTED':
+    case 'PROJECT_STARTED':
+    case 'MILESTONE_SUBMITTED':
+    case 'MILESTONE_APPROVED':
+    case 'INVITATION_RECEIVED':
+      return 'projectNotifications';
+    default:
+      return 'accountNotifications';
+  }
+};
+
 export const createNotification = async (payload: CreateNotificationPayload, tx?: any) => {
   try {
     const client = tx || prisma
+    
+    // ── 1. Fetch User (needed for preferences AND role-based links) ─────────────────
+    const user = await client.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        role: true,
+        projectNotifications: true,
+        messageNotifications: true,
+        accountNotifications: true,
+      }
+    });
+
+    if (!user) return null;
+
+    // ── 2. Check Preferences ───────────────────────────────
+    const prefField = getPreferenceField(payload.type);
+    const isEnabled = (user as any)[prefField] ?? true;
+    
+    if (!isEnabled) {
+      console.log(`[NotificationService] Skipping notification ${payload.type} for ${payload.userId} (disabled).`);
+      return null;
+    }
+
+    // ── 3. Transform Link based on Type & Role ───────────────────────────────────
+    let finalLink = payload.link;
+
+    // A) Handle Message Redirection
+    if (payload.type === 'MESSAGE_RECEIVED' && finalLink?.includes('/chat/')) {
+      const roomId = finalLink.split('/').pop();
+      const base = user.role === 'FREELANCER' ? '/freelancer' : '/client';
+      finalLink = `${base}/messages?room=${roomId}`;
+    }
+
+    // B) Handle Dispute Redirection
+    if (['DISPUTE_OPENED', 'DISPUTE_RESOLVED'].includes(payload.type)) {
+      if (user.role === 'ADMIN') {
+        // Admins go to the admin dispute detail if link contains ID
+        const disputeId = finalLink?.split('/').pop();
+        finalLink = disputeId && disputeId.length > 10 ? `/admin/disputes/${disputeId}` : '/admin/disputes';
+      } else {
+        const base = user.role === 'FREELANCER' ? '/freelancer' : '/client';
+        finalLink = `${base}/contracts?tab=disputed`;
+      }
+    }
+
+    // ── 4. Create in Database ─────────────────────────────
     const notification = await client.notification.create({
       data: {
         userId: payload.userId,
         type: payload.type,
         title: payload.title,
         body: payload.body,
-        link: payload.link || null,
+        link: finalLink || null,
       },
     })
 
@@ -28,7 +93,6 @@ export const createNotification = async (payload: CreateNotificationPayload, tx?
     if (io) {
       io.to(`user:${payload.userId}`).emit('new_notification', notification)
       
-      // Also emit a count update if needed (though the frontend can just increment locally)
       const unreadCount = await client.notification.count({
         where: { userId: payload.userId, isRead: false }
       })
@@ -38,8 +102,6 @@ export const createNotification = async (payload: CreateNotificationPayload, tx?
     return notification
   } catch (error) {
     console.error('[NotificationService] Error creating notification:', error)
-    // We don't want to crash the main flow if notification fails, 
-    // but maybe we should throw in some cases? For now, just log.
     return null
   }
 }

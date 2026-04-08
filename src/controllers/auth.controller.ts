@@ -944,3 +944,41 @@ export const changePassword = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Internal server error.' });
   }
 }
+
+/**
+ * @desc    Update user notification settings
+ * @route   PUT /api/auth/notification-settings
+ * @access  Private
+ */
+export const updateNotificationSettings = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { 
+      projectNotifications, 
+      messageNotifications, 
+      accountNotifications 
+    } = req.body;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        projectNotifications: projectNotifications !== undefined ? !!projectNotifications : undefined,
+        messageNotifications: messageNotifications !== undefined ? !!messageNotifications : undefined,
+        accountNotifications: accountNotifications !== undefined ? !!accountNotifications : undefined,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification settings updated successfully",
+      data: {
+        projectNotifications: user.projectNotifications,
+        messageNotifications: user.messageNotifications,
+        accountNotifications: user.accountNotifications,
+      },
+    });
+  } catch (error) {
+    console.error("Update notification settings error:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

@@ -1,6 +1,7 @@
 import { Job } from 'bull'
 import { prisma } from '../config/prisma'
 import { milestoneReleaseQueue } from './milestoneRelease.queue'
+import { createNotification } from '../services/notification.service'
 
 interface AutoReleaseJobData {
   milestoneId: string
@@ -31,7 +32,7 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
           project: {
             include: {
               clientProfile: { select: { userId: true, fullName: true } },
-              dispute: { select: { status: true } },
+              disputes: { select: { status: true } },
             },
           },
           freelancerProfile: {
@@ -68,8 +69,9 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
   }
 
   // Guard C: no open dispute on the project
-  const dispute = milestone.contract.project.dispute
-  if (dispute && dispute.status === 'OPEN') {
+  const disputes = milestone.contract.project.disputes
+  const hasOpenDispute = disputes.some(d => d.status === 'OPEN')
+  if (hasOpenDispute) {
     console.log(
       `⏭️  Project has an open dispute — skipping auto-release for milestone ${milestoneId}.`
     )
@@ -103,37 +105,31 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
     // ── 4. Notifications ──────────────────────────────────────
 
     // Notify freelancer — payment released
-    await tx.notification.create({
-      data: {
-        userId: freelancerUserId,
-        type: 'PAYMENT_RELEASED',
-        title: 'Payment Auto-Released!',
-        body: `"${milestone.title}" was automatically approved after 3 days of review. $${milestone.amount.toFixed(2)} has been released to you.`,
-        link: `/freelancer/contracts/${contractId}`,
-      },
-    })
+    await createNotification({
+      userId: freelancerUserId,
+      type: 'PAYMENT_RELEASED',
+      title: 'Payment Auto-Released!',
+      body: `"${milestone.title}" was automatically approved after 3 days of review. $${milestone.amount.toFixed(2)} has been released to you.`,
+      link: `/freelancer/contracts/${contractId}`,
+    }, tx)
 
     // Notify client — auto-approved
-    await tx.notification.create({
-      data: {
-        userId: clientUserId,
-        type: 'MILESTONE_APPROVED',
-        title: 'Milestone Auto-Approved',
-        body: `"${milestone.title}" was automatically approved and payment released after 72 hours without a response. If you have concerns, please open a dispute.`,
-        link: `/client/contracts/${contractId}`,
-      },
-    })
+    await createNotification({
+      userId: clientUserId,
+      type: 'MILESTONE_APPROVED',
+      title: 'Milestone Auto-Approved',
+      body: `"${milestone.title}" was automatically approved and payment released after 72 hours without a response. If you have concerns, please open a dispute.`,
+      link: `/client/contracts/${contractId}`,
+    }, tx)
 
     // Audit log — system alert to client
-    await tx.notification.create({
-      data: {
-        userId: clientUserId,
-        type: 'SYSTEM_ALERT',
-        title: 'Auto-Release Audit',
-        body: `System auto-released $${milestone.amount.toFixed(2)} for milestone "${milestone.title}" on contract ${contractId} at ${new Date().toISOString()}.`,
-        link: `/client/contracts/${contractId}`,
-      },
-    })
+    await createNotification({
+      userId: clientUserId,
+      type: 'SYSTEM_ALERT',
+      title: 'Auto-Release Audit',
+      body: `System auto-released $${milestone.amount.toFixed(2)} for milestone "${milestone.title}" on contract ${contractId} at ${new Date().toISOString()}.`,
+      link: `/client/contracts/${contractId}`,
+    }, tx)
   })
 
   console.log(`✅ Auto-released payment for milestone ${milestoneId}`)
@@ -159,26 +155,21 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
         data: { status: 'COMPLETED' },
       })
 
-      // Notify both parties about contract completion
-      await tx.notification.create({
-        data: {
-          userId: freelancerUserId,
-          type: 'MILESTONE_APPROVED',
-          title: 'Contract Completed!',
-          body: `All milestones approved! Your contract for "${contract.project.title}" is now complete.`,
-          link: `/freelancer/contracts/${contractId}`,
-        },
-      })
+          await createNotification({
+            userId: freelancerUserId,
+            type: 'MILESTONE_APPROVED',
+            title: 'Contract Completed!',
+            body: `All milestones approved! Your contract for "${contract.project.title}" is now complete.`,
+            link: `/freelancer/contracts/${contractId}`,
+          }, tx)
 
-      await tx.notification.create({
-        data: {
-          userId: clientUserId,
-          type: 'MILESTONE_APPROVED',
-          title: 'Contract Completed!',
-          body: `All milestones have been approved and payment released for "${contract.project.title}". The contract is now complete.`,
-          link: `/client/contracts/${contractId}`,
-        },
-      })
+          await createNotification({
+            userId: clientUserId,
+            type: 'MILESTONE_APPROVED',
+            title: 'Contract Completed!',
+            body: `All milestones have been approved and payment released for "${contract.project.title}". The contract is now complete.`,
+            link: `/client/contracts/${contractId}`,
+          }, tx)
     })
 
     console.log(`🏁 Contract ${contractId} marked as COMPLETED — all milestones approved.`)

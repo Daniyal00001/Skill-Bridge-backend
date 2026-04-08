@@ -11,6 +11,7 @@ import {
   resetPassword,
   completeGoogleSignup,
   changePassword,
+  updateNotificationSettings,
 } from '../controllers/auth.controller'
 import passport from '../config/passport'
 import { protect } from '../middlewares/auth.middleware'
@@ -27,6 +28,7 @@ router.post('/forgot-password', forgotPassword)
 router.post('/reset-password', resetPassword)
 router.post('/complete-google-signup', protect, completeGoogleSignup)
 router.put('/change-password', protect, changePassword)
+router.put('/notification-settings', protect, updateNotificationSettings)
 
 // Google OAuth
 router.get('/google', passport.authenticate('google', {

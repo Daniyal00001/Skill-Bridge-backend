@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
+import { createNotification } from '../services/notification.service';
 
 const ADMIN_ONLY = (req: Request, res: Response): boolean => {
   if (req.user?.role !== 'ADMIN') {
@@ -288,13 +289,22 @@ export const updateDisputeStatus = async (req: Request, res: Response) => {
     });
 
     // Notify both parties
-    const notifData = [
-      { userId: dispute.clientId, title: 'Dispute Status Updated', body: `Your dispute status is now: ${status.replace(/_/g, ' ')}` },
-      { userId: dispute.freelancerId, title: 'Dispute Status Updated', body: `Your dispute status is now: ${status.replace(/_/g, ' ')}` },
-    ];
-    await prisma.notification.createMany({
-      data: notifData.map((n) => ({ ...n, type: 'DISPUTE_OPENED' as any, link: `/disputes/${id}` })),
-    });
+    await Promise.all([
+      createNotification({
+        userId: dispute.clientId,
+        type: 'DISPUTE_OPENED',
+        title: 'Dispute Status Updated',
+        body: `Your dispute status is now: ${status.replace(/_/g, ' ')}`,
+        link: `/disputes/${id}`,
+      }),
+      createNotification({
+        userId: dispute.freelancerId,
+        type: 'DISPUTE_OPENED',
+        title: 'Dispute Status Updated',
+        body: `Your dispute status is now: ${status.replace(/_/g, ' ')}`,
+        link: `/disputes/${id}`,
+      }),
+    ]);
 
     return res.json({ success: true, dispute: updated });
   } catch (err: any) {
@@ -461,21 +471,22 @@ export const resolveDispute = async (req: Request, res: Response) => {
 
     // Notify both parties
     const resolutionText = resolution.replace(/_/g, ' ');
-    const notifData = [
-      {
+    await Promise.all([
+      createNotification({
         userId: dispute.clientId,
+        type: 'DISPUTE_RESOLVED',
         title: 'Dispute Resolved',
         body: `Admin resolved your dispute: ${resolutionText}. ${resolutionNote || ''}`,
-      },
-      {
+        link: `/disputes/${id}`,
+      }, tx),
+      createNotification({
         userId: dispute.freelancerId,
+        type: 'DISPUTE_RESOLVED',
         title: 'Dispute Resolved',
         body: `Admin resolved the dispute: ${resolutionText}. ${resolutionNote || ''}`,
-      },
-    ];
-    await prisma.notification.createMany({
-      data: notifData.map((n) => ({ ...n, type: 'DISPUTE_RESOLVED' as any, link: `/disputes/${id}` })),
-    });
+        link: `/disputes/${id}`,
+      }, tx),
+    ]);
 
     return res.json({ success: true, dispute: updated, message: 'Dispute resolved successfully' });
   } catch (err: any) {
@@ -573,27 +584,27 @@ export const createDispute = async (req: Request, res: Response) => {
     // Notify admin(s)
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
     if (admins.length > 0) {
-      await prisma.notification.createMany({
-        data: admins.map((a) => ({
-          userId: a.id,
-          type: 'DISPUTE_OPENED' as any,
-          title: 'New Dispute Opened',
-          body: `A dispute was opened for project: ${project.title}`,
-          link: `/admin/disputes`,
-        })),
-      });
+      await Promise.all(
+        admins.map((a) =>
+          createNotification({
+            userId: a.id,
+            type: 'DISPUTE_OPENED',
+            title: 'New Dispute Opened',
+            body: `A dispute was opened for project: ${project.title}`,
+            link: `/admin/disputes`,
+          })
+        )
+      );
     }
 
     // Notify the other party
     const otherUserId = userId === clientUserId ? freelancerUserId : clientUserId;
-    await prisma.notification.create({
-      data: {
-        userId: otherUserId,
-        type: 'DISPUTE_OPENED' as any,
-        title: 'Dispute Opened',
-        body: `A dispute has been filed on project: ${project.title}`,
-        link: `/disputes/${dispute.id}`,
-      },
+    await createNotification({
+      userId: otherUserId,
+      type: 'DISPUTE_OPENED',
+      title: 'Dispute Opened',
+      body: `A dispute has been filed on project: ${project.title}`,
+      link: `/disputes/${dispute.id}`,
     });
 
     return res.status(201).json({ success: true, dispute, message: 'Dispute created successfully' });
