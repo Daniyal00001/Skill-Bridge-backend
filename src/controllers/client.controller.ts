@@ -3,6 +3,7 @@ import { prisma } from "../config/prisma";
 import { sendOtpEmail } from "../utils/email";
 import { sendSmsOtp } from "../utils/sms";
 import crypto from "crypto";
+import { uploadToCloudinary, deleteFromCloudinary } from "../utils/uploadToCloudinary";
 
 // ── helpers ──────────────────────────────────────────────────
 const genOtp = () =>
@@ -31,6 +32,8 @@ export const getMyProfile = async (req: Request, res: Response) => {
             isPhoneVerified: true,
             isPaymentVerified: true,
             isIdVerified: true,
+            idVerificationStatus: true,
+            idRejectionReason: true,
             profileImage: true,
             phoneNumber: true,
             googleId: true,
@@ -145,6 +148,8 @@ export const updateMyProfile = async (req: Request, res: Response) => {
             isPhoneVerified: true,
             isPaymentVerified: true,
             isIdVerified: true,
+            idVerificationStatus: true,
+            idRejectionReason: true,
             profileImage: true,
             phoneNumber: true,
           },
@@ -363,6 +368,42 @@ export const verifyPhoneOtp = async (req: Request, res: Response) => {
     return res.status(200).json({ success: true, message: "Phone number verified successfully" });
   } catch (error) {
     console.error("Error verifying phone OTP:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// ── POST /client/profile/upload-id ────────────────────────────
+export const uploadIdDocument = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    if (!files || !files["idDocument"] || !files["idDocument"][0]) {
+      return res.status(400).json({ success: false, message: "No ID document provided" });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    // Delete old one if exists
+    if (user.idDocumentUrl) {
+      await deleteFromCloudinary(user.idDocumentUrl);
+    }
+
+    const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer, files["idDocument"][0].originalname, files["idDocument"][0].mimetype);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { idDocumentUrl: idUrl, idVerificationStatus: "PENDING" }, 
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "ID Document uploaded successfully",
+      data: { idDocumentUrl: idUrl, idVerificationStatus: "PENDING" }
+    });
+  } catch (error) {
+    console.error("Error uploading ID document:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 };

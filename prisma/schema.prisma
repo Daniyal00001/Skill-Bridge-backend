@@ -18,6 +18,13 @@ enum Role {
   ADMIN
 }
 
+enum IdVerificationStatus {
+  UNSUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum ProjectStatus {
   DRAFT
   OPEN
@@ -170,6 +177,8 @@ model User {
   isEmailVerified   Boolean   @default(false)
   isPaymentVerified Boolean   @default(false)
   isIdVerified      Boolean   @default(false)
+  idVerificationStatus IdVerificationStatus @default(UNSUBMITTED)
+  idRejectionReason String?
   idDocumentUrl     String?
   phoneNumber       String?
   isPhoneVerified   Boolean   @default(false)

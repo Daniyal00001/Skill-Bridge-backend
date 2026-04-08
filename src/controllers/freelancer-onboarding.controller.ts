@@ -33,6 +33,8 @@ export const getMyFreelancerProfile = async (req: Request, res: Response) => {
             profileImage: true,
             isEmailVerified: true,
             isIdVerified: true,
+            idVerificationStatus: true,
+            idRejectionReason: true,
             phoneNumber: true,
           },
         },
@@ -482,7 +484,7 @@ export const uploadOnboardingFiles = async (req: Request, res: Response) => {
       const idUrl = await uploadToCloudinary(files["idDocument"][0].buffer, files["idDocument"][0].originalname, files["idDocument"][0].mimetype);
       await prisma.user.update({
         where: { id: userId },
-        data: { idDocumentUrl: idUrl, isIdVerified: true }, // Mock verified immediately
+        data: { idDocumentUrl: idUrl, idVerificationStatus: "PENDING" }, 
       });
       updates.idDocumentUrl = idUrl;
     }
@@ -658,6 +660,8 @@ export const updateFreelancerProfile = async (req: Request, res: Response) => {
     if (idDocumentUrl === null || idDocumentUrl === "") {
       userUpdateData.idDocumentUrl = null;
       userUpdateData.isIdVerified = false;
+      userUpdateData.idVerificationStatus = "UNSUBMITTED";
+      userUpdateData.idRejectionReason = null;
     }
     if (profileImage === null || profileImage === "") {
       userUpdateData.profileImage = null;
