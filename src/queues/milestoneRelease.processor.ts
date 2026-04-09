@@ -102,6 +102,14 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
       },
     })
 
+    // Credit freelancer balance
+    await tx.freelancerProfile.update({
+      where: { userId: freelancerUserId },
+      data: { balance: { increment: milestone.amount } }
+    })
+
+
+
     // ── 4. Notifications ──────────────────────────────────────
 
     // Notify freelancer — payment released

@@ -425,3 +425,222 @@ export const deletePaymentMethod = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// FREELANCER: GET BALANCE & EARNINGS SUMMARY
+// GET /api/stripe/freelancer/balance
+// ─────────────────────────────────────────────────────────────
+export const getFreelancerBalance = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+
+    // Fetch freelancer with contracts+payments — no `withdrawals` include (supports old client)
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { userId },
+      include: {
+        contracts: {
+          include: {
+            payments: {
+              where: { status: 'RELEASED' },
+              orderBy: { releasedAt: 'desc' }
+            },
+            project: { select: { title: true } }
+          }
+        }
+      }
+    })
+
+    if (!freelancer) {
+      return res.status(404).json({ success: false, message: 'Freelancer profile not found.' })
+    }
+
+    // Fetch withdrawals separately via `any` cast (Withdrawal model may not be in stale .d.ts)
+    let withdrawalHistory: any[] = []
+    try {
+      withdrawalHistory = await (prisma as any).withdrawal.findMany({
+        where: { freelancerProfileId: freelancer.id },
+        orderBy: { requestedAt: 'desc' },
+        take: 20
+      })
+    } catch {
+      // Withdrawal table may not exist yet — safe to ignore on first deploy
+    }
+
+    // Build earnings history from released payments
+    const earningsHistory = freelancer.contracts.flatMap((contract: any) =>
+      contract.payments.map((p: any) => ({
+        id: p.id,
+        amount: p.amount,
+        projectTitle: contract.project.title,
+        releasedAt: p.releasedAt,
+        type: 'EARNINGS'
+      }))
+    ).sort((a: any, b: any) => new Date(b.releasedAt).getTime() - new Date(a.releasedAt).getTime())
+
+    // Calculate actual balance for self-healing: Sum(Earnings) - Sum(Withdrawals)
+    const totalEarnings = earningsHistory.reduce((sum, item) => sum + item.amount, 0);
+    const totalProcessedWithdrawals = withdrawalHistory
+      .filter(w => w.status === 'COMPLETED' || w.status === 'PROCESSING')
+      .reduce((sum, w) => sum + w.amount, 0);
+    
+    // If stored balance is 0 but they have history, use the calculated one
+    const calculatedBalance = Math.max(0, totalEarnings - totalProcessedWithdrawals);
+    const balanceToReturn = freelancer.balance > 0 ? freelancer.balance : calculatedBalance;
+    const totalWithdrawn = (freelancer as any).totalWithdrawn ?? totalProcessedWithdrawals;
+
+    return res.status(200).json({
+      success: true,
+      balance: balanceToReturn,
+      totalWithdrawn,
+      earningsHistory,
+      withdrawalHistory,
+      stripeConnected: !!freelancer.stripeConnectId && freelancer.stripeOnboardingComplete
+    })
+
+  } catch (error: any) {
+    console.error('Get freelancer balance error:', error)
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// FREELANCER: REQUEST WITHDRAWAL
+// POST /api/stripe/freelancer/withdraw
+// Body: { amount }
+// ─────────────────────────────────────────────────────────────
+export const requestWithdrawal = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+    const { amount } = req.body
+
+    if (!amount || isNaN(amount) || Number(amount) <= 0) {
+      return res.status(400).json({ success: false, message: 'Invalid withdrawal amount.' })
+    }
+
+    const withdrawAmount = Number(amount)
+
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { userId }
+    })
+
+    if (!freelancer) {
+      return res.status(404).json({ success: false, message: 'Freelancer profile not found.' })
+    }
+
+    // Check Stripe Connect is fully onboarded
+    if (!freelancer.stripeConnectId || !freelancer.stripeOnboardingComplete) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please complete Stripe onboarding before withdrawing funds.'
+      })
+    }
+
+    // Check sufficient balance (Self-healing logic)
+    let availableBalance = freelancer.balance;
+    if (availableBalance <= 0) {
+      // Calculate from history as fallback
+      const prismaAny = prisma as any;
+      const earnings = await prisma.payment.aggregate({
+        where: {
+          contract: { freelancerProfileId: freelancer.id },
+          status: 'RELEASED'
+        },
+        _sum: { amount: true }
+      });
+      const withdrawals = await prismaAny.withdrawal.aggregate({
+        where: { freelancerProfileId: freelancer.id, status: { in: ['COMPLETED', 'PROCESSING'] } },
+        _sum: { amount: true }
+      });
+      availableBalance = (earnings._sum.amount || 0) - (withdrawals._sum.amount || 0);
+    }
+
+    if (availableBalance < withdrawAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient balance. Available: $${availableBalance.toFixed(2)}`
+      })
+    }
+
+
+    // Minimum withdrawal: $1
+    if (withdrawAmount < 1) {
+      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is $1.00.' })
+    }
+
+    // Verify the connected account still has payouts enabled
+    const account = await stripe.accounts.retrieve(freelancer.stripeConnectId)
+    if (!account.payouts_enabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Your Stripe account is not yet approved for payouts. Please check your Stripe dashboard.'
+      })
+    }
+
+    const amountInCents = Math.round(withdrawAmount * 100)
+
+    // Create the withdrawal record first (PROCESSING) — use `any` cast for new model
+    const prismaAny = prisma as any
+    const withdrawal = await prismaAny.withdrawal.create({
+      data: {
+        freelancerProfileId: freelancer.id,
+        amount: withdrawAmount,
+        status: 'PROCESSING',
+      }
+    })
+
+    try {
+      // Execute Stripe transfer to connected account
+      const transfer = await stripe.transfers.create({
+        amount: amountInCents,
+        currency: 'usd',
+        destination: freelancer.stripeConnectId!,
+        description: `SkillBridge withdrawal — $${withdrawAmount.toFixed(2)}`,
+        metadata: {
+          freelancerUserId: userId,
+          withdrawalId: withdrawal.id,
+        }
+      })
+
+      // Update withdrawal as COMPLETED and deduct from balance
+      await prismaAny.withdrawal.update({
+        where: { id: withdrawal.id },
+        data: {
+          status: 'COMPLETED',
+          stripeTransferId: transfer.id,
+          processedAt: new Date()
+        }
+      })
+
+      await prisma.freelancerProfile.update({
+        where: { id: freelancer.id },
+        data: {
+          balance: { decrement: withdrawAmount },
+          totalWithdrawn: { increment: withdrawAmount }
+        } as any
+      })
+
+      return res.status(200).json({
+        success: true,
+        message: `$${withdrawAmount.toFixed(2)} has been transferred to your Stripe account successfully!`,
+        transferId: transfer.id,
+        amount: withdrawAmount
+      })
+
+    } catch (stripeError: any) {
+      // Mark withdrawal as FAILED if Stripe errors
+      await prismaAny.withdrawal.update({
+        where: { id: withdrawal.id },
+        data: {
+          status: 'FAILED',
+          failureReason: stripeError.message,
+          processedAt: new Date()
+        }
+      })
+      throw stripeError
+    }
+
+  } catch (error: any) {
+    console.error('Request withdrawal error:', error)
+    return res.status(500).json({ success: false, message: error.message || 'Withdrawal failed.' })
+  }
+}

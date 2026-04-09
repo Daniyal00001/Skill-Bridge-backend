@@ -563,6 +563,14 @@ export const approveMilestone = async (req: Request, res: Response) => {
         data: { status: 'RELEASED', releasedAt: new Date() }
       })
 
+      // Credit freelancer balance
+      await tx.freelancerProfile.update({
+        where: { id: contract.freelancerProfileId },
+        data: { balance: { increment: milestone.amount } }
+      })
+
+
+
       // Update client stats (Total Spent)
       await updateClientStats(tx, contract.project.clientProfileId)
 

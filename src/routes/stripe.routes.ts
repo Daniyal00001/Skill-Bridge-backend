@@ -7,7 +7,9 @@ import {
   checkOnboardingStatus,
   createSetupIntent,
   getPaymentMethods,
-  deletePaymentMethod
+  deletePaymentMethod,
+  getFreelancerBalance,
+  requestWithdrawal
 } from '../controllers/stripe.controller'
 
 const router = Router()
@@ -21,6 +23,10 @@ router.post('/confirm-fund', protect, requireRole('CLIENT'), confirmFundMileston
 // Freelancer Connect Onboarding
 router.get('/setup-payouts', protect, requireRole('FREELANCER'), setupFreelancerPayouts)
 router.get('/onboarding-status', protect, requireRole('FREELANCER'), checkOnboardingStatus)
+
+// Freelancer Balance & Withdrawals
+router.get('/freelancer/balance', protect, requireRole('FREELANCER'), getFreelancerBalance)
+router.post('/freelancer/withdraw', protect, requireRole('FREELANCER'), requestWithdrawal)
 
 // Client Payment Methods
 router.post('/create-setup-intent', protect, requireRole('CLIENT'), createSetupIntent)

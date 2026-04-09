@@ -93,6 +93,13 @@ enum PaymentStatus {
   FAILED
 }
 
+enum WithdrawalStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum DisputeStatus {
   OPEN
   UNDER_REVIEW
@@ -331,6 +338,7 @@ model FreelancerProfile {
   createdAt               DateTime?          @default(now())
   updatedAt               DateTime?          @updatedAt
   balance                 Float              @default(0)
+  totalWithdrawn          Float              @default(0)
   stripeConnectId         String?
   stripeOnboardingComplete Boolean            @default(false)
 
@@ -351,6 +359,7 @@ model FreelancerProfile {
   chatRooms         ChatRoom[]
   tokenTransactions TokenTransaction[]
   gigs              Gig[]
+  withdrawals       Withdrawal[]
 
   // ── Browse System additions ──
   lastLoginAt            DateTime?
@@ -753,6 +762,27 @@ model Payment {
 
   @@map("payments")
 }
+
+// ============================================================
+// WITHDRAWAL (Freelancer payout requests)
+// ============================================================
+
+model Withdrawal {
+  id                  String           @id @default(auto()) @map("_id") @db.ObjectId
+  freelancerProfileId String           @db.ObjectId
+  amount              Float
+  status              WithdrawalStatus @default(PENDING)
+  stripeTransferId    String?          // Stripe transfer ID once processed
+  failureReason       String?
+  requestedAt         DateTime         @default(now())
+  processedAt         DateTime?
+
+  freelancerProfile FreelancerProfile @relation(fields: [freelancerProfileId], references: [id], onDelete: Cascade)
+
+  @@map("withdrawals")
+}
+
+
 
 // ============================================================
 // CHAT ROOM (One per contract or for recruitment)
