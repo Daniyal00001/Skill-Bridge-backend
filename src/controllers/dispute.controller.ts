@@ -602,16 +602,20 @@ export const createDispute = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'You are not a party to this project' });
     }
 
-    // Check if the user already filed a dispute for this project
-    const existingSameFiler = await prisma.dispute.findFirst({
+    // Check if the user already has an ACTIVE dispute for this project
+    const activeDispute = await prisma.dispute.findFirst({
       where: {
         projectId,
         filedBy: userRole as any,
+        status: { notIn: ["RESOLVED", "CLOSED"] as any },
       },
     });
 
-    if (existingSameFiler) {
-      return res.status(409).json({ success: false, message: 'You have already filed a dispute for this project' });
+    if (activeDispute) {
+      return res.status(409).json({
+        success: false,
+        message: "You already have an active dispute for this project.",
+      });
     }
 
     // Check if the OTHER party already filed a dispute to link them
@@ -693,17 +697,18 @@ export const getMyDispute = async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const userRole = req.user!.role;
 
-    // Find any dispute for this project where the requester is either the client or the freelancer
+    // Find the latest dispute for this project involving the requester
     const dispute = await prisma.dispute.findFirst({
       where: {
         projectId: projectId as string,
         OR: [{ clientId: userId as string }, { freelancerId: userId as string }],
       },
+      orderBy: { openedAt: "desc" },
       include: {
         project: { select: { id: true, title: true, budget: true } },
         client: { select: { id: true, name: true, profileImage: true } },
         freelancer: { select: { id: true, name: true, profileImage: true } },
-        admin: { select: { fullName: true } },
+        admin: { select: { id: true, fullName: true } },
       },
     });
 
