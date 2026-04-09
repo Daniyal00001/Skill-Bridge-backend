@@ -59,9 +59,9 @@ export const getMyContracts = async (req: Request, res: Response) => {
     const contracts = await prisma.contract.findMany({
       where: whereClause,
       include: {
-        project: { select: { title: true, budget: true, status: true } },
+        project: { select: { title: true, budget: true, status: true, deadline: true } },
         freelancerProfile: { include: { user: { select: { name: true, profileImage: true } } } },
-        milestones: { select: { status: true, amount: true } },
+        milestones: { select: { status: true, amount: true, dueDate: true } },
         payments: { select: { amount: true, status: true } },
       },
       orderBy: { createdAt: 'desc' }
@@ -81,6 +81,11 @@ export const getMyContracts = async (req: Request, res: Response) => {
         ? (c.milestones.filter(m => m.status === 'APPROVED').length / c.milestones.length) * 100 
         : 0
 
+      // The "Deadline" can be the contract endDate, the last milestone's dueDate, or the project's overall deadline
+      const milestonesWithDueDates = c.milestones.filter(m => m.dueDate).sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime());
+      const lastMilestoneDueDate = milestonesWithDueDates.length > 0 ? milestonesWithDueDates[milestonesWithDueDates.length - 1].dueDate : null;
+      const finalDeadline = c.endDate || lastMilestoneDueDate || c.project.deadline;
+
       return {
         id: c.id,
         projectId: c.projectId,
@@ -95,6 +100,7 @@ export const getMyContracts = async (req: Request, res: Response) => {
         milestonesSubmitted: c.milestones.filter(m => m.status === 'SUBMITTED').length,
         milestonesRevisionRequested: c.milestones.filter(m => m.status === 'REVISION_REQUESTED').length,
         createdAt: c.createdAt,
+        endDate: finalDeadline,
         freelancer: {
           name: c.freelancerProfile.user.name,
           image: c.freelancerProfile.user.profileImage
@@ -783,7 +789,10 @@ function formatContract(contract: any) {
     status:
       contract.project?.status === "DISPUTED" ? "DISPUTED" : contract.status,
     startDate: contract.startDate,
-    endDate: contract.endDate,
+    endDate: contract.endDate || (() => {
+      const milestonesWithDueDates = contract.milestones?.filter((m: any) => m.dueDate).sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()) || [];
+      return milestonesWithDueDates.length > 0 ? milestonesWithDueDates[milestonesWithDueDates.length - 1].dueDate : (contract.project?.deadline || null);
+    })(),
     milestonesModifiedByClient: contract.milestonesModifiedByClient ?? false,
     milestones: contract.milestones.map((m: any) => {
       const history = Array.isArray(m.history) ? [...m.history] : [];
