@@ -66,6 +66,10 @@ app.use("/api/metadata", metadataRoutes);
 // contract + milestone routes
 app.use("/api/contracts", contractRoutes);
 
+// stripe payment routes
+import stripeRoutes from "./routes/stripe.routes";
+app.use("/api/stripe", stripeRoutes);
+
 // client routes
 import clientRoutes from "./routes/client.routes";
 app.use("/api/client", clientRoutes);
