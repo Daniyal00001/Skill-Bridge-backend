@@ -206,3 +206,178 @@ export const confirmFundMilestone = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message || 'Internal server error.' })
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// FREELANCER: SETUP CONNECT ACCOUNT (Payouts)
+// GET /api/stripe/setup-payouts
+// ─────────────────────────────────────────────────────────────
+export const setupFreelancerPayouts = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { userId },
+      include: { user: { select: { email: true } } }
+    })
+
+    if (!freelancer) {
+      return res.status(404).json({ success: false, message: 'Freelancer profile not found.' })
+    }
+
+    let accountId = freelancer.stripeConnectId
+
+    if (!accountId) {
+      const account = await stripe.accounts.create({
+        type: 'express',
+        email: freelancer.user.email,
+        capabilities: {
+          transfers: { requested: true },
+          card_payments: { requested: true },
+        },
+      })
+      accountId = account.id
+      await prisma.freelancerProfile.update({
+        where: { userId },
+        data: { stripeConnectId: accountId }
+      })
+    }
+
+    const accountLink = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: `${process.env.FRONTEND_URL}/freelancer/settings?tab=withdrawals`,
+      return_url: `${process.env.FRONTEND_URL}/freelancer/settings?tab=withdrawals`,
+      type: 'account_onboarding',
+    })
+
+    return res.status(200).json({ success: true, url: accountLink.url })
+  } catch (error: any) {
+    console.error('Setup freelancer payouts error:', error)
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// FREELANCER: CHECK ONBOARDING STATUS
+// GET /api/stripe/onboarding-status
+// ─────────────────────────────────────────────────────────────
+export const checkOnboardingStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { userId }
+    })
+
+    if (!freelancer || !freelancer.stripeConnectId) {
+      return res.status(200).json({ success: true, complete: false })
+    }
+
+    const account = await stripe.accounts.retrieve(freelancer.stripeConnectId)
+    const complete = account.details_submitted
+
+    if (complete !== freelancer.stripeOnboardingComplete) {
+      await prisma.freelancerProfile.update({
+        where: { userId },
+        data: { stripeOnboardingComplete: complete }
+      })
+    }
+
+    return res.status(200).json({
+      success: true,
+      complete,
+      payoutsEnabled: account.payouts_enabled,
+      detailsSubmitted: account.details_submitted
+    })
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// CLIENT: CREATE SETUP INTENT (Attach Bank/Card)
+// POST /api/stripe/create-setup-intent
+// ─────────────────────────────────────────────────────────────
+export const createSetupIntent = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+    const client = await prisma.clientProfile.findUnique({
+      where: { userId },
+      include: { user: { select: { email: true } } }
+    })
+
+    if (!client) {
+      return res.status(404).json({ success: false, message: 'Client profile not found.' })
+    }
+
+    let customerId = client.stripeCustomerId
+
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: client.user.email,
+        name: client.fullName,
+      })
+      customerId = customer.id
+      await prisma.clientProfile.update({
+        where: { userId },
+        data: { stripeCustomerId: customerId }
+      })
+    }
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card', 'us_bank_account'],
+    })
+
+    return res.status(200).json({ success: true, clientSecret: setupIntent.client_secret })
+  } catch (error: any) {
+    console.error('Create setup intent error:', error)
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// CLIENT: GET ATTACHED METHODS
+// GET /api/stripe/payment-methods
+// ─────────────────────────────────────────────────────────────
+export const getPaymentMethods = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+    const client = await prisma.clientProfile.findUnique({
+      where: { userId }
+    })
+
+    if (!client || !client.stripeCustomerId) {
+      return res.status(200).json({ success: true, methods: [] })
+    }
+
+    const cards = await stripe.paymentMethods.list({
+      customer: client.stripeCustomerId,
+      type: 'card',
+    })
+
+    const bankAccounts = await stripe.paymentMethods.list({
+      customer: client.stripeCustomerId,
+      type: 'us_bank_account',
+    })
+
+    return res.status(200).json({
+      success: true,
+      methods: [
+        ...cards.data.map(m => ({
+          id: m.id,
+          type: 'card',
+          brand: m.card?.brand,
+          last4: m.card?.last4,
+          expMonth: m.card?.exp_month,
+          expYear: m.card?.exp_year
+        })),
+        ...bankAccounts.data.map(m => ({
+          id: m.id,
+          type: 'bank_account',
+          bankName: m.us_bank_account?.bank_name,
+          last4: m.us_bank_account?.last4
+        }))
+      ]
+    })
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}

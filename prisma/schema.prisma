@@ -291,6 +291,7 @@ model ClientProfile {
   updatedAt         DateTime?        @updatedAt
   lastLoginAt       DateTime?
   balance           Float            @default(0)
+  stripeCustomerId  String?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   projects    Project[]
@@ -329,6 +330,8 @@ model FreelancerProfile {
   createdAt               DateTime?          @default(now())
   updatedAt               DateTime?          @updatedAt
   balance                 Float              @default(0)
+  stripeConnectId         String?
+  stripeOnboardingComplete Boolean            @default(false)
 
   // Social / portfolio links
   github    String?
