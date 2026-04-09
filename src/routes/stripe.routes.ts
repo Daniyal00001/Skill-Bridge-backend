@@ -6,7 +6,8 @@ import {
   setupFreelancerPayouts,
   checkOnboardingStatus,
   createSetupIntent,
-  getPaymentMethods
+  getPaymentMethods,
+  deletePaymentMethod
 } from '../controllers/stripe.controller'
 
 const router = Router()
@@ -24,5 +25,6 @@ router.get('/onboarding-status', protect, requireRole('FREELANCER'), checkOnboar
 // Client Payment Methods
 router.post('/create-setup-intent', protect, requireRole('CLIENT'), createSetupIntent)
 router.get('/payment-methods', protect, requireRole('CLIENT'), getPaymentMethods)
+router.delete('/payment-methods/:methodId', protect, requireRole('CLIENT'), deletePaymentMethod)
 
 export default router

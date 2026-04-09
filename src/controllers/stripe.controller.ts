@@ -384,3 +384,44 @@ export const getPaymentMethods = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message })
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// DELETE PAYMENT METHOD (Client)
+// DELETE /api/stripe/payment-methods/:methodId
+// ─────────────────────────────────────────────────────────────
+export const deletePaymentMethod = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { methodId } = req.params;
+
+    const client = await prisma.clientProfile.findUnique({
+      where: { userId }
+    });
+
+    if (!client || !client.stripeCustomerId) {
+      return res.status(404).json({ success: false, message: 'Stripe customer not found' });
+    }
+
+    // Detach the payment method from the customer in Stripe
+    await stripe.paymentMethods.detach(methodId);
+
+    // Re-check remaining payment methods
+    const cards = await stripe.paymentMethods.list({
+      customer: client.stripeCustomerId,
+      type: 'card',
+    });
+
+    const hasMethods = cards.data.length > 0;
+
+    // Update the flag (this handles setting to false if 0 methods left)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isPaymentVerified: hasMethods }
+    });
+
+    return res.status(200).json({ success: true, message: 'Payment method deleted successfully' });
+  } catch (error: any) {
+    console.error('Delete payment method error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
