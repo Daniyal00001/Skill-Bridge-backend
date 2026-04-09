@@ -1,6 +1,10 @@
-import { Request, Response } from 'express';
+import Stripe from 'stripe';
 import { prisma } from '../config/prisma';
 import { createNotification } from '../services/notification.service';
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2026-03-25.dahlia',
+});
 
 const ADMIN_ONLY = (req: Request, res: Response): boolean => {
   if (req.user?.role !== 'ADMIN') {
@@ -321,21 +325,33 @@ export const updateDisputeStatus = async (req: Request, res: Response) => {
 export const resolveDispute = async (req: Request, res: Response) => {
   if (!ADMIN_ONLY(req, res)) return;
 
-  const VALID_RESOLUTIONS = ['FAVOR_CLIENT', 'FAVOR_FREELANCER', 'PARTIAL_SPLIT', 'PROJECT_CANCELLED', 'DISMISSED'];
+  const VALID_RESOLUTIONS = [
+    "FAVOR_CLIENT",
+    "FAVOR_FREELANCER",
+    "PARTIAL_SPLIT",
+    "PROJECT_CANCELLED",
+    "DISMISSED",
+  ];
 
   try {
     const { id } = req.params;
     const { resolution, resolutionNote } = req.body;
 
     if (!VALID_RESOLUTIONS.includes(resolution)) {
-      return res.status(400).json({ success: false, message: `Invalid resolution. Allowed: ${VALID_RESOLUTIONS.join(', ')}` });
+      return res.status(400).json({
+        success: false,
+        message: `Invalid resolution. Allowed: ${VALID_RESOLUTIONS.join(", ")}`,
+      });
     }
 
     const dispute = await prisma.dispute.findUnique({
       where: { id: id as string },
       include: { project: true },
     });
-    if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
+    if (!dispute)
+      return res
+        .status(404)
+        .json({ success: false, message: "Dispute not found" });
 
     const adminProfile = await prisma.adminProfile.findUnique({
       where: { userId: req.user!.userId },
@@ -345,7 +361,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
       const disputeUpdate = await tx.dispute.update({
         where: { id: id as string },
         data: {
-          status: 'RESOLVED' as any,
+          status: "RESOLVED" as any,
           resolution: resolution as any,
           resolutionNote,
           resolvedAt: new Date(),
@@ -357,101 +373,167 @@ export const resolveDispute = async (req: Request, res: Response) => {
       const contract = await tx.contract.findUnique({
         where: { projectId: dispute.projectId },
         include: {
-          payments: { where: { status: 'HELD_IN_ESCROW' } },
+          payments: { where: { status: "HELD_IN_ESCROW" } },
           freelancerProfile: true,
-          project: { include: { clientProfile: true } }
-        }
+          project: { include: { clientProfile: true } },
+        },
       });
 
       if (contract && contract.payments.length > 0) {
-        const totalEscrow = contract.payments.reduce((sum, p) => sum + p.amount, 0);
+        const totalEscrow = contract.payments.reduce(
+          (sum, p) => sum + p.amount,
+          0
+        );
 
-        if (resolution === 'FAVOR_FREELANCER') {
-          // Release all to freelancer
+        if (resolution === "FAVOR_FREELANCER") {
+          // Release all to freelancer (INTERNAL BALANCE)
           await tx.payment.updateMany({
-            where: { contractId: contract.id, status: 'HELD_IN_ESCROW' },
-            data: { status: 'RELEASED', releasedAt: new Date() }
+            where: { contractId: contract.id, status: "HELD_IN_ESCROW" },
+            data: { status: "RELEASED", releasedAt: new Date() },
           });
           await tx.freelancerProfile.update({
             where: { id: contract.freelancerProfileId },
-            data: { balance: { increment: totalEscrow } }
+            data: { balance: { increment: totalEscrow } },
           });
-          // Also mark associated milestones as APPROVED
-          const milestoneIds = contract.payments.map(p => p.milestoneId).filter(Boolean) as string[];
+          // Mark associated milestones as APPROVED
+          const milestoneIds = contract.payments
+            .map((p) => p.milestoneId)
+            .filter(Boolean) as string[];
           if (milestoneIds.length > 0) {
             await tx.milestone.updateMany({
               where: { id: { in: milestoneIds } },
-              data: { status: 'APPROVED', approvedAt: new Date() }
+              data: { status: "APPROVED", approvedAt: new Date() },
             });
           }
-        } else if (resolution === 'FAVOR_CLIENT' || resolution === 'PROJECT_CANCELLED') {
-          // Refund all to client
+        } else if (
+          resolution === "FAVOR_CLIENT" ||
+          resolution === "PROJECT_CANCELLED"
+        ) {
+          // ── REAL STRIPE REFUNDS ────────────────────────────────
+          for (const payment of contract.payments) {
+            if (payment.transactionId) {
+              try {
+                await stripe.refunds.create({
+                  payment_intent: payment.transactionId,
+                });
+              } catch (stripeErr: any) {
+                console.error(`Stripe refund failed for PI ${payment.transactionId}:`, stripeErr.message);
+                // We continue with DB updates even if one refund fails (manual intervention might be needed)
+              }
+            }
+          }
+
+          // Refund all to client (MARK DB)
           await tx.payment.updateMany({
-            where: { contractId: contract.id, status: 'HELD_IN_ESCROW' },
-            data: { status: 'REFUNDED' }
+            where: { contractId: contract.id, status: "HELD_IN_ESCROW" },
+            data: { status: "REFUNDED" },
           });
-          await tx.clientProfile.update({
-            where: { id: contract.project.clientProfileId },
-            data: { balance: { increment: totalEscrow } }
-          });
-          // Mark associated milestones as REJECTED since they weren't paid
-          const milestoneIds = contract.payments.map(p => p.milestoneId).filter(Boolean) as string[];
+
+          // Mark associated milestones as REJECTED
+          const milestoneIds = contract.payments
+            .map((p) => p.milestoneId)
+            .filter(Boolean) as string[];
           if (milestoneIds.length > 0) {
             await tx.milestone.updateMany({
               where: { id: { in: milestoneIds } },
-              data: { status: 'REJECTED' }
+              data: { status: "REJECTED" },
             });
           }
-        } else if (resolution === 'PARTIAL_SPLIT') {
+        } else if (resolution === "PARTIAL_SPLIT") {
           // Default 50/50 split
           const half = totalEscrow / 2;
+          
+          // Trigger partial Stripe refunds for each payment
+          for (const payment of contract.payments) {
+            if (payment.transactionId) {
+              try {
+                await stripe.refunds.create({
+                  payment_intent: payment.transactionId,
+                  amount: Math.round((payment.amount / 2) * 100), // 50% refund
+                });
+              } catch (stripeErr: any) {
+                 console.error(`Partial Stripe refund failed:`, stripeErr.message);
+              }
+            }
+          }
+
           await tx.payment.updateMany({
-            where: { contractId: contract.id, status: 'HELD_IN_ESCROW' },
-            data: { status: 'RELEASED', releasedAt: new Date() } // Mark as processed
+            where: { contractId: contract.id, status: "HELD_IN_ESCROW" },
+            data: { status: "RELEASED", releasedAt: new Date() },
           });
           await tx.freelancerProfile.update({
             where: { id: contract.freelancerProfileId },
-            data: { balance: { increment: half } }
+            data: { balance: { increment: half } },
           });
-          await tx.clientProfile.update({
-            where: { id: contract.project.clientProfileId },
-            data: { balance: { increment: half } }
-          });
-          // Mark milestones as APPROVED since they are considered "resolved"
-          const milestoneIds = contract.payments.map(p => p.milestoneId).filter(Boolean) as string[];
+
+          // Mark milestones as APPROVED
+          const milestoneIds = contract.payments
+            .map((p) => p.milestoneId)
+            .filter(Boolean) as string[];
           if (milestoneIds.length > 0) {
             await tx.milestone.updateMany({
               where: { id: { in: milestoneIds } },
-              data: { status: 'APPROVED', approvedAt: new Date() }
+              data: { status: "APPROVED", approvedAt: new Date() },
             });
           }
         }
       }
 
-      // ── CHECK FOR COMPLETION ──────────────────────────────────────────
-      // Fetch all milestones to see if any are left unfinished
+      // Update project/contract status
       const allMilestones = await tx.milestone.findMany({
-        where: { contractId: contract.id }
+        where: { contractId: contract?.id || "" },
       });
-      const allDone = allMilestones.every(m => ['APPROVED', 'REJECTED'].includes(m.status));
+      const allDone = allMilestones.every((m) =>
+        ["APPROVED", "REJECTED"].includes(m.status)
+      );
 
-      // Update project and contract status based on resolution and completion
-      if (resolution === 'PROJECT_CANCELLED') {
-        await tx.project.update({ where: { id: dispute.projectId }, data: { status: 'CANCELLED' } });
-        await tx.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'CANCELLED' } });
-      } else if (allDone) {
-        await tx.contract.update({ 
-          where: { projectId: dispute.projectId }, 
-          data: { status: 'COMPLETED', endDate: new Date() } 
+      if (resolution === "PROJECT_CANCELLED") {
+        await tx.project.update({
+          where: { id: dispute.projectId },
+          data: { status: "CANCELLED" },
         });
-        await tx.project.update({ 
-          where: { id: dispute.projectId }, 
-          data: { status: 'COMPLETED' } 
+        await tx.contract.update({
+          where: { projectId: dispute.projectId },
+          data: { status: "CANCELLED" },
+        });
+      } else if (allDone) {
+        await tx.contract.update({
+          where: { projectId: dispute.projectId },
+          data: { status: "COMPLETED", endDate: new Date() },
+        });
+        await tx.project.update({
+          where: { id: dispute.projectId },
+          data: { status: "COMPLETED" },
         });
       } else {
-        await tx.contract.update({ where: { projectId: dispute.projectId }, data: { status: 'ACTIVE' } });
-        await tx.project.update({ where: { id: dispute.projectId }, data: { status: 'IN_PROGRESS' } });
+        await tx.contract.update({
+          where: { projectId: dispute.projectId },
+          data: { status: "ACTIVE" },
+        });
+        await tx.project.update({
+          where: { id: dispute.projectId },
+          data: { status: "IN_PROGRESS" },
+        });
       }
+
+      // ── Notify both parties (FIXED: INSIDE TRANSACTION) ──
+      const resolutionText = resolution.replace(/_/g, " ");
+      await Promise.all([
+        createNotification({
+          userId: dispute.clientId,
+          type: "DISPUTE_RESOLVED",
+          title: "Dispute Resolved",
+          body: `Admin resolved your dispute: ${resolutionText}. ${resolutionNote || ""}`,
+          link: `/disputes/${id}`,
+        }, tx),
+        createNotification({
+          userId: dispute.freelancerId,
+          type: "DISPUTE_RESOLVED",
+          title: "Dispute Resolved",
+          body: `Admin resolved the dispute: ${resolutionText}. ${resolutionNote || ""}`,
+          link: `/disputes/${id}`,
+        }, tx),
+      ]);
 
       return disputeUpdate;
     });
@@ -461,37 +543,24 @@ export const resolveDispute = async (req: Request, res: Response) => {
       await prisma.adminLog.create({
         data: {
           adminProfileId: adminProfile.id,
-          action: 'RESOLVED_DISPUTE',
-          targetType: 'Dispute',
+          action: "RESOLVED_DISPUTE",
+          targetType: "Dispute",
           targetId: id as string,
-          note: `Resolution: ${resolution}. ${resolutionNote || ''}`,
+          note: `Resolution: ${resolution}. ${resolutionNote || ""}`,
         },
       });
     }
 
-    // Notify both parties
-    const resolutionText = resolution.replace(/_/g, ' ');
-    await Promise.all([
-      createNotification({
-        userId: dispute.clientId,
-        type: 'DISPUTE_RESOLVED',
-        title: 'Dispute Resolved',
-        body: `Admin resolved your dispute: ${resolutionText}. ${resolutionNote || ''}`,
-        link: `/disputes/${id}`,
-      }, tx),
-      createNotification({
-        userId: dispute.freelancerId,
-        type: 'DISPUTE_RESOLVED',
-        title: 'Dispute Resolved',
-        body: `Admin resolved the dispute: ${resolutionText}. ${resolutionNote || ''}`,
-        link: `/disputes/${id}`,
-      }, tx),
-    ]);
-
-    return res.json({ success: true, dispute: updated, message: 'Dispute resolved successfully' });
+    return res.json({
+      success: true,
+      dispute: updated,
+      message: "Dispute resolved successfully",
+    });
   } catch (err: any) {
-    console.error('resolveDispute error:', err);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error("resolveDispute error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
