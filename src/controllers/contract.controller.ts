@@ -753,17 +753,23 @@ function formatContract(contract: any) {
     .filter((p: any) => p.status === 'RELEASED')
     .reduce((sum: number, p: any) => sum + p.amount, 0)
   const escrowAmount = contract.payments
-    .filter((p: any) => p.status === 'HELD_IN_ESCROW')
-    .reduce((sum: number, p: any) => sum + p.amount, 0)
+    .filter((p: any) => p.status === "HELD_IN_ESCROW")
+    .reduce((sum: number, p: any) => sum + p.amount, 0);
 
-  const dispute = contract.project?.disputes?.[0]
-  const disputeInfo = dispute ? {
-    id: dispute.id,
-    status: dispute.status,
-    resolution: dispute.resolution,
-    resolutionNote: dispute.resolutionNote,
-    resolvedAt: dispute.resolvedAt
-  } : null
+  const refundedAmount = contract.payments
+    .filter((p: any) => p.status === "REFUNDED")
+    .reduce((sum: number, p: any) => sum + p.amount, 0);
+
+  const dispute = contract.project?.disputes?.[0];
+  const disputeInfo = dispute
+    ? {
+        id: dispute.id,
+        status: dispute.status,
+        resolution: dispute.resolution,
+        resolutionNote: dispute.resolutionNote,
+        resolvedAt: dispute.resolvedAt,
+      }
+    : null;
 
   return {
     id: contract.id,
@@ -774,35 +780,48 @@ function formatContract(contract: any) {
     freelancerImage: contract.freelancerProfile?.user?.profileImage,
     freelancerId: contract.freelancerProfileId,
     agreedPrice: contract.agreedPrice,
-    status: (contract.project?.status === 'DISPUTED') ? 'DISPUTED' : contract.status,
+    status:
+      contract.project?.status === "DISPUTED" ? "DISPUTED" : contract.status,
     startDate: contract.startDate,
     endDate: contract.endDate,
     milestonesModifiedByClient: contract.milestonesModifiedByClient ?? false,
     milestones: contract.milestones.map((m: any) => {
-      const history = Array.isArray(m.history) ? [...m.history] : []
-      
+      const history = Array.isArray(m.history) ? [...m.history] : [];
+
       // Inject dispute resolution into history if it exists and milestone was funded
-      if (disputeInfo && disputeInfo.status === 'RESOLVED' && ['FUNDED', 'IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED', 'APPROVED'].includes(m.status)) {
+      if (
+        disputeInfo &&
+        disputeInfo.status === "RESOLVED" &&
+        [
+          "FUNDED",
+          "IN_PROGRESS",
+          "SUBMITTED",
+          "REVISION_REQUESTED",
+          "APPROVED",
+        ].includes(m.status)
+      ) {
         history.push({
-          type: 'DISPUTE_RESOLUTION',
+          type: "DISPUTE_RESOLUTION",
           timestamp: disputeInfo.resolvedAt || new Date(),
-          content: `Admin Resolution: ${disputeInfo.resolution?.replace(/_/g, ' ')}. ${disputeInfo.resolutionNote || ''}`,
-          actorName: 'System Admin',
-          actorRole: 'ADMIN'
-        })
+          content: `Admin Resolution: ${disputeInfo.resolution?.replace(/_/g, " ")}. ${disputeInfo.resolutionNote || ""}`,
+          actorName: "System Admin",
+          actorRole: "ADMIN",
+        });
       }
 
       return {
         ...m,
-        history
-      }
+        history,
+      };
     }),
     totalMilestoneAmount,
     releasedAmount,
     escrowAmount,
-    pendingAmount: totalMilestoneAmount - releasedAmount - escrowAmount,
-    disputeInfo
-  }
+    refundedAmount,
+    pendingAmount:
+      totalMilestoneAmount - releasedAmount - escrowAmount - refundedAmount,
+    disputeInfo,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────

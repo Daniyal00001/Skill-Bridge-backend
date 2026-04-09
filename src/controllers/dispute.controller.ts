@@ -441,29 +441,47 @@ export const resolveDispute = async (req: Request, res: Response) => {
           }
         } else if (resolution === "PARTIAL_SPLIT") {
           // Default 50/50 split
-          const half = totalEscrow / 2;
-          
-          // Trigger partial Stripe refunds for each payment
+          const totalHalf = totalEscrow / 2;
+
           for (const payment of contract.payments) {
+            const halfAmount = payment.amount / 2;
             if (payment.transactionId) {
               try {
                 await stripe.refunds.create({
                   payment_intent: payment.transactionId,
-                  amount: Math.round((payment.amount / 2) * 100), // 50% refund
+                  amount: Math.round(halfAmount * 100), // 50% refund
                 });
               } catch (stripeErr: any) {
-                 console.error(`Partial Stripe refund failed:`, stripeErr.message);
+                console.error(`Partial Stripe refund failed:`, stripeErr.message);
               }
             }
+
+            // Update original payment to the RELEASED portion (freelancer gets this)
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: {
+                amount: halfAmount,
+                status: "RELEASED",
+                releasedAt: new Date(),
+              },
+            });
+
+            // Create a new record for the REFUNDED portion (client got this back)
+            await tx.payment.create({
+              data: {
+                contractId: contract.id,
+                amount: halfAmount,
+                status: "REFUNDED",
+                transactionId: payment.transactionId,
+                paidAt: payment.paidAt,
+                // milestoneId stays null for this record to avoid unique conflict
+              },
+            });
           }
 
-          await tx.payment.updateMany({
-            where: { contractId: contract.id, status: "HELD_IN_ESCROW" },
-            data: { status: "RELEASED", releasedAt: new Date() },
-          });
           await tx.freelancerProfile.update({
             where: { id: contract.freelancerProfileId },
-            data: { balance: { increment: half } },
+            data: { balance: { increment: totalHalf } },
           });
 
           // Mark milestones as APPROVED
