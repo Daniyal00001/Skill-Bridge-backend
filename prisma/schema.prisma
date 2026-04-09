@@ -303,6 +303,7 @@ model ClientProfile {
   totalHires    Int    @default(0)
   hireRate      Float?
   totalReviews  Int    @default(0)
+  totalSpent    Float  @default(0)
 
   @@map("client_profiles")
 }

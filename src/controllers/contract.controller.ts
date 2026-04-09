@@ -69,14 +69,15 @@ export const getMyContracts = async (req: Request, res: Response) => {
 
     const formatted = contracts.map(c => {
       const totalAmount = c.milestones.reduce((s, m) => s + m.amount, 0)
-      const approvedAmount = c.milestones
-        .filter(m => m.status === 'APPROVED')
-        .reduce((s, m) => s + m.amount, 0)
+      
+      const earnedAmount = c.payments
+        .filter(p => p.status === 'RELEASED')
+        .reduce((s, p) => s + p.amount, 0)
       
       const escrowAmount = c.payments
-        .filter((p: any) => p.status === 'HELD_IN_ESCROW')
-        .reduce((sum: number, p: any) => sum + p.amount, 0)
-      
+        .filter(p => p.status === 'HELD_IN_ESCROW')
+        .reduce((s, p) => s + p.amount, 0)
+     
       const progress = c.milestones.length > 0 
         ? (c.milestones.filter(m => m.status === 'APPROVED').length / c.milestones.length) * 100 
         : 0
@@ -92,7 +93,7 @@ export const getMyContracts = async (req: Request, res: Response) => {
         title: c.project.title,
         status: (c.project.status === 'DISPUTED') ? 'DISPUTED' : c.status,
         totalAmount,
-        earnedAmount: approvedAmount,
+        earnedAmount,
         escrowAmount,
         progress: Math.round(progress),
         milestonesTotal: c.milestones.length,
@@ -561,6 +562,9 @@ export const approveMilestone = async (req: Request, res: Response) => {
         where: { milestoneId, status: 'HELD_IN_ESCROW' },
         data: { status: 'RELEASED', releasedAt: new Date() }
       })
+
+      // Update client stats (Total Spent)
+      await updateClientStats(tx, contract.project.clientProfileId)
 
       // Notify freelancer
       await notificationService.createNotification({

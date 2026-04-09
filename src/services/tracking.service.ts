@@ -264,21 +264,29 @@ export async function updateClientStats(
   clientProfileId: string
 ): Promise<void> {
   try {
-    const [totalProjects, totalHires] = await Promise.all([
+    const [totalProjects, totalHires, totalSpentData] = await Promise.all([
       prisma.project.count({ where: { clientProfileId } }),
       prisma.contract.count({
         where: { project: { clientProfileId } },
       }),
+      prisma.payment.aggregate({
+        where: {
+          contract: { project: { clientProfileId } },
+          status: 'RELEASED',
+        },
+        _sum: { amount: true },
+      }),
     ]);
 
-    const hireRate =
-      totalProjects > 0 ? totalHires / totalProjects : 0;
+    const hireRate = totalProjects > 0 ? totalHires / totalProjects : 0;
+    const totalSpent = totalSpentData._sum.amount || 0;
 
     await prisma.clientProfile.update({
       where: { id: clientProfileId },
       data: {
         totalHires,
         hireRate,
+        totalSpent,
       },
     });
   } catch (err) {

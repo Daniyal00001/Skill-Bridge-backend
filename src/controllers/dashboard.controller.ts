@@ -246,10 +246,22 @@ export const getClientDashboard = async (req: Request, res: Response) => {
         ? Math.round((hiredProjectsCount / totalProjects) * 100)
         : 0;
 
-    const committedBudget = inProgressProjectsList.reduce(
-      (acc, p) => acc + (p.budget || 0),
-      0,
-    );
+    // Calculate Total Budget Spent (Escrowed + Released)
+    const clientContracts = await prisma.contract.findMany({
+      where: { project: { clientProfileId: clientId } },
+      select: { id: true },
+    });
+    const contractIds = clientContracts.map((c) => c.id);
+
+    const paymentStats = await prisma.payment.aggregate({
+      _sum: { amount: true },
+      where: {
+        contractId: { in: contractIds },
+        status: { in: ["HELD_IN_ESCROW", "RELEASED"] },
+      },
+    });
+
+    const committedBudget = paymentStats._sum.amount || 0;
     const pendingProposalsCount = await prisma.proposal.count({
       where: { project: { clientProfileId: clientId }, status: "PENDING" },
     });
