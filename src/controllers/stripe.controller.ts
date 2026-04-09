@@ -323,7 +323,7 @@ export const createSetupIntent = async (req: Request, res: Response) => {
 
     const setupIntent = await stripe.setupIntents.create({
       customer: customerId,
-      payment_method_types: ['card', 'us_bank_account'],
+      payment_method_types: ['card'],
     })
 
     return res.status(200).json({ success: true, clientSecret: setupIntent.client_secret })
@@ -353,11 +353,6 @@ export const getPaymentMethods = async (req: Request, res: Response) => {
       type: 'card',
     })
 
-    const bankAccounts = await stripe.paymentMethods.list({
-      customer: client.stripeCustomerId,
-      type: 'us_bank_account',
-    })
-
     return res.status(200).json({
       success: true,
       methods: [
@@ -368,12 +363,6 @@ export const getPaymentMethods = async (req: Request, res: Response) => {
           last4: m.card?.last4,
           expMonth: m.card?.exp_month,
           expYear: m.card?.exp_year
-        })),
-        ...bankAccounts.data.map(m => ({
-          id: m.id,
-          type: 'bank_account',
-          bankName: m.us_bank_account?.bank_name,
-          last4: m.us_bank_account?.last4
         }))
       ]
     })
