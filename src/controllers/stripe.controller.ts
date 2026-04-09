@@ -353,6 +353,20 @@ export const getPaymentMethods = async (req: Request, res: Response) => {
       type: 'card',
     })
 
+    const hasMethods = cards.data.length > 0;
+
+    const userObj = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isPaymentVerified: true }
+    });
+
+    if (userObj && userObj.isPaymentVerified !== hasMethods) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { isPaymentVerified: hasMethods }
+      });
+    }
+
     return res.status(200).json({
       success: true,
       methods: [

@@ -921,7 +921,16 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
         project: {
           include: { 
             clientProfile: {
-              include: { user: { select: { name: true, profileImage: true } } }
+              include: { 
+                user: { 
+                  select: { 
+                    name: true, 
+                    profileImage: true, 
+                    isIdVerified: true, 
+                    isPaymentVerified: true 
+                  } 
+                } 
+              }
             },
             contract: { select: { id: true, createdAt: true } } 
           }
@@ -978,9 +987,12 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
           createdAt: proposalRaw.project.clientProfile.createdAt,
           totalHires: proposalRaw.project.clientProfile.totalHires,
           hireRate: proposalRaw.project.clientProfile.hireRate,
+          totalSpent: proposalRaw.project.clientProfile.totalSpent,
           averageRating: proposalRaw.project.clientProfile.averageRating,
           totalReviews: proposalRaw.project.clientProfile.totalReviews,
           location: proposalRaw.project.clientProfile.location,
+          isIdVerified: proposalRaw.project.clientProfile.user?.isIdVerified,
+          isPaymentVerified: proposalRaw.project.clientProfile.user?.isPaymentVerified,
         }
       },
       freelancer: {

@@ -387,12 +387,14 @@ export const getAllProjects = async (req: Request, res: Response) => {
               totalReviews: true,
               createdAt: true,
               totalHires: true,
+              totalSpent: true,
               hireRate: true,
               user: {
                 select: {
                   profileImage: true,
                   name: true,
                   isIdVerified: true,
+                  isPaymentVerified: true,
                   idVerificationStatus: true,
                 }
               }
@@ -514,12 +516,14 @@ export const getProjectById = async (req: Request, res: Response) => {
             totalReviews: true, 
             createdAt: true, 
             totalHires: true, 
+            totalSpent: true,
             hireRate: true,
             user: {
               select: {
                 profileImage: true,
                 name: true,
                 isIdVerified: true,
+                isPaymentVerified: true,
                 idVerificationStatus: true,
               }
             }
