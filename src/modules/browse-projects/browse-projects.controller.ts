@@ -113,7 +113,7 @@ export const getSavedProjects = async (req: Request, res: Response) => {
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
     const projects = await getSavedService(prisma, userId);
-    return res.status(200).json(projects);
+    return res.status(200).json({ projects });
   } catch (error: any) {
     console.error("[BrowseController] GetSaved Error:", error);
     return res.status(500).json({ message: error.message || "Internal server error" });
