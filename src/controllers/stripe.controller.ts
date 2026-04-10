@@ -636,11 +636,23 @@ export const requestWithdrawal = async (req: Request, res: Response) => {
           processedAt: new Date()
         }
       })
+
+      // Provide a more helpful message for balance issues (common in test mode)
+      if (stripeError.code === 'balance_insufficient') {
+        return res.status(400).json({
+          success: false,
+          message: "Insufficient available funds in the platform's Stripe account. In Test Mode, please fund a milestone using the test card '4000 0000 0000 0077' to add funds directly to your available balance."
+        })
+      }
+
       throw stripeError
     }
 
   } catch (error: any) {
     console.error('Request withdrawal error:', error)
-    return res.status(500).json({ success: false, message: error.message || 'Withdrawal failed.' })
+    return res.status(error.status || 500).json({ 
+      success: false, 
+      message: error.message || 'Withdrawal failed.' 
+    })
   }
 }
