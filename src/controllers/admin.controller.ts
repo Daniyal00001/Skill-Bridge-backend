@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
+import { getCache, setCache, deletePatternCache } from '../utils/redis';
 
 // ─────────────────────────────────────────────────────────────
 // GET ALL SKILLS (Admin, filter by status)
@@ -7,17 +8,29 @@ import { prisma } from '../config/prisma';
 // ─────────────────────────────────────────────────────────────
 export const getAdminSkills = async (req: Request, res: Response) => {
   try {
-    const { status } = req.query;
+    const { status, page = '1', limit = '20' } = req.query;
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const take = parseInt(limit as string);
     
     // Only allow Admins to access this.
     if (req.user?.role !== 'ADMIN') {
        return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
     }
 
+    const cacheKey = `admin:skills:${status}:${page}:${limit}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return res.status(200).json({ success: true, ...cached });
+
     if (status === 'REJECTED') {
-      const rejectedSkills = await prisma.rejectedSkill.findMany({
-        orderBy: { createdAt: 'desc' }
-      });
+      const [rejectedSkills, total] = await Promise.all([
+        prisma.rejectedSkill.findMany({
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' }
+        }),
+        prisma.rejectedSkill.count()
+      ]);
+
       // Map to same structure as Skill for frontend consistency
       const skills = rejectedSkills.map(s => ({
         id: s.id,
@@ -25,7 +38,10 @@ export const getAdminSkills = async (req: Request, res: Response) => {
         status: 'REJECTED',
         createdAt: s.createdAt
       }));
-      return res.status(200).json({ success: true, skills });
+      
+      const response = { skills, total };
+      await setCache(cacheKey, response, 300);
+      return res.status(200).json({ success: true, ...response });
     }
 
     const whereClause: any = {};
@@ -33,12 +49,19 @@ export const getAdminSkills = async (req: Request, res: Response) => {
       whereClause.status = status;
     }
 
-    const skills = await prisma.skill.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' }
-    });
+    const [skills, total] = await Promise.all([
+      prisma.skill.findMany({
+        where: whereClause,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.skill.count({ where: whereClause })
+    ]);
 
-    return res.status(200).json({ success: true, skills });
+    const response = { skills, total };
+    await setCache(cacheKey, response, 300);
+    return res.status(200).json({ success: true, ...response });
   } catch (error: any) {
     console.error("Admin Get Skills Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
@@ -87,6 +110,7 @@ export const updateSkillStatus = async (req: Request, res: Response) => {
         return await tx.skill.delete({ where: { id: skillToDelete.id } });
       });
 
+      await deletePatternCache('admin:skills:*');
       return res.status(200).json({ success: true, message: `Skill rejected and moved to blocked list`, skill });
     }
 
@@ -95,6 +119,7 @@ export const updateSkillStatus = async (req: Request, res: Response) => {
       data: { status }
     });
 
+    await deletePatternCache('admin:skills:*');
     return res.status(200).json({ success: true, message: `Skill ${status.toLowerCase()} successfully`, skill });
   } catch (error: any) {
     console.error("Admin Update Skill Error:", error);
@@ -266,7 +291,13 @@ export const getAllVerifications = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
     }
 
-    const { status } = req.query;
+    const { status, page = '1', limit = '12', search, role } = req.query;
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const take = parseInt(limit as string);
+
+    const cacheKey = `admin:verifications:${status}:${role}:${search}:${page}:${limit}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return res.status(200).json({ success: true, ...cached });
 
     // Build where clause — only include users who have submitted a verification
     const where: any = {
@@ -277,21 +308,37 @@ export const getAllVerifications = async (req: Request, res: Response) => {
       where.idVerificationStatus = status;
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        idDocumentUrl: true,
-        createdAt: true,
-        updatedAt: true,
-        idVerificationStatus: true,
-        idRejectionReason: true,
-      },
-      orderBy: { updatedAt: 'desc' }
-    });
+    if (role && role !== 'ALL') {
+      where.role = role;
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string, mode: 'insensitive' } },
+      ];
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          idDocumentUrl: true,
+          createdAt: true,
+          updatedAt: true,
+          idVerificationStatus: true,
+          idRejectionReason: true,
+        },
+        orderBy: { updatedAt: 'desc' }
+      }),
+      prisma.user.count({ where })
+    ]);
 
     // Return counts per status for tab badges
     const counts = await prisma.user.groupBy({
@@ -312,7 +359,9 @@ export const getAllVerifications = async (req: Request, res: Response) => {
       statusCounts.ALL += c._count.idVerificationStatus;
     });
 
-    return res.status(200).json({ success: true, users, statusCounts });
+    const respData = { users, total, statusCounts };
+    await setCache(cacheKey, respData, 300);
+    return res.status(200).json({ success: true, ...respData });
   } catch (error: any) {
     console.error("Admin Get All Verifications Error:", error);
     return res.status(500).json({ success: false, message: "Internal server error" });
@@ -338,6 +387,12 @@ export const approveVerification = async (req: Request, res: Response) => {
         idRejectionReason: null
       }
     });
+
+    await Promise.all([
+      deletePatternCache('admin:verifications:*'),
+      // Global user cache might include verification status
+      deletePatternCache('admin:users:*')
+    ]);
 
     return res.status(200).json({ success: true, message: "User identity verified successfully", user });
   } catch (error: any) {
@@ -373,6 +428,11 @@ export const rejectVerification = async (req: Request, res: Response) => {
         idDocumentUrl: null
       }
     });
+
+    await Promise.all([
+      deletePatternCache('admin:verifications:*'),
+      deletePatternCache('admin:users:*')
+    ]);
 
     return res.status(200).json({ success: true, message: "User identity rejected", user });
   } catch (error: any) {

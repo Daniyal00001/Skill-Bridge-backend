@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
+import { getCache, setCache, deletePatternCache } from '../utils/redis';
 
 // ─────────────────────────────────────────────────────────────
 // GET ALL USERS (Admin)
@@ -12,6 +13,11 @@ export const getAllUsers = async (req: Request, res: Response) => {
     }
     const { role, search, page = '1', limit = '20', banned, startDate, endDate } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    // Protocol Cache Logic
+    const cacheKey = `admin:users:${role || 'all'}:${search || ''}:${banned || 'f'}:${startDate || ''}:${endDate || ''}:${page}:${limit}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return res.status(200).json({ success: true, ...cached });
 
     const where: any = {};
     
@@ -70,7 +76,15 @@ export const getAllUsers = async (req: Request, res: Response) => {
       prisma.user.count({ where }),
     ]);
 
-    return res.status(200).json({ success: true, users, total, page: parseInt(page as string), limit: parseInt(limit as string) });
+    const responseData = { 
+      users, 
+      total, 
+      page: parseInt(page as string), 
+      limit: parseInt(limit as string) 
+    };
+    await setCache(cacheKey, responseData, 300); // 5 minute TTL
+
+    return res.status(200).json({ success: true, ...responseData });
   } catch (error: any) {
     console.error('Admin Get All Users Error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -112,6 +126,9 @@ export const banUser = async (req: Request, res: Response) => {
       });
     }
 
+    // Invalidate user caches
+    await deletePatternCache('admin:users:*');
+
     return res.status(200).json({ success: true, user, message: ban ? 'User banned' : 'User unbanned' });
   } catch (error: any) {
     console.error('Admin Ban User Error:', error);
@@ -130,6 +147,10 @@ export const getAdminPayments = async (req: Request, res: Response) => {
     }
     const { status, page = '1', limit = '20' } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    const cacheKey = `admin:payments:${status || 'all'}:${page}:${limit}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return res.status(200).json({ success: true, ...cached });
 
     const where: any = {};
     if (status && status !== 'ALL') where.status = status;
@@ -171,7 +192,10 @@ export const getAdminPayments = async (req: Request, res: Response) => {
       if (s.status === 'REFUNDED') formattedStats.totalRefunded = s._sum.amount || 0;
     });
 
-    return res.status(200).json({ success: true, payments, total, stats: formattedStats });
+    const responseData = { payments, total, stats: formattedStats };
+    await setCache(cacheKey, responseData, 300);
+
+    return res.status(200).json({ success: true, ...responseData });
   } catch (error: any) {
     console.error('Admin Get Payments Error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -189,6 +213,10 @@ export const getAdminWithdrawals = async (req: Request, res: Response) => {
     }
     const { status, page = '1', limit = '20' } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    const cacheKey = `admin:withdrawals:${status || 'all'}:${page}:${limit}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return res.status(200).json({ success: true, ...cached });
 
     const where: any = {};
     if (status && status !== 'ALL') where.status = status;
@@ -208,7 +236,10 @@ export const getAdminWithdrawals = async (req: Request, res: Response) => {
       prisma.withdrawal.count({ where }),
     ]);
 
-    return res.status(200).json({ success: true, withdrawals, total });
+    const responseData = { withdrawals, total };
+    await setCache(cacheKey, responseData, 300);
+
+    return res.status(200).json({ success: true, ...responseData });
   } catch (error: any) {
     console.error('Admin Get Withdrawals Error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -226,6 +257,10 @@ export const getAdminLogs = async (req: Request, res: Response) => {
     }
     const { page = '1', limit = '30', targetType } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    const cacheKey = `admin:logs:${targetType || 'all'}:${page}:${limit}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return res.status(200).json({ success: true, ...cached });
 
     const where: any = {};
     if (targetType && targetType !== 'ALL') where.targetType = targetType;
@@ -245,7 +280,10 @@ export const getAdminLogs = async (req: Request, res: Response) => {
       prisma.adminLog.count({ where }),
     ]);
 
-    return res.status(200).json({ success: true, logs, total });
+    const respData = { logs, total };
+    await setCache(cacheKey, respData, 300);
+
+    return res.status(200).json({ success: true, ...respData });
   } catch (error: any) {
     console.error('Admin Get Logs Error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -262,6 +300,7 @@ export const getPlatformSettings = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
     const settings = await prisma.platformSetting.findMany({ orderBy: { key: 'asc' } });
+    
     return res.status(200).json({ success: true, settings });
   } catch (error: any) {
     console.error('Admin Get Settings Error:', error);
@@ -479,6 +518,12 @@ export const getAdminProjects = async (req: Request, res: Response) => {
     const { status, search, page = '1', limit = '20' } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
+    const cacheKey = `admin:projects:${status}:${search}:${page}:${limit}`;
+    const cachedData = await getCache<any>(cacheKey);
+    if (cachedData) {
+      return res.status(200).json({ success: true, ...cachedData });
+    }
+
     const where: any = {};
     if (status && status !== 'ALL') where.status = status;
     if (search) {
@@ -525,7 +570,10 @@ export const getAdminProjects = async (req: Request, res: Response) => {
       category: p.category,
     }));
 
-    return res.status(200).json({ success: true, projects: formatted, total });
+    const responseData = { projects: formatted, total };
+    await setCache(cacheKey, responseData, 300);
+
+    return res.status(200).json({ success: true, ...responseData });
   } catch (error: any) {
     console.error('Admin Get Projects Error:', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -564,6 +612,12 @@ export const updateProjectStatusByAdmin = async (req: Request, res: Response) =>
       });
     }
 
+    await Promise.all([
+      deletePatternCache('admin:projects:*'),
+      // Also invalidate payments if it's related
+      deletePatternCache('admin:payments:*')
+    ]);
+
     return res.status(200).json({ success: true, project, message: 'Project status updated' });
   } catch (error: any) {
     console.error('Admin Moderate Project Error:', error);
@@ -599,6 +653,8 @@ export const deleteProjectByAdmin = async (req: Request, res: Response) => {
         },
       });
     }
+
+    await deletePatternCache('admin:projects:*');
 
     return res.status(200).json({ success: true, message: 'Project permanently deleted' });
   } catch (error: any) {
