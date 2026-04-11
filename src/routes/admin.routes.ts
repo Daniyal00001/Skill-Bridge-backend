@@ -27,6 +27,9 @@ import {
   upsertPlatformSetting,
   grantTokens,
   getAdminAnalytics,
+  getAdminProjects,
+  updateProjectStatusByAdmin,
+  deleteProjectByAdmin,
 } from '../controllers/adminExtended.controller';
 import { protect } from '../middlewares/auth.middleware';
 
@@ -61,6 +64,11 @@ router.delete('/categories/:id', deleteCategory);
 router.post('/categories/:categoryId/subcategories', createSubCategory);
 router.patch('/subcategories/:id', updateSubCategory);
 router.delete('/subcategories/:id', deleteSubCategory);
+
+// ── Project Moderation ────────────────────────────────────────
+router.get('/projects', getAdminProjects);
+router.patch('/projects/:id/status', updateProjectStatusByAdmin);
+router.delete('/projects/:id', deleteProjectByAdmin);
 
 // ── Payments & Withdrawals ────────────────────────────────────
 router.get('/payments', getAdminPayments);

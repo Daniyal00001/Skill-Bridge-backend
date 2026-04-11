@@ -444,3 +444,145 @@ export const getAdminAnalytics = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
+
+// ─────────────────────────────────────────────────────────────
+// GET ALL PROJECTS (Admin)
+// GET /api/admin/projects?status=&search=&page=1
+// ─────────────────────────────────────────────────────────────
+export const getAdminProjects = async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    const { status, search, page = '1', limit = '20' } = req.query;
+    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+
+    const where: any = {};
+    if (status && status !== 'ALL') where.status = status;
+    if (search) {
+      where.OR = [
+        { title: { contains: search as string, mode: 'insensitive' } },
+        { description: { contains: search as string, mode: 'insensitive' } },
+      ];
+    }
+
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where,
+        skip,
+        take: parseInt(limit as string),
+        orderBy: { createdAt: 'desc' },
+        include: {
+          clientProfile: {
+            include: { user: { select: { id: true, name: true, email: true } } },
+          },
+          category: { select: { name: true } },
+          _count: { select: { proposals: true } },
+        },
+      }),
+      prisma.project.count({ where }),
+    ]);
+
+    // Format for frontend
+    const formatted = projects.map(p => ({
+      id: p.id,
+      title: p.title,
+      status: p.status,
+      budget: p.budget,
+      budgetType: p.budgetType,
+      size: p.size,
+      proposalCount: p._count.proposals,
+      createdAt: p.createdAt,
+      clientProfile: {
+        user: { 
+          id: p.clientProfile.user.id, // helpful for linking
+          name: p.clientProfile.user.name, 
+          email: p.clientProfile.user.email 
+        }
+      },
+      category: p.category,
+    }));
+
+    return res.status(200).json({ success: true, projects: formatted, total });
+  } catch (error: any) {
+    console.error('Admin Get Projects Error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// UPDATE PROJECT STATUS (Moderation)
+// PATCH /api/admin/projects/:id/status
+// ─────────────────────────────────────────────────────────────
+export const updateProjectStatusByAdmin = async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    const { id } = req.params;
+    const { status, note } = req.body;
+
+    const project = await prisma.project.update({
+      where: { id },
+      data: { status },
+      include: { clientProfile: { select: { userId: true } } }
+    });
+
+    // Log the action
+    const adminProfile = await prisma.adminProfile.findUnique({ where: { userId: req.user.userId } });
+    if (adminProfile) {
+      await prisma.adminLog.create({
+        data: {
+          adminProfileId: adminProfile.id,
+          action: 'MODERATED_PROJECT',
+          targetType: 'Project',
+          targetId: id,
+          note: `Status changed to ${status}. ${note || ''}`,
+        },
+      });
+    }
+
+    return res.status(200).json({ success: true, project, message: 'Project status updated' });
+  } catch (error: any) {
+    console.error('Admin Moderate Project Error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// PERMANENTLY DELETE PROJECT (Moderation)
+// DELETE /api/admin/projects/:id
+// ─────────────────────────────────────────────────────────────
+export const deleteProjectByAdmin = async (req: Request, res: Response) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+    const { id } = req.params;
+
+    const project = await prisma.project.delete({
+      where: { id },
+    });
+
+    // Log the action
+    const adminProfile = await prisma.adminProfile.findUnique({ where: { userId: req.user.userId } });
+    if (adminProfile) {
+      await prisma.adminLog.create({
+        data: {
+          adminProfileId: adminProfile.id,
+          action: 'DELETED_PROJECT',
+          targetType: 'Project',
+          targetId: id,
+          note: `Project '${project.title}' permanently deleted.`,
+        },
+      });
+    }
+
+    return res.status(200).json({ success: true, message: 'Project permanently deleted' });
+  } catch (error: any) {
+    console.error('Admin Delete Project Error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+
