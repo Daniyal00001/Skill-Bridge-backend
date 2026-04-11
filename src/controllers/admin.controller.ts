@@ -204,6 +204,8 @@ export const getAdminUserProfile = async (req: Request, res: Response) => {
         isIdVerified: user.isIdVerified,
         isPhoneVerified: user.isPhoneVerified,
         isPaymentVerified: user.isPaymentVerified,
+        isBanned: user.isBanned,
+        banReason: user.banReason,
         lastActiveAt: user.lastActiveAt,
         clientProfile: user.clientProfile,
         freelancerProfile: user.freelancerProfile,
