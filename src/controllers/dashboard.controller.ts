@@ -391,8 +391,8 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
             in: ["IN_PROGRESS", "SUBMITTED", "REVISION_REQUESTED", "APPROVED"],
           },
           contract: {
-            status: { in: ["ACTIVE", "DISPUTED"] }
-          }
+            status: { in: ["ACTIVE", "DISPUTED"] },
+          },
         },
         take: 5,
         orderBy: { dueDate: "asc" },
