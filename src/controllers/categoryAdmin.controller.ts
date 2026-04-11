@@ -33,12 +33,26 @@ export const createCategory = async (req: Request, res: Response) => {
     if (req.user?.role !== 'ADMIN') {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
-    const { name, slug, icon } = req.body;
+    const { name, slug, icon, subCategoryName, subCategorySlug } = req.body;
     if (!name || !slug) {
-      return res.status(400).json({ success: false, message: 'Name and slug are required' });
+      return res.status(400).json({ success: false, message: 'Category Name and slug are required' });
     }
+    if (!subCategoryName || !subCategorySlug) {
+      return res.status(400).json({ success: false, message: 'At least one sub-category is required' });
+    }
+
     const category = await prisma.category.create({
-      data: { name: name.trim(), slug: slug.trim().toLowerCase(), icon },
+      data: { 
+        name: name.trim(), 
+        slug: slug.trim().toLowerCase(), 
+        icon,
+        subCategories: {
+          create: {
+            name: subCategoryName.trim(),
+            slug: subCategorySlug.trim().toLowerCase()
+          }
+        }
+      },
       include: { subCategories: true, _count: { select: { projects: true, subCategories: true } } },
     });
     return res.status(201).json({ success: true, category });
