@@ -10,13 +10,26 @@ export const getAdminSkills = async (req: Request, res: Response) => {
     const { status } = req.query;
     
     // Only allow Admins to access this.
-    // Assuming req.user exists and has a role. If not, protect this via middleware.
     if (req.user?.role !== 'ADMIN') {
        return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
     }
 
+    if (status === 'REJECTED') {
+      const rejectedSkills = await prisma.rejectedSkill.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+      // Map to same structure as Skill for frontend consistency
+      const skills = rejectedSkills.map(s => ({
+        id: s.id,
+        name: s.name,
+        status: 'REJECTED',
+        createdAt: s.createdAt
+      }));
+      return res.status(200).json({ success: true, skills });
+    }
+
     const whereClause: any = {};
-    if (status) {
+    if (status && status !== 'ALL') {
       whereClause.status = status;
     }
 
