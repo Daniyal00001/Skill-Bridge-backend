@@ -22,6 +22,20 @@ import {
 import { scoreFreelancer } from "./browseFreelancers.scoring";
 import redis from "../../config/redis";
 
+// ── LEVEL COMPUTATION (mirrors frontend levelUtils.ts) ───────────
+function computeFreelancerLevel(
+  earnings: number,
+  clients: number,
+  projects: number,
+  rating: number,
+): string {
+  if (earnings >= 5000 && projects >= 30 && rating >= 4.5) return "expert";
+  if (earnings >= 2000 && projects >= 15 && rating >= 4) return "senior";
+  if (earnings >= 500 && clients >= 5 && projects >= 10) return "intermediate";
+  if (earnings >= 100 && clients >= 3) return "beginner";
+  return "entry";
+}
+
 // ── MAIN ENTRY POINT ─────────────────────────────────────────────
 export async function getBrowseFreelancersFeed(
   prisma: PrismaClient,
@@ -58,6 +72,19 @@ export async function getBrowseFreelancersFeed(
     ...f,
     ...scoreFreelancer(f, client),
   }));
+
+  // 5b. Apply level filter if specified (post-score, since level is computed)
+  if (filters.level) {
+    scored = scored.filter((f) => {
+      const level = computeFreelancerLevel(
+        0, // totalEarnings not in browse (use 0 — level filter based on available fields)
+        f.totalReviews ?? 0,
+        f.completedContracts ?? 0,
+        f.averageRating ?? 0,
+      );
+      return level === filters.level;
+    });
+  }
 
   // 6. Sort
   scored = applySorting(scored, sort);

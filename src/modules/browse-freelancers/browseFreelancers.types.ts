@@ -100,6 +100,7 @@ export interface FreelancerBrowseFilters {
   hasPortfolio?: boolean;
   isVerified?: boolean;
   categorySlug?: string;
+  level?: "entry" | "beginner" | "intermediate" | "senior" | "expert";
 }
 
 // Sort options

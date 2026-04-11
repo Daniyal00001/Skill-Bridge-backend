@@ -96,6 +96,7 @@ export const browseFreelancers = async (
       hasPortfolio: req.query.hasPortfolio === "true" ? true : undefined,
       isVerified: req.query.isIdVerified === "true" ? true : undefined,
       categorySlug: req.query.category as string | undefined,
+      level: req.query.level as string | undefined,
     };
 
     const cursor = req.query.cursor as string | undefined;
