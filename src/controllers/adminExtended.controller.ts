@@ -10,11 +10,33 @@ export const getAllUsers = async (req: Request, res: Response) => {
     if (req.user?.role !== 'ADMIN') {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
-    const { role, search, page = '1', limit = '20', banned } = req.query;
+    const { role, search, page = '1', limit = '20', banned, startDate, endDate } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
     const where: any = {};
-    if (role && role !== 'ALL') where.role = role;
+    
+    // Role filtering (Exclude admins by default)
+    if (role && role !== 'ALL') {
+      where.role = role;
+    } else {
+      where.role = { not: 'ADMIN' };
+    }
+
+    // Date range filtering
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        const start = new Date(startDate as string);
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate as string);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
+    }
+
     if (banned === 'true') where.isBanned = true;
     if (search) {
       where.OR = [
