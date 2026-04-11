@@ -195,6 +195,7 @@ export const getAdminUserProfile = async (req: Request, res: Response) => {
         clientProfile: user.clientProfile,
         freelancerProfile: user.freelancerProfile,
         reviews: user.reviewsReceived,
+        _count: user._count,
         disputeHistory: [...user.disputesAsClient, ...user.disputesAsFreelancer].sort((a, b) => 
           new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime()
         )
