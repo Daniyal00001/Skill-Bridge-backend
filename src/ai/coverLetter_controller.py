@@ -82,7 +82,7 @@ MISSION: Output ONLY the localized, persuasive letter.
         result_raw = await llm.call([
             {"role": "system", "content": "You are a senior AI writing assistant specialized in generating high-quality cover letters."},
             {"role": "user", "content": prompt}
-        ])
+        ], task="cover_letter")
 
         # 4. Clean and format for frontend
         result = result_raw.strip()

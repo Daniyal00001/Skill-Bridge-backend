@@ -42,7 +42,7 @@ User message:
 {message}
 """
 
-        raw = await self.llm.call([{"role": "user", "content": prompt}])
+        raw = await self.llm.call([{"role": "user", "content": prompt}], task="conversation")
         cleaned = re.sub(r"```json|```", "", raw, flags=re.IGNORECASE).strip()
 
         try:

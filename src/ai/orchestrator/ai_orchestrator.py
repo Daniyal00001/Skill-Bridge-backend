@@ -265,7 +265,7 @@ Consider 'true' if:
 2. The user has provided enough basic info (Goal + Budget) and seems ready for the next step.
 
 RETURN ONLY: true OR false"""
-            result = await self.llm.call([{"role": "user", "content": prompt}])
+            result = await self.llm.call([{"role": "user", "content": prompt}], task="intent")
             decision = "true" in result.strip().lower()
             if decision: print("💡 LLM detected intent to match.")
             return decision

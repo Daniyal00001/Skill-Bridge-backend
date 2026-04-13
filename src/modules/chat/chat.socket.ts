@@ -12,6 +12,7 @@ import {
 } from "./chat.service";
 import { MessageWithSender } from "./chat.service";
 import * as notificationService from "../../services/notification.service";
+import { checkContentModeration } from "../../utils/moderation";
 
 // Track online users: userId → Set of socketIds
 const onlineUsers = new Map<string, Set<string>>();
@@ -157,6 +158,25 @@ export const initChatSocket = (
           return socket.emit("error", {
             message: "Message is too long (max 2000 characters)",
           });
+        }
+
+        // 3. Content Moderation (AI/Pattern based — passes roomId for full blocking)
+        const modResult = await checkContentModeration(userId, data.content, data.roomId);
+        if (modResult.hasViolation) {
+          // Emit warning/block to sender
+          socket.emit(modResult.isAccountBlocked ? "message_blocked" : "moderation_warning", {
+            message: modResult.message,
+            violationType: modResult.violationType,
+            isBlocked: modResult.isAccountBlocked,
+          });
+
+          // If warn (not block), still save the sanitized version
+          if (!modResult.isAccountBlocked && modResult.sanitizedMessage) {
+            data.content = modResult.sanitizedMessage;
+            // Fall through to save the sanitized message
+          } else {
+            return; // Block — don't save anything
+          }
         }
 
         try {

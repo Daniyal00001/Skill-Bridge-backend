@@ -29,7 +29,7 @@ class Database:
             # Resolve DB name from URI or use default
             db_name = DATABASE_URL.split("/")[-1].split("?")[0] or "skillbridge"
             cls._db = cls._client[db_name]
-            print(f"📦 Connected to MongoDB: {db_name}")
+            print(f"[DB] Connected to MongoDB: {db_name}")
 
     @classmethod
     async def get_db(cls):

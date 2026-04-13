@@ -26,7 +26,7 @@ class ConversationService:
         # 1.5 Generate Title if first message
         if not session.get("title") or session.get("title") == "New Chat":
             title_prompt = f"Summarize this project request into a 3-4 word title. Respond with ONLY the title. Request: {user_message}"
-            title = await self.llm.call([{"role": "user", "content": title_prompt}])
+            title = await self.llm.call([{"role": "user", "content": title_prompt}], task="title")
             session["title"] = title.strip().strip('"').strip("'")
             print(f"📝 Title generated: {session['title']}")
 
@@ -50,7 +50,7 @@ class ConversationService:
         messages.append({"role": "user", "content": user_message})
 
         # 5. LLM call
-        reply = await self.llm.call(messages)
+        reply = await self.llm.call(messages, task="conversation")
 
         # 6. Save history
         history.append({"role": "user", "content": user_message})
@@ -85,7 +85,7 @@ RETURN STRICT JSON ONLY:
   "primaryGoal": "..."
 }}
 """
-            result = await self.llm.call([{"role": "user", "content": prompt}])
+            result = await self.llm.call([{"role": "user", "content": prompt}], task="persona")
             cleaned = re.sub(r"```json|```", "", result, flags=re.IGNORECASE).strip()
             persona = json.loads(cleaned)
             return persona

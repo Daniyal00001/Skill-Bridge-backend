@@ -73,6 +73,7 @@ class AssistantRequest(BaseModel):
     clientId: Optional[str] = None
     freelancerResponses: Optional[List[FreelancerResponse]] = []
     selectedFreelancerId: Optional[str] = None
+    attachments: Optional[List[str]] = []
 
 
 class AssistantResponse(BaseModel):
@@ -99,13 +100,11 @@ class ModerationRequest(BaseModel):
 @router.post("/moderate")
 async def moderate_message(body: ModerationRequest):
     """
-    Analyzes a message for off-platform communication attempts.
+    Lightweight moderation — analyzes a message for off-platform communication.
     Returns: violation (bool), severity, sanitized_message, etc.
     """
     try:
-        llm = LLMService()
-        mod_svc = ModerationService(llm)
-        result = await mod_svc.moderate(
+        result = await moderation_service.moderate(
             message=body.message,
             contract_status=body.contractStatus,
             user_violation_count=body.violationCount
@@ -116,7 +115,61 @@ async def moderate_message(body: ModerationRequest):
         }
     except Exception as e:
         print(f"❌ Moderation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "success": False,
+            "result": {
+                "violation": False,
+                "severity": "low",
+                "suggested_action": "allow",
+                "reason": "Moderation service error fallback"
+            }
+        }
+
+
+# ── Feature: Full Blocking Pipeline (used by Node.js socket) ──
+class BlockingCheckRequest(BaseModel):
+    message: str
+    senderId: str
+    roomId: str
+    contractStatus: Optional[str] = "NONE"
+
+@router.post("/moderate/check")
+async def blocking_check(body: BlockingCheckRequest):
+    """
+    Full blocking pipeline — checks message, logs violations to DB,
+    injects system messages into chat room, blocks repeat offenders.
+    Called by the Node.js chat socket before saving any message.
+    """
+    try:
+        from moderation.blocking_service import BlockingService
+
+        db = await Database.get_db()
+        llm = LLMService()
+        blocking_svc = BlockingService(llm)
+
+        result = await blocking_svc.check_message(
+            db=db,
+            message=body.message,
+            sender_id=body.senderId,
+            room_id=body.roomId,
+            contract_status=body.contractStatus,
+        )
+        return result
+
+    except Exception as e:
+        import traceback
+        print(f"❌ BlockingService error:\n{traceback.format_exc()}")
+        # Fail-open: allow message if blocking service errors
+        return {
+            "action": "allow",
+            "message": body.message,
+            "sanitizedMessage": None,
+            "violationCount": 0,
+            "isBlocked": False,
+            "severity": None,
+            "confidence": None,
+            "reason": None,
+        }
 
 
 # ── Route ─────────────────────────────────────────────────────
@@ -134,19 +187,20 @@ async def handle_assistant_message(body: AssistantRequest):
         
         if mod_result.violation and mod_result.suggested_action in ["block", "warn"]:
             return AssistantResponse(
-                success=False,
                 reply="⚠️ Sharing personal contact information (emails, phone numbers, or external links) is not allowed on SkillBridge. Your message has been flagged for review.",
-                stage="UNDERSTAND"
+                stage="UNDERSTAND",
+                sessionId=body.sessionId or "new_session"
             )
 
         result: AgentOutput = await orchestrator.run(
             AgentInput(
                 sessionId=body.sessionId or "",
-                message=body.message,
                 clientName=body.clientName or "Client",
                 clientId=body.clientId,
                 freelancerResponses=body.freelancerResponses or [],
                 selectedFreelancerId=body.selectedFreelancerId,
+                # Add support for file processing here if needed
+                message=f"{body.message} [ATTACHMENTS: {', '.join(body.attachments)}]" if body.attachments else body.message
             )
         )
 
