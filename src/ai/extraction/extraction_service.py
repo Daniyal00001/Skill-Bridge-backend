@@ -82,7 +82,7 @@ class ExtractionService:
     ) -> Dict[str, Any]:
         prompt = build_extraction_prompt(session, available_skills)
         messages = [{"role": "user", "content": prompt}]
-        raw = await self.llm.call(messages)
+        raw = await self.llm.call(messages, task="extraction")
 
         fallback = ProjectRequirements().dict()
         return self._parse_json(raw, fallback)
@@ -90,7 +90,7 @@ class ExtractionService:
     async def _check_completeness(self, session: Dict[str, Any]) -> CompletenessCheck:
         prompt = build_extraction_check_prompt(session)
         messages = [{"role": "user", "content": prompt}]
-        raw = await self.llm.call(messages)
+        raw = await self.llm.call(messages, task="extraction")
 
         fallback = {"isComplete": False, "missingFields": [], "confidence": 0}
         parsed = self._parse_json(raw, fallback)

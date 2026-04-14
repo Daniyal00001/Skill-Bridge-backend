@@ -82,9 +82,8 @@ ELSE:
 IF severity = "LOW": → suggested_action = "allow"
 IF severity = "MEDIUM": → suggested_action = "warn"
 IF severity = "HIGH":
-  IF user_violation_count < 2: → suggested_action = "warn"
-  ELSE IF user_violation_count < 5: → suggested_action = "block"
-  ELSE: → suggested_action = "restrict"
+  IF user_violation_count < 1: → suggested_action = "warn"
+  ELSE: → suggested_action = "block"
 
 ---
 

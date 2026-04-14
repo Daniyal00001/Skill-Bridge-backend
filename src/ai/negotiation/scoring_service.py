@@ -37,7 +37,7 @@ class ScoringService:
         }}
         """
         
-        raw = await self.llm.call([{"role": "user", "content": prompt}])
+        raw = await self.llm.call([{"role": "user", "content": prompt}], task="scoring")
         try:
             # Clean JSON from markdown if present
             cleaned = re.sub(r"```json|```", "", raw, flags=re.IGNORECASE).strip()

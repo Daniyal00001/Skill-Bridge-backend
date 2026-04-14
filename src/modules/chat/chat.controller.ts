@@ -121,11 +121,14 @@ export const uploadAttachment = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'No files provided' })
     }
 
-    const belongs = await doesRoomBelongToUser(roomId, userId)
-    if (!belongs) return res.status(403).json({ success: false, message: 'Access denied' })
+    const isTemp = roomId === 'temp'
+    if (!isTemp) {
+      const belongs = await doesRoomBelongToUser(roomId, userId)
+      if (!belongs) return res.status(403).json({ success: false, message: 'Access denied' })
 
-    const restricted = await isUserRestricted(roomId, userId)
-    if (restricted) return res.status(403).json({ success: false, message: 'You have been restricted from this chat.' })
+      const restricted = await isUserRestricted(roomId, userId)
+      if (restricted) return res.status(403).json({ success: false, message: 'You have been restricted from this chat.' })
+    }
 
     const savedMessages = []
     for (const file of files) {
@@ -136,6 +139,13 @@ export const uploadAttachment = async (req: Request, res: Response) => {
       else resourceType = 'raw'
 
       const fileUrl = await uploadToCloudinary(file.buffer, file.originalname, file.mimetype)
+      
+      if (isTemp) {
+        // Just return the URL for temp uploads (AI Assistant)
+        savedMessages.push({ fileUrl, originalname: file.originalname })
+        continue
+      }
+
       const content = file.originalname // use filename as content for FILE type messages
 
       const message = await saveMessage({

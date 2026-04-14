@@ -16,6 +16,12 @@ from negotiation.negotiation_prompt import (
     build_negotiation_reply_prompt,
     build_negotiation_analysis_prompt,
 )
+from negotiation.negotiation_state import (
+    NegotiationState,
+    NegotiationStatus,
+    NegotiationResult,
+)
+
 
 class NegotiationService:
     def __init__(self, llm_service, session_service):
@@ -28,74 +34,69 @@ class NegotiationService:
         freelancer_responses: Optional[List[Any]] = None,
         selected_freelancer_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Handles the negotiation flow. Now integrates with real DB.
-        """
         db = await Database.get_db()
         matches: List[Dict[str, Any]] = session.get("matches") or []
 
         if not matches:
-            return {
-                "reply": "No freelancers to negotiate with.",
-                "results": [],
-            }
+            return {"reply": "No freelancers to negotiate with.", "results": []}
 
-        negotiation_state = session.get("negotiationState") or {}
-        current_round = negotiation_state.get("round", 0)
+        # ── Load State ────────────────────────────────────────
+        state = NegotiationState.from_dict(session.get("negotiationState") or {})
 
-        # ── 1. Outreach (Starting the conversation) ──────────────────
-        if not negotiation_state or current_round == 0:
-            return await self._start_outreach(db, session, matches, selected_freelancer_id)
+        # ── 1. Outreach ───────────────────────────────────────
+        if state.round == 0:
+            return await self._start_outreach(db, session, matches, state, selected_freelancer_id)
 
-        # ── 2. Handle Responses (Autopilot) ───────────────────────────
+        # ── 2. Handle Responses ───────────────────────────────
         if freelancer_responses:
-            return await self._handle_responses(db, session, freelancer_responses)
+            return await self._handle_responses(db, session, freelancer_responses, state)
 
         return {
             "reply": "Waiting for freelancer response...",
-            "results": negotiation_state.get("results", []),
+            "results": [r.__dict__ for r in state.results],
         }
 
+    # ─────────────────────────────────────────────────────────
+    # OUTREACH
+    # ─────────────────────────────────────────────────────────
     async def _start_outreach(
         self,
         db,
         session: Dict[str, Any],
         matches: List[Dict[str, Any]],
+        state: NegotiationState,
         selected_freelancer_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Creates a real ChatRoom and sends the first message.
-        """
+
+        # Pick target freelancer
         if selected_freelancer_id:
-            selected = next((m for m in matches if m["id"] == selected_freelancer_id), None)
-            target = selected if selected else matches[0]
+            target = next((m for m in matches if m["id"] == selected_freelancer_id), matches[0])
         else:
             target = matches[0]
 
-        # 1. Create or Find ChatRoom in DB
+        # Find client profile
         client_id = session.get("clientId")
-        # Find clientProfileId from userId
         client_profile = await db.client_profiles.find_one({"userId": ObjectId(client_id)})
         if not client_profile:
-             return {"reply": "Client profile not found. Please complete your profile.", "results": []}
+            return {"reply": "Client profile not found. Please complete your profile.", "results": []}
 
-        # freelancer_id in target is likely the freelancerProfileId
         freelancer_profile_id = target["id"]
 
+        # Create or find ChatRoom
         room = await db.chat_rooms.find_one({
             "clientProfileId": client_profile["_id"],
-            "freelancerProfileId": ObjectId(freelancer_profile_id)
+            "freelancerProfileId": ObjectId(freelancer_profile_id),
         })
 
         if not room:
             room_data = {
-                "clientProfileId": client_profile["_id"],
+                "clientProfileId":    client_profile["_id"],
                 "freelancerProfileId": ObjectId(freelancer_profile_id),
-                "projectId": ObjectId(session.get("project", {}).get("id")) if session.get("project", {}).get("id") else None,
-                "isActiveAI": True,
-                "createdAt": datetime.now(),
-                "clientDeleted": False,
-                "freelancerDeleted": False
+                "projectId":          ObjectId(session.get("project", {}).get("id")) if session.get("project", {}).get("id") else None,
+                "isActiveAI":         True,
+                "createdAt":          datetime.now(),
+                "clientDeleted":      False,
+                "freelancerDeleted":  False,
             }
             res = await db.chat_rooms.insert_one(room_data)
             room_id = str(res.inserted_id)
@@ -103,158 +104,247 @@ class NegotiationService:
             room_id = str(room["_id"])
             await db.chat_rooms.update_one({"_id": room["_id"]}, {"$set": {"isActiveAI": True}})
 
-        # 2. Generate Outreach
+        # Generate outreach message
         prompt = build_negotiation_outreach_prompt(session, target)
-        message_content = await self.llm.call([{"role": "user", "content": prompt}])
+        message_content = await self.llm.call([{"role": "user", "content": prompt}], task="outreach")
 
-        # 3. Save as Real Message
-        msg_data = {
+        # Save message to DB
+        await db.messages.insert_one({
             "chatRoomId": ObjectId(room_id),
-            "senderId": ObjectId(client_id), # Representing the client
-            "content": message_content,
-            "type": "TEXT",
-            "isRead": False,
+            "senderId":   ObjectId(client_id),
+            "content":    message_content,
+            "type":       "TEXT",
+            "isRead":     False,
             "isAiMessage": True,
-            "sentAt": datetime.now()
-        }
-        await db.messages.insert_one(msg_data)
+            "sentAt":     datetime.now(),
+        })
 
-        results = [{
-            "freelancerId": freelancer_profile_id,
-            "freelancerName": target["name"],
-            "status": "PENDING",
-            "notes": message_content,
-        }]
+        # Update state
+        state.round  = 1
+        state.roomId = room_id
+        state.results = [
+            NegotiationResult(
+                freelancerId=   freelancer_profile_id,
+                freelancerName= target["name"],
+                status=         NegotiationStatus.PENDING,
+                notes=          message_content,
+            )
+        ]
 
-        # Save session state
+        # Save session
         updated_session = {
             **session,
-            "stage": AgentStage.NEGOTIATE,
-            "negotiationState": {
-                "responses": [],
-                "results": results,
-                "round": 1,
-                "roomId": room_id
-            },
+            "stage":            AgentStage.NEGOTIATE,
+            "negotiationState": state.to_dict(),
         }
         await self.session_service.save(updated_session)
 
         return {
-            "reply": f"Outreach sent to **{target['name']}**! Redirecting you to chat...",
-            "results": results,
-            "chatRoomId": room_id
+            "reply":      f"Outreach sent to **{target['name']}**! Redirecting you to chat...",
+            "results":    [r.__dict__ for r in state.results],
+            "chatRoomId": room_id,
         }
 
+    # ─────────────────────────────────────────────────────────
+    # HANDLE RESPONSES
+    # ─────────────────────────────────────────────────────────
     async def _handle_responses(
         self,
         db,
         session: Dict[str, Any],
         freelancer_responses: List[Any],
+        state: NegotiationState,
     ) -> Dict[str, Any]:
-        """
-        Handles real-time freelancer replies triggered by socket.
-        """
-        results: List[Dict[str, Any]] = []
-        messages_to_db: List[Dict[str, Any]] = []
+
+        # Check round expiry
+        if state.is_expired():
+            return {
+                "reply":   "Maximum negotiation rounds reached. Please check with your client for final approval.",
+                "results": [r.__dict__ for r in state.results],
+            }
+
+        budget_max  = session.get("project", {}).get("budgetMax", 0)
+        client_id   = session.get("clientId")
+        next_stage  = AgentStage.NEGOTIATE
+        results     = []
 
         for resp in freelancer_responses:
             freelancer_id = resp.freelancerId
-            reply_text = resp.replyText
-            room_id = session.get("negotiationState", {}).get("roomId")
+            reply_text    = resp.replyText
+            room_id       = state.roomId
 
-            if not room_id: continue
+            if not room_id:
+                continue
 
-            # 1. High-Precision Analysis via LLM
-            analysis_prompt = build_negotiation_analysis_prompt(reply_text, session.get("project", {}).get("budgetMax", 0))
-            analysis_raw = await self.llm.call([{"role": "user", "content": analysis_prompt}])
-            analysis = self._parse_json(analysis_raw, {"status": "QUESTIONS", "proposedPrice": None})
-            
-            # 2. Logic-Driven Decision
-            budget_max = session.get("project", {}).get("budgetMax", 0)
-            proposed_price = analysis.get("proposedPrice")
-            status = analysis.get("status")
+            # 1. Analyze reply
+            analysis_prompt = build_negotiation_analysis_prompt(reply_text, budget_max)
+            analysis_raw    = await self.llm.call([{"role": "user", "content": analysis_prompt}], task="analysis")
+            analysis        = self._parse_json(analysis_raw, {"status": "QUESTIONS", "proposedPrice": None})
 
+            proposed_price    = analysis.get("proposedPrice")
+            status            = analysis.get("status")
             is_deal_confirmed = (status == "ACCEPTED") or self._detect_deal_close(reply_text)
-            ai_reply = ""
-            next_stage = AgentStage.NEGOTIATE
+            ai_reply          = ""
 
-            # Logic: If price is mentioned, we apply the 10-20% rules
+            # 2. Price-based negotiation logic
             if proposed_price:
                 if proposed_price <= budget_max:
-                    # Within budget -> Try to close or confirm
-                    ai_reply = f"That sounds perfect. Your quote of ${proposed_price} works for the budget. Let's move forward with this!"
+                    ai_reply          = f"That sounds perfect. Your quote of ${proposed_price} works for the budget. Let's move forward!"
                     is_deal_confirmed = True
+
                 elif proposed_price <= budget_max * 1.2:
-                    # 10-20% over -> Counter convincingly
-                    counter = budget_max
-                    ai_reply = f"I appreciate the proposal. While ${proposed_price} is slightly above our target of ${budget_max}, we're prepared to move forward immediately at ${budget_max}. Given the well-defined scope and the potential for a long-term partnership with 5-star feedback, would this work for you?"
+                    ai_reply = (
+                        f"I appreciate the proposal. While ${proposed_price} is slightly above our target of "
+                        f"${budget_max}, we're prepared to move forward immediately at ${budget_max}. "
+                        f"Given the well-defined scope and potential for a long-term partnership with 5-star "
+                        f"feedback, would this work for you?"
+                    )
                     is_deal_confirmed = False
+
                 else:
-                    # > 20% over -> Polite decline/negotiate harder
-                    ai_reply = f"Thank you for the quote. However, ${proposed_price} is significantly outside our established budget of ${budget_max}. We have a very clear project scope and are looking for a partner who can work within these constraints. Are you able to revise your quote, or should we explore other candidates?"
+                    ai_reply = (
+                        f"Thank you for the quote. However, ${proposed_price} is significantly outside our "
+                        f"budget of ${budget_max}. We have a very clear project scope — are you able to "
+                        f"revise your quote, or should we explore other candidates?"
+                    )
                     is_deal_confirmed = False
+
             else:
-                # No price mentioned -> Standard AI reply
+                # No price mentioned
                 if is_deal_confirmed:
                     ai_reply = "Great! I've confirmed our agreement. I'll prepare the contract for you now."
                 else:
-                    matches = session.get("matches") or []
+                    matches    = session.get("matches") or []
                     freelancer = next((m for m in matches if m["id"] == freelancer_id), matches[0])
-                    reply_prompt = build_negotiation_reply_prompt(session, freelancer, reply_text)
-                    ai_reply = await self.llm.call([{"role": "user", "content": reply_prompt}])
 
+                    # Check if last round
+                    if state.is_expired():
+                        ai_reply = "I'll need to check with the client for final approval on this. I'll get back to you shortly."
+                    else:
+                        reply_prompt = build_negotiation_reply_prompt(session, freelancer, reply_text)
+                        ai_reply     = await self.llm.call([{"role": "user", "content": reply_prompt}], task="negotiation")
+
+            # 3. Handle deal close
             if is_deal_confirmed:
                 next_stage = AgentStage.CONTRACT
-                await db.chat_rooms.update_one({"_id": ObjectId(room_id)}, {"$set": {"isActiveAI": False}})
+                await db.chat_rooms.update_one(
+                    {"_id": ObjectId(room_id)},
+                    {"$set": {"isActiveAI": False}}
+                )
+                try:
+                    await self._create_contract_in_db(db, session, freelancer_id, proposed_price or budget_max, room_id)
+                except Exception as e:
+                    print(f"❌ Failed to create contract: {e}")
 
-            # 3. Save AI Message to DB
-            client_id = session.get("clientId")
-            msg_data = {
-                "chatRoomId": ObjectId(room_id),
-                "senderId": ObjectId(client_id),
-                "content": ai_reply,
-                "type": "TEXT",
-                "isRead": False,
+            # 4. Save AI message to DB
+            await db.messages.insert_one({
+                "chatRoomId":  ObjectId(room_id),
+                "senderId":    ObjectId(client_id),
+                "content":     ai_reply,
+                "type":        "TEXT",
+                "isRead":      False,
                 "isAiMessage": True,
-                "sentAt": datetime.now()
-            }
-            await db.messages.insert_one(msg_data)
-            
-            results.append({
-                "freelancerId": freelancer_id,
-                "freelancerName": next((m["name"] for m in session.get("matches", []) if m["id"] == freelancer_id), "Freelancer"),
-                "status": "ACCEPTED" if is_deal_confirmed else "PENDING",
-                "aiReply": ai_reply,
-                "proposedPrice": proposed_price
+                "sentAt":      datetime.now(),
             })
 
-        # Update session
+            # 5. Build result
+            result = NegotiationResult(
+                freelancerId=   freelancer_id,
+                freelancerName= next((m["name"] for m in session.get("matches", []) if m["id"] == freelancer_id), "Freelancer"),
+                status=         NegotiationStatus.ACCEPTED if is_deal_confirmed else NegotiationStatus(status or "PENDING"),
+                aiReply=        ai_reply,
+                proposedPrice=  proposed_price,
+            )
+            results.append(result)
+
+        # ── Advance State ─────────────────────────────────────
+        state.next_round()
+        state.results = results
+
         updated_session = {
             **session,
-            "stage": next_stage,
-            "negotiationState": {
-                **session.get("negotiationState", {}),
-                "round": session.get("negotiationState", {}).get("round", 1) + 1,
-                "results": results
-            }
+            "stage":            next_stage,
+            "negotiationState": state.to_dict(),
         }
         await self.session_service.save(updated_session)
 
-        return {"reply": results[0]["aiReply"], "results": results}
+        return {
+            "reply":   results[0].aiReply if results else "",
+            "results": [r.__dict__ for r in results],
+        }
 
+    # ─────────────────────────────────────────────────────────
+    # CONTRACT CREATION
+    # ─────────────────────────────────────────────────────────
+    async def _create_contract_in_db(
+        self,
+        db,
+        session: Dict[str, Any],
+        freelancer_id: str,
+        final_price: float,
+        room_id: str,
+    ):
+        project_id = session.get("project", {}).get("id")
+        if not project_id:
+            return
+
+        # Create contract
+        contract_data = {
+            "projectId":           ObjectId(project_id),
+            "freelancerProfileId": ObjectId(freelancer_id),
+            "agreedPrice":         float(final_price),
+            "startDate":           datetime.now(),
+            "status":              "OFFER_PENDING",
+            "createdAt":           datetime.now(),
+            "updatedAt":           datetime.now(),
+        }
+
+        existing = await db.contracts.find_one({"projectId": ObjectId(project_id)})
+        if existing:
+            contract_id = existing["_id"]
+        else:
+            res         = await db.contracts.insert_one(contract_data)
+            contract_id = res.inserted_id
+
+        # Create default milestone
+        await db.milestones.insert_one({
+            "contractId":  contract_id,
+            "order":       0,
+            "title":       "Initial Deliverable",
+            "description": "Project kickoff and initial milestones as agreed in chat.",
+            "amount":      float(final_price),
+            "status":      "PENDING",
+        })
+
+        # Link contract to chat room
+        await db.chat_rooms.update_one(
+            {"_id": ObjectId(room_id)},
+            {"$set": {"contractId": contract_id}}
+        )
+
+        # System notification message
+        await db.messages.insert_one({
+            "chatRoomId":  ObjectId(room_id),
+            "senderId":    ObjectId(session.get("clientId")),
+            "content":     f"🤝 **CONTRACT CREATED**\n\nA formal contract has been generated for ${final_price}. You can now view and manage milestones in the [Contract Detail Page](/contracts/{contract_id}).",
+            "type":        "SYSTEM",
+            "isRead":      False,
+            "isAiMessage": True,
+            "sentAt":      datetime.now(),
+        })
+
+        print(f"✅ Contract {contract_id} created for project {project_id}")
+
+    # ─────────────────────────────────────────────────────────
+    # HELPERS
+    # ─────────────────────────────────────────────────────────
     def _detect_deal_close(self, text: str) -> bool:
-        """
-        Detects if the message indicates an agreement (Deal Closer Mode).
-        """
         keywords = [r"\bok\b", r"\bgood\b", r"\bsounds good\b", r"\bagreed\b", r"\bfine\b", r"\blet's do\b", r"\bconfirm\b"]
-        for kw in keywords:
-            if re.search(kw, text, re.IGNORECASE):
-                return True
-        return False
+        return any(re.search(kw, text, re.IGNORECASE) for kw in keywords)
 
     def _parse_json(self, raw: str, fallback: Dict[str, Any]) -> Dict[str, Any]:
         try:
             cleaned = re.sub(r"```json|```", "", raw, flags=re.IGNORECASE).strip()
             return json.loads(cleaned)
         except Exception:
-            return fallback
+            return fallback

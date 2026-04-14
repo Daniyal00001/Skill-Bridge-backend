@@ -44,6 +44,6 @@ Write a professional, standard contract text based on these details.
         result = await self.llm.call([
             {"role": "system", "content": "You are an expert contract writer."},
             {"role": "user", "content": prompt}
-        ])
+        ], task="contract")
 
         return result.strip()

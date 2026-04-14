@@ -31,7 +31,7 @@ class ModerationService:
         
         # Call LLM
         messages = [{"role": "system", "content": prompt}]
-        raw = await self.llm.call(messages)
+        raw = await self.llm.call(messages, task="moderation")
         
         # Parse JSON
         fallback = {
