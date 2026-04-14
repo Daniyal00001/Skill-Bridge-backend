@@ -486,7 +486,7 @@ export const getFreelancerBalance = async (req: Request, res: Response) => {
     // If stored balance is 0 but they have history, use the calculated one
     const calculatedBalance = Math.max(0, totalEarnings - totalProcessedWithdrawals);
     const balanceToReturn = freelancer.balance > 0 ? freelancer.balance : calculatedBalance;
-    const totalWithdrawn = (freelancer as any).totalWithdrawn ?? totalProcessedWithdrawals;
+    const totalWithdrawn = (freelancer as any).totalWithdrawn > 0 ? (freelancer as any).totalWithdrawn : totalProcessedWithdrawals;
 
     return res.status(200).json({
       success: true,
