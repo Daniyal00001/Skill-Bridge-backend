@@ -562,9 +562,9 @@ export const requestWithdrawal = async (req: Request, res: Response) => {
     }
 
 
-    // Minimum withdrawal: $1
-    if (withdrawAmount < 1) {
-      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is $1.00.' })
+    // Minimum withdrawal: $25
+    if (withdrawAmount < 25) {
+      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is $25.00.' })
     }
 
     // Verify the connected account still has payouts enabled
