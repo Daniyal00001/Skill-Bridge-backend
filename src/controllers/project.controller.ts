@@ -520,6 +520,7 @@ export const getProjectById = async (req: Request, res: Response) => {
             hireRate: true,
             user: {
               select: {
+                id: true,
                 profileImage: true,
                 name: true,
                 isIdVerified: true,
