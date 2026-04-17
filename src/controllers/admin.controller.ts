@@ -119,7 +119,24 @@ export const updateSkillStatus = async (req: Request, res: Response) => {
       data: { status }
     });
 
-    await deletePatternCache('admin:skills:*');
+    // Log the action
+    const adminProfile = await prisma.adminProfile.findUnique({ where: { userId: req.user!.userId } });
+    if (adminProfile) {
+      await prisma.adminLog.create({
+        data: {
+          adminProfileId: adminProfile.id,
+          action: status === 'APPROVED' ? 'APPROVED_SKILL' : 'REJECTED_SKILL',
+          targetType: 'Skill',
+          targetId: id,
+          note: `Skill: ${skill.name}`,
+        },
+      });
+    }
+
+    await Promise.all([
+      deletePatternCache('admin:skills:*'),
+      deletePatternCache('admin:logs:*')
+    ]);
     return res.status(200).json({ success: true, message: `Skill ${status.toLowerCase()} successfully`, skill });
   } catch (error: any) {
     console.error("Admin Update Skill Error:", error);
@@ -388,10 +405,24 @@ export const approveVerification = async (req: Request, res: Response) => {
       }
     });
 
+    // Log the action
+    const adminProfile = await prisma.adminProfile.findUnique({ where: { userId: req.user!.userId } });
+    if (adminProfile) {
+      await prisma.adminLog.create({
+        data: {
+          adminProfileId: adminProfile.id,
+          action: 'APPROVED_IDENTITY',
+          targetType: 'User',
+          targetId: userId,
+          note: `Verified user: ${user.name}`,
+        },
+      });
+    }
+
     await Promise.all([
       deletePatternCache('admin:verifications:*'),
-      // Global user cache might include verification status
-      deletePatternCache('admin:users:*')
+      deletePatternCache('admin:users:*'),
+      deletePatternCache('admin:logs:*')
     ]);
 
     return res.status(200).json({ success: true, message: "User identity verified successfully", user });
@@ -429,9 +460,24 @@ export const rejectVerification = async (req: Request, res: Response) => {
       }
     });
 
+    // Log action
+    const adminProfile = await prisma.adminProfile.findUnique({ where: { userId: req.user!.userId } });
+    if (adminProfile) {
+      await prisma.adminLog.create({
+        data: {
+          adminProfileId: adminProfile.id,
+          action: 'REJECTED_IDENTITY',
+          targetType: 'User',
+          targetId: userId,
+          note: `Rejected identity for ${user.name}. Reason: ${reason || "Invalid document"}`,
+        },
+      });
+    }
+
     await Promise.all([
       deletePatternCache('admin:verifications:*'),
-      deletePatternCache('admin:users:*')
+      deletePatternCache('admin:users:*'),
+      deletePatternCache('admin:logs:*')
     ]);
 
     return res.status(200).json({ success: true, message: "User identity rejected", user });

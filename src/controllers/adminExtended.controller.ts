@@ -126,8 +126,11 @@ export const banUser = async (req: Request, res: Response) => {
       });
     }
 
-    // Invalidate user caches
-    await deletePatternCache('admin:users:*');
+    // Invalidate user and log caches
+    await Promise.all([
+      deletePatternCache('admin:users:*'),
+      deletePatternCache('admin:logs:*')
+    ]);
 
     return res.status(200).json({ success: true, user, message: ban ? 'User banned' : 'User unbanned' });
   } catch (error: any) {
@@ -255,15 +258,21 @@ export const getAdminLogs = async (req: Request, res: Response) => {
     if (req.user?.role !== 'ADMIN') {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
-    const { page = '1', limit = '30', targetType } = req.query;
+    const { page = '1', limit = '30', targetType, startDate, endDate } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-    const cacheKey = `admin:logs:${targetType || 'all'}:${page}:${limit}`;
+    const cacheKey = `admin:logs:${targetType || 'all'}:${startDate || ''}:${endDate || ''}:${page}:${limit}`;
     const cached = await getCache<any>(cacheKey);
     if (cached) return res.status(200).json({ success: true, ...cached });
 
     const where: any = {};
     if (targetType && targetType !== 'ALL') where.targetType = targetType;
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) where.createdAt.lte = new Date(`${endDate}T23:59:59.999Z`);
+    }
 
     const [logs, total] = await Promise.all([
       prisma.adminLog.findMany({
@@ -614,8 +623,8 @@ export const updateProjectStatusByAdmin = async (req: Request, res: Response) =>
 
     await Promise.all([
       deletePatternCache('admin:projects:*'),
-      // Also invalidate payments if it's related
-      deletePatternCache('admin:payments:*')
+      deletePatternCache('admin:payments:*'),
+      deletePatternCache('admin:logs:*')
     ]);
 
     return res.status(200).json({ success: true, project, message: 'Project status updated' });
