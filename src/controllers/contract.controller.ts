@@ -563,13 +563,33 @@ export const approveMilestone = async (req: Request, res: Response) => {
         data: { status: 'RELEASED', releasedAt: new Date() }
       })
 
-      // Credit freelancer balance
+      // Calculate 10% platform fee
+      const platformFee = milestone.amount * 0.10
+      const freelancerNet = milestone.amount - platformFee
+
+      // Credit freelancer balance (net amount after 10% fee)
       await tx.freelancerProfile.update({
         where: { id: contract.freelancerProfileId },
-        data: { balance: { increment: milestone.amount } }
+        data: { balance: { increment: freelancerNet } }
       })
 
-
+      // Record Platform Earning
+      await tx.platformEarning.create({
+        data: {
+          amount: platformFee,
+          type: 'PROJECT_FEE',
+          description: `10% fee from milestone "${milestone.title}" on contract ${contractId}`,
+          metadata: {
+            contractId,
+            milestoneId,
+            freelancerId: contract.freelancerProfileId,
+            grossAmount: milestone.amount,
+            feePercentage: 10,
+            feeAmount: platformFee,
+            netAmount: freelancerNet
+          }
+        }
+      })
 
       // Update client stats (Total Spent)
       await updateClientStats(tx, contract.project.clientProfileId)
@@ -579,7 +599,7 @@ export const approveMilestone = async (req: Request, res: Response) => {
         userId: contract.freelancerProfile.userId,
         type: 'MILESTONE_APPROVED',
         title: 'Milestone Approved!',
-        body: `"${milestone.title}" was approved! $${milestone.amount.toFixed(2)} has been released to you.`,
+        body: `"${milestone.title}" was approved! $${freelancerNet.toFixed(2)} has been released to you (after 10% platform fee).`,
         link: `/freelancer/contracts/${contractId}`,
       }, tx)
 

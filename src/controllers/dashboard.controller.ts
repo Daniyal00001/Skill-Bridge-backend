@@ -36,12 +36,11 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
       prisma.adminProfile.findUnique({ where: { userId: req.user?.userId } }),
     ]);
 
-    // Calculate revenue (Sum of all RELEASED payments, assuming platform takes 10% fee)
-    const payments = await prisma.payment.aggregate({
+    // Calculate revenue from PlatformEarning model
+    const earnings = await prisma.platformEarning.aggregate({
       _sum: { amount: true },
-      where: { status: "RELEASED" },
     });
-    const totalRevenue = (payments._sum.amount || 0) * 0.1;
+    const totalRevenue = earnings._sum.amount || 0;
 
     // Fetch lists
     const [
@@ -474,6 +473,7 @@ export const getFreelancerDashboard = async (req: Request, res: Response) => {
           pendingInvitationsCount,
           totalEarnings,
           monthlyEarnings,
+          balance: freelancerProfile.balance,
           skillTokenBalance: freelancerProfile.skillTokenBalance,
           profileCompletion: freelancerProfile.profileCompletion,
           averageRating: reviews._avg.rating || 5.0,

@@ -656,3 +656,140 @@ export const requestWithdrawal = async (req: Request, res: Response) => {
     })
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FREELANCER: CREATE SETUP INTENT (Save card for token purchases)
+// POST /api/stripe/freelancer/setup-intent
+// This is SEPARATE from client card management and from Stripe Connect payouts.
+// ─────────────────────────────────────────────────────────────────────────────
+export const createFreelancerSetupIntent = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { userId },
+      include: { user: { select: { email: true, name: true } } }
+    })
+
+    if (!freelancer) {
+      return res.status(404).json({ success: false, message: 'Freelancer profile not found.' })
+    }
+
+    // ── Read stripeCustomerId via raw MongoDB command ──────────────────────
+    // Reason: field was added to schema AFTER the Prisma client was generated,
+    // so the generated client doesn't know about it. $runCommandRaw bypasses
+    // Prisma's type validation and hits MongoDB directly.
+    const rawRead = await (prisma as any).$runCommandRaw({
+      find: 'freelancer_profiles',
+      filter: { _id: { $oid: freelancer.id } },
+      projection: { stripeCustomerId: 1 },
+      limit: 1
+    })
+    let customerId: string | null =
+      rawRead?.cursor?.firstBatch?.[0]?.stripeCustomerId ?? null
+
+    if (!customerId) {
+      // Create a new Stripe Customer for this freelancer
+      const customer = await stripe.customers.create({
+        email: freelancer.user.email,
+        name: freelancer.fullName || freelancer.user.name,
+        metadata: { userId, role: 'FREELANCER' }
+      })
+      customerId = customer.id
+
+      // ── Write stripeCustomerId via raw MongoDB command ───────────────────
+      await (prisma as any).$runCommandRaw({
+        update: 'freelancer_profiles',
+        updates: [{
+          q: { _id: { $oid: freelancer.id } },
+          u: { $set: { stripeCustomerId: customerId } },
+          upsert: false
+        }]
+      })
+    }
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      usage: 'off_session',
+    })
+
+    return res.status(200).json({
+      success: true,
+      clientSecret: setupIntent.client_secret
+    })
+  } catch (error: any) {
+    console.error('Create freelancer setup intent error:', error)
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FREELANCER: GET SAVED PAYMENT METHODS
+// GET /api/stripe/freelancer/payment-methods
+// ─────────────────────────────────────────────────────────────────────────────
+export const getFreelancerPaymentMethods = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId
+
+    const freelancer = await prisma.freelancerProfile.findUnique({
+      where: { userId }
+    })
+
+    if (!freelancer) {
+      return res.status(404).json({ success: false, message: 'Freelancer profile not found.' })
+    }
+
+    // ── Read stripeCustomerId via raw MongoDB command (see note above) ──────
+    const rawRead = await (prisma as any).$runCommandRaw({
+      find: 'freelancer_profiles',
+      filter: { _id: { $oid: freelancer.id } },
+      projection: { stripeCustomerId: 1 },
+      limit: 1
+    })
+    const customerId: string | null =
+      rawRead?.cursor?.firstBatch?.[0]?.stripeCustomerId ?? null
+
+    if (!customerId) {
+      return res.status(200).json({ success: true, methods: [] })
+    }
+
+    const cards = await stripe.paymentMethods.list({
+      customer: customerId,
+      type: 'card',
+    })
+
+    return res.status(200).json({
+      success: true,
+      methods: cards.data.map(m => ({
+        id: m.id,
+        type: 'card',
+        brand: m.card?.brand,
+        last4: m.card?.last4,
+        expMonth: m.card?.exp_month,
+        expYear: m.card?.exp_year,
+      }))
+    })
+  } catch (error: any) {
+    console.error('Get freelancer payment methods error:', error)
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FREELANCER: DELETE SAVED PAYMENT METHOD
+// DELETE /api/stripe/freelancer/payment-methods/:methodId
+// ─────────────────────────────────────────────────────────────────────────────
+export const deleteFreelancerPaymentMethod = async (req: Request, res: Response) => {
+  try {
+    const { methodId } = req.params
+
+    // Detach the payment method from the customer in Stripe
+    await stripe.paymentMethods.detach(methodId)
+
+    return res.status(200).json({ success: true, message: 'Payment method removed successfully.' })
+  } catch (error: any) {
+    console.error('Delete freelancer payment method error:', error)
+    return res.status(500).json({ success: false, message: error.message })
+  }
+}

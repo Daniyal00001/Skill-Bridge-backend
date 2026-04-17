@@ -158,7 +158,7 @@ export const getAdminPayments = async (req: Request, res: Response) => {
     const where: any = {};
     if (status && status !== 'ALL') where.status = status;
 
-    const [payments, total, stats] = await Promise.all([
+    const [payments, total, paymentStats, platformEarningStats] = await Promise.all([
       prisma.payment.findMany({
         where,
         skip,
@@ -180,6 +180,9 @@ export const getAdminPayments = async (req: Request, res: Response) => {
         _sum: { amount: true },
         _count: { id: true },
       }),
+      prisma.platformEarning.aggregate({
+        _sum: { amount: true }
+      })
     ]);
 
     const formattedStats = {
@@ -188,14 +191,21 @@ export const getAdminPayments = async (req: Request, res: Response) => {
       totalPending: 0,
       totalRefunded: 0,
     };
-    stats.forEach(s => {
+    paymentStats.forEach(s => {
       if (s.status === 'RELEASED') formattedStats.totalReleased = s._sum.amount || 0;
       if (s.status === 'HELD_IN_ESCROW') formattedStats.totalInEscrow = s._sum.amount || 0;
       if (s.status === 'PENDING') formattedStats.totalPending = s._sum.amount || 0;
       if (s.status === 'REFUNDED') formattedStats.totalRefunded = s._sum.amount || 0;
     });
 
-    const responseData = { payments, total, stats: formattedStats };
+    const responseData = { 
+      payments, 
+      total, 
+      stats: {
+        ...formattedStats,
+        platformRevenue: platformEarningStats._sum.amount || 0
+      } 
+    };
     await setCache(cacheKey, responseData, 300);
 
     return res.status(200).json({ success: true, ...responseData });
@@ -447,16 +457,16 @@ export const getAdminAnalytics = async (req: Request, res: Response) => {
         const [users, projects, revenue] = await Promise.all([
           prisma.user.count({ where: { createdAt: { gte: m.start, lte: m.end } } }),
           prisma.project.count({ where: { createdAt: { gte: m.start, lte: m.end } } }),
-          prisma.payment.aggregate({
+          prisma.platformEarning.aggregate({
             _sum: { amount: true },
-            where: { status: 'RELEASED', releasedAt: { gte: m.start, lte: m.end } },
+            where: { createdAt: { gte: m.start, lte: m.end } },
           }),
         ]);
         return {
           month: m.label,
           users,
           projects,
-          revenue: (revenue._sum.amount || 0) * 0.1,
+          revenue: revenue._sum.amount || 0,
         };
       })
     );

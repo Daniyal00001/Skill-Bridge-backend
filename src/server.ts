@@ -1,6 +1,8 @@
+// Server entry — Prisma client regenerated with stripeCustomerId field (2026-04-18)
 import 'dotenv/config'
 import http from 'http'
 import app from './app'
+
 import { prisma } from './config/prisma'
 import './config/redis'
 import { initTokenAwardJob } from './jobs/token-award.job'
