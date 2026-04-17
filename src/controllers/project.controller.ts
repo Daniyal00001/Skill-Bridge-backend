@@ -508,14 +508,14 @@ export const getProjectById = async (req: Request, res: Response) => {
       include: {
         skills: true,
         clientProfile: {
-          select: { 
-            fullName: true, 
-            company: true, 
-            location: true, 
-            averageRating: true, 
-            totalReviews: true, 
-            createdAt: true, 
-            totalHires: true, 
+          select: {
+            fullName: true,
+            company: true,
+            location: true,
+            averageRating: true,
+            totalReviews: true,
+            createdAt: true,
+            totalHires: true,
             totalSpent: true,
             hireRate: true,
             user: {
@@ -525,9 +525,10 @@ export const getProjectById = async (req: Request, res: Response) => {
                 isIdVerified: true,
                 isPaymentVerified: true,
                 idVerificationStatus: true,
-              }
-            }
-          }
+              },
+            },
+            _count: { select: { projects: true } },
+          },
         },
         proposals: { select: { id: true } },
         category: true,
