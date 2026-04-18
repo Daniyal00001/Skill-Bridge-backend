@@ -9,26 +9,33 @@ import {
   getPaymentMethods,
   deletePaymentMethod,
   getFreelancerBalance,
-  requestWithdrawal
+  requestWithdrawal,
+  createFreelancerSetupIntent,
+  getFreelancerPaymentMethods,
+  deleteFreelancerPaymentMethod,
 } from '../controllers/stripe.controller'
 
 const router = Router()
 
-// Create a Stripe PaymentIntent for a milestone (Client only)
+// ── Client: Fund Milestones ────────────────────────────────────────────────
 router.post('/create-payment-intent', protect, requireRole('CLIENT'), createPaymentIntent)
-
-// After Stripe payment succeeds on frontend, confirm and fund the milestone
 router.post('/confirm-fund', protect, requireRole('CLIENT'), confirmFundMilestone)
 
-// Freelancer Connect Onboarding
+// ── Freelancer: Connect Onboarding (Payouts) ──────────────────────────────
 router.get('/setup-payouts', protect, requireRole('FREELANCER'), setupFreelancerPayouts)
 router.get('/onboarding-status', protect, requireRole('FREELANCER'), checkOnboardingStatus)
 
-// Freelancer Balance & Withdrawals
+// ── Freelancer: Earnings & Withdrawals ────────────────────────────────────
 router.get('/freelancer/balance', protect, requireRole('FREELANCER'), getFreelancerBalance)
 router.post('/freelancer/withdraw', protect, requireRole('FREELANCER'), requestWithdrawal)
 
-// Client Payment Methods
+// ── Freelancer: Saved Cards (for token purchases) ─────────────────────────
+// NOTE: completely separate from client billing and from Stripe Connect payouts
+router.post('/freelancer/setup-intent', protect, requireRole('FREELANCER'), createFreelancerSetupIntent)
+router.get('/freelancer/payment-methods', protect, requireRole('FREELANCER'), getFreelancerPaymentMethods)
+router.delete('/freelancer/payment-methods/:methodId', protect, requireRole('FREELANCER'), deleteFreelancerPaymentMethod)
+
+// ── Client: Saved Cards (for funding milestones) ──────────────────────────
 router.post('/create-setup-intent', protect, requireRole('CLIENT'), createSetupIntent)
 router.get('/payment-methods', protect, requireRole('CLIENT'), getPaymentMethods)
 router.delete('/payment-methods/:methodId', protect, requireRole('CLIENT'), deletePaymentMethod)

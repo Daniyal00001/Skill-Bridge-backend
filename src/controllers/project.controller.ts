@@ -515,19 +515,22 @@ export const getProjectById = async (req: Request, res: Response) => {
             averageRating: true, 
             totalReviews: true, 
             createdAt: true, 
+
             totalHires: true,
             totalSpent: true,
             hireRate: true,
             user: {
               select: {
+                id: true,
                 profileImage: true,
                 name: true,
                 isIdVerified: true,
                 isPaymentVerified: true,
                 idVerificationStatus: true,
-              }
-            }
-          }
+              },
+            },
+            _count: { select: { projects: true } },
+          },
         },
         proposals: { select: { id: true } },
         category: true,

@@ -11,8 +11,15 @@ export const getInvitations = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     const role = (req as any).user?.role;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
 
-    let whereClause = {};
+    const status = req.query.status as string;
+    const search = req.query.search as string;
+    const dateRange = req.query.dateRange as string;
+
+    let whereClause: any = {};
     if (role === "CLIENT") {
       const clientProfile = await prisma.clientProfile.findUnique({
         where: { userId },
@@ -37,10 +44,55 @@ export const getInvitations = async (req: Request, res: Response) => {
         .json({ success: false, message: "Not authorized" });
     }
 
-    const invitations = await prisma.invitation.findMany({
-      where: whereClause,
-      orderBy: { createdAt: "desc" },
-    });
+    // Apply status filter
+    if (status && status !== "all") {
+      whereClause.status = status.toUpperCase();
+    }
+
+    // Apply search filter (matching project title or freelancer name)
+    if (search) {
+      whereClause.OR = [
+        {
+          project: {
+            title: { contains: search, mode: 'insensitive' }
+          }
+        },
+        {
+          freelancerProfile: {
+            user: {
+              name: { contains: search, mode: 'insensitive' }
+            }
+          }
+        }
+      ];
+    }
+
+    // Apply date range filter
+    if (dateRange && dateRange !== "all") {
+      const now = new Date();
+      let fromDate = new Date();
+      if (dateRange === "today") {
+        fromDate.setHours(0, 0, 0, 0);
+      } else if (dateRange === "week") {
+        fromDate.setDate(now.getDate() - 7);
+      } else if (dateRange === "month") {
+        fromDate.setDate(now.getDate() - 30);
+      }
+      whereClause.createdAt = { gte: fromDate };
+    }
+
+    const [invitations, totalCount, pendingCount, acceptedCount, rejectedCount] = await Promise.all([
+      prisma.invitation.findMany({
+        where: whereClause,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.invitation.count({ where: whereClause }),
+      prisma.invitation.count({ where: { ...whereClause, status: "PENDING" } }),
+      prisma.invitation.count({ where: { ...whereClause, status: "ACCEPTED" } }),
+      prisma.invitation.count({ where: { ...whereClause, status: "REJECTED" } }),
+    ]);
 
     // Manual joins to handle potential orphaned records without crashing
     const projectIds = [...new Set(invitations.map((i) => i.projectId))];
@@ -72,7 +124,10 @@ export const getInvitations = async (req: Request, res: Response) => {
       }),
       prisma.clientProfile.findMany({
         where: { id: { in: clientIds } },
-        include: { user: { select: { name: true, profileImage: true } } },
+        include: {
+          user: { select: { name: true, profileImage: true } },
+          _count: { select: { projects: true } }
+        },
       }),
     ]);
 
@@ -108,6 +163,11 @@ export const getInvitations = async (req: Request, res: Response) => {
           clientId: inv.clientProfileId,
           clientName: client.user?.name || "Unknown Client",
           clientAvatar: client.user?.profileImage,
+          clientStats: {
+            totalSpent: client.totalSpent,
+            totalHires: client.totalHires,
+            totalProjects: client._count?.projects || 0,
+          },
           message: inv.message,
           status: project ? inv.status : "CANCELLED", // Mark as cancelled if project is gone
           milestones: inv.milestones,
@@ -119,9 +179,115 @@ export const getInvitations = async (req: Request, res: Response) => {
       })
       .filter(Boolean);
 
-    return res.status(200).json({ success: true, data: formatted });
+
+    return res.status(200).json({
+      success: true,
+      data: formatted,
+      pagination: {
+        total: totalCount,
+        page,
+        limit,
+        pages: Math.ceil(totalCount / limit),
+      },
+      stats: {
+        total: totalCount,
+        pending: pendingCount,
+        accepted: acceptedCount,
+        rejected: rejectedCount,
+      }
+    });
   } catch (error) {
     console.error("Get invitations error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+/**
+ * @desc    Get a single invitation by ID
+ * @route   GET /api/invitations/:id
+ * @access  Private
+ */
+export const getInvitationById = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { id } = req.params;
+
+    const invitation = await prisma.invitation.findUnique({
+      where: { id },
+      include: {
+        project: {
+          include: {
+            skills: { include: { skill: true } },
+            category: true,
+          },
+        },
+        freelancerProfile: {
+          include: { user: { select: { name: true, profileImage: true } } },
+        },
+        clientProfile: {
+          include: {
+            user: { select: { name: true, profileImage: true } },
+            _count: { select: { projects: true } }
+          },
+        },
+      },
+    });
+
+    if (!invitation) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Invitation not found" });
+    }
+
+    // Authorization check
+    if (
+      invitation.clientProfile.userId !== userId &&
+      invitation.freelancerProfile.userId !== userId
+    ) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Not authorized to view this invitation" });
+    }
+
+    const formatted = {
+      id: invitation.id,
+      projectId: invitation.projectId,
+      projectTitle: invitation.project?.title || "Project Deleted",
+      projectCategory: invitation.project?.category?.name || "General",
+      projectDescription: invitation.project?.description || "",
+      projectSkills:
+        invitation.project?.skills?.map((s: any) => s.skill?.name).filter(Boolean) ||
+        [],
+      projectExperienceLevel: invitation.project?.experienceLevel || "ANY",
+      projectDuration: invitation.project?.size || "Not specified",
+      projectBudget: invitation.project?.budget || 0,
+      projectBudgetType: invitation.project?.budgetType || "FIXED",
+      freelancerId: invitation.freelancerProfileId,
+      freelancerName: invitation.freelancerProfile.user?.name || "Unknown Freelancer",
+      freelancerAvatar: invitation.freelancerProfile.user?.profileImage,
+      clientId: invitation.clientProfileId,
+      clientName: invitation.clientProfile.user?.name || "Unknown Client",
+      clientAvatar: invitation.clientProfile.user?.profileImage,
+      clientStats: {
+        totalSpent: invitation.clientProfile.totalSpent,
+        totalHires: invitation.clientProfile.totalHires,
+        totalProjects: invitation.clientProfile._count?.projects || 0,
+      },
+      message: invitation.message,
+
+      status: invitation.project ? invitation.status : "CANCELLED",
+      milestones: invitation.milestones,
+      revisionsAllowed: invitation.revisionsAllowed,
+      budget: invitation.budget,
+      attachments: invitation.attachments,
+      createdAt: invitation.createdAt,
+    };
+
+    return res.status(200).json({ success: true, data: formatted });
+  } catch (error) {
+    console.error("Get invitation by ID error:", error);
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });

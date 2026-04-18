@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { protect, requireRole } from '../middlewares/auth.middleware'
 import {
   getInvitations,
+  getInvitationById,
   cancelInvitation,
   acceptInvitation,
   rejectInvitation
@@ -15,6 +16,13 @@ const router = Router()
  * @access  Private
  */
 router.get('/', protect, getInvitations)
+
+/**
+ * @route   GET /api/invitations/:id
+ * @desc    Get single invitation by ID
+ * @access  Private
+ */
+router.get('/:id', protect, getInvitationById)
 
 /**
  * @route   PATCH /api/invitations/:id/cancel
