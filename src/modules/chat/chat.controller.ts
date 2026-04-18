@@ -47,7 +47,7 @@ export const openRoom = async (req: Request, res: Response) => {
   try {
     const parsed = openRoomSchema.safeParse(req.body)
     if (!parsed.success) {
-      return res.status(400).json({ success: false, message: parsed.error.errors[0].message })
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message })
     }
     const { clientProfileId, freelancerProfileId, contractId, projectId } = parsed.data
     const room = await getOrCreateChatRoom(clientProfileId, freelancerProfileId, contractId, projectId)
@@ -65,12 +65,12 @@ export const getMessages = async (req: Request, res: Response) => {
     const userId = req.user!.userId
     const cursor = req.query.cursor as string | undefined
 
-    const belongs = await doesRoomBelongToUser(roomId, userId)
+    const belongs = await doesRoomBelongToUser(roomId as string, userId)
     if (!belongs) return res.status(403).json({ success: false, message: 'Access denied' })
 
-    const data = await getPaginatedMessages(roomId, cursor, 30)
+    const data = await getPaginatedMessages(roomId as string, cursor as string | undefined, 30)
     // Mark messages as read when fetched
-    await markMessagesAsRead(roomId, userId)
+    await markMessagesAsRead(roomId as string, userId)
 
     res.json({ success: true, data })
   } catch (err) {
@@ -85,19 +85,19 @@ export const sendMessage = async (req: Request, res: Response) => {
     const { roomId } = req.params
     const userId = req.user!.userId
 
-    const belongs = await doesRoomBelongToUser(roomId, userId)
+    const belongs = await doesRoomBelongToUser(roomId as string, userId)
     if (!belongs) return res.status(403).json({ success: false, message: 'Access denied' })
 
-    const restricted = await isUserRestricted(roomId, userId)
+    const restricted = await isUserRestricted(roomId as string, userId)
     if (restricted) return res.status(403).json({ success: false, message: 'You have been restricted from this chat.' })
 
     const parsed = sendMessageSchema.safeParse(req.body)
     if (!parsed.success) {
-      return res.status(400).json({ success: false, message: parsed.error.errors[0].message })
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message })
     }
 
     const message = await saveMessage({
-      chatRoomId: roomId,
+      chatRoomId: roomId as string,
       senderId: userId,
       content: parsed.data.content,
       type: parsed.data.type,
@@ -123,10 +123,10 @@ export const uploadAttachment = async (req: Request, res: Response) => {
 
     const isTemp = roomId === 'temp'
     if (!isTemp) {
-      const belongs = await doesRoomBelongToUser(roomId, userId)
+      const belongs = await doesRoomBelongToUser(roomId as string, userId)
       if (!belongs) return res.status(403).json({ success: false, message: 'Access denied' })
 
-      const restricted = await isUserRestricted(roomId, userId)
+      const restricted = await isUserRestricted(roomId as string, userId)
       if (restricted) return res.status(403).json({ success: false, message: 'You have been restricted from this chat.' })
     }
 
@@ -149,7 +149,7 @@ export const uploadAttachment = async (req: Request, res: Response) => {
       const content = file.originalname // use filename as content for FILE type messages
 
       const message = await saveMessage({
-        chatRoomId: roomId,
+        chatRoomId: roomId as string,
         senderId: userId,
         content,
         type: 'FILE',
@@ -177,7 +177,7 @@ export const muteRoomHandler = async (req: Request, res: Response) => {
     const parsed = muteRoomSchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ success: false, message: 'Invalid request' })
 
-    await muteRoom(userId, roomId, parsed.data.muted)
+    await muteRoom(userId, roomId as string, parsed.data.muted)
     res.json({ success: true, message: parsed.data.muted ? 'Room muted' : 'Room unmuted' })
   } catch (err) {
     console.error('[Chat] muteRoom error:', err)
@@ -195,10 +195,10 @@ export const restrictUserHandler = async (req: Request, res: Response) => {
     if (!parsed.success) return res.status(400).json({ success: false, message: 'Invalid request' })
 
     // Only room owner (client profile) can restrict
-    const belongs = await doesRoomBelongToUser(roomId, userId)
+    const belongs = await doesRoomBelongToUser(roomId as string, userId)
     if (!belongs) return res.status(403).json({ success: false, message: 'Access denied' })
 
-    await restrictUser(roomId, parsed.data.targetUserId, parsed.data.restricted)
+    await restrictUser(roomId as string, parsed.data.targetUserId, parsed.data.restricted)
     res.json({
       success: true,
       message: parsed.data.restricted ? 'User restricted' : 'User unrestricted',
@@ -214,7 +214,7 @@ export const markSeenHandler = async (req: Request, res: Response) => {
   try {
     const { roomId } = req.params
     const userId = req.user!.userId
-    await markMessagesAsRead(roomId, userId)
+    await markMessagesAsRead(roomId as string, userId)
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to mark seen' })
@@ -226,7 +226,7 @@ export const deleteRoom = async (req: Request, res: Response) => {
     const { roomId } = req.params
     const userId = req.user!.userId
 
-    await deleteChatRoom(roomId, userId)
+    await deleteChatRoom(roomId as string, userId)
     res.json({ success: true, message: 'Chat deleted successfully' })
   } catch (err: any) {
     console.error('[Chat] deleteRoom error:', err)

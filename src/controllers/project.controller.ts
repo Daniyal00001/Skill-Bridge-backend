@@ -515,7 +515,7 @@ export const getProjectById = async (req: Request, res: Response) => {
             averageRating: true, 
             totalReviews: true, 
             createdAt: true, 
-            totalHires: true, 
+            totalHires: true,
             totalSpent: true,
             hireRate: true,
             user: {

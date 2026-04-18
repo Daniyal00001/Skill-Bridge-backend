@@ -109,7 +109,7 @@ class NegotiationService:
         message_content = await self.llm.call([{"role": "user", "content": prompt}], task="outreach")
 
         # Save message to DB
-        await db.messages.insert_one({
+        msg_res = await db.messages.insert_one({
             "chatRoomId": ObjectId(room_id),
             "senderId":   ObjectId(client_id),
             "content":    message_content,
@@ -118,6 +118,18 @@ class NegotiationService:
             "isAiMessage": True,
             "sentAt":     datetime.now(),
         })
+        message_id = str(msg_res.inserted_id)
+
+        # Notify Node.js backend to broadcast via Socket.io
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    "http://localhost:5000/api/ai/assistant/broadcast-message",
+                    json={"roomId": room_id, "messageId": message_id}
+                )
+        except Exception as e:
+            print(f"⚠️ Failed to broadcast AI message: {e}")
 
         # Update state
         state.round  = 1
@@ -237,7 +249,7 @@ class NegotiationService:
                     print(f"❌ Failed to create contract: {e}")
 
             # 4. Save AI message to DB
-            await db.messages.insert_one({
+            msg_res = await db.messages.insert_one({
                 "chatRoomId":  ObjectId(room_id),
                 "senderId":    ObjectId(client_id),
                 "content":     ai_reply,
@@ -246,6 +258,18 @@ class NegotiationService:
                 "isAiMessage": True,
                 "sentAt":      datetime.now(),
             })
+            message_id = str(msg_res.inserted_id)
+
+            # Notify Node.js backend to broadcast via Socket.io
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        "http://localhost:5000/api/ai/assistant/broadcast-message",
+                        json={"roomId": room_id, "messageId": message_id}
+                    )
+            except Exception as e:
+                print(f"⚠️ Failed to broadcast AI message: {e}")
 
             # 5. Build result
             result = NegotiationResult(

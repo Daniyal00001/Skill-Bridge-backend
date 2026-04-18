@@ -110,12 +110,26 @@ Mask sensitive data:
 
 ---
 
+---
+
+## 🛠️ SPECIAL RULE: INTEGRATION VS. COMMUNICATION
+Distinguish between:
+1. **Communication Intent**: "Contact me on WhatsApp at +92..." or "Let's talk on Instagram."
+   → **VIOLATION (MEDIUM/HIGH)**
+2. **Technical/Integration Requirement**: "I want a bot that integrates with WhatsApp API" or "The app should post to Instagram."
+   → **NOT A VIOLATION (LOW/ALLOW)**
+
+Mentions of social platforms (WhatsApp, Instagram, etc.) are **ALLOWED** if the user is describing project features, API integrations, or technical scope.
+
+---
+
 ## ❗ CRITICAL RULES
 * Never over-block harmless messages
 * Always return valid JSON
 * Never output explanation outside JSON
-* Be strict when intent is clear
-* Be lenient when ambiguity exists
+* Be strict when intent is clear (e.g., sharing a phone number or email)
+* Be extremely lenient when a user mentions a platform (WhatsApp, Zoom, etc.) as a project requirement or integration feature.
+* If the user is describing what they want to **build**, it is almost never a violation.
 """
 
 def build_moderation_prompt(message: str, contract_status: str, user_violation_count: int) -> str:

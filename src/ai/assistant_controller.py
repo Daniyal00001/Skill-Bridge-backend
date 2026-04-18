@@ -187,6 +187,7 @@ async def handle_assistant_message(body: AssistantRequest):
         
         if mod_result.violation and mod_result.suggested_action in ["block", "warn"]:
             return AssistantResponse(
+                success=True,
                 reply="⚠️ Sharing personal contact information (emails, phone numbers, or external links) is not allowed on SkillBridge. Your message has been flagged for review.",
                 stage="UNDERSTAND",
                 sessionId=body.sessionId or "new_session"

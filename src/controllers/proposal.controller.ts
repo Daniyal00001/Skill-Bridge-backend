@@ -987,7 +987,7 @@ export const getProposal = async (req: Request, res: Response): Promise<any> => 
           createdAt: proposalRaw.project.clientProfile.createdAt,
           totalHires: proposalRaw.project.clientProfile.totalHires,
           hireRate: proposalRaw.project.clientProfile.hireRate,
-          totalSpent: proposalRaw.project.clientProfile.totalSpent,
+          totalSpent: (proposalRaw.project.clientProfile as any).totalSpent,
           averageRating: proposalRaw.project.clientProfile.averageRating,
           totalReviews: proposalRaw.project.clientProfile.totalReviews,
           location: proposalRaw.project.clientProfile.location,

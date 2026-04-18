@@ -62,4 +62,56 @@ router.post('/cover-letter', async (req: Request, res: Response) => {
   }
 });
 
+// ── Internal: Broadcast AI Message ──────────────────────────────
+router.post('/assistant/broadcast-message', async (req: Request, res: Response) => {
+  try {
+    const { roomId, messageId } = req.body;
+    const io = req.app.get('io');
+
+    if (!io) return res.status(500).json({ success: false, message: 'Socket.io not initialized' });
+
+    // Fetch the full message with sender from DB
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: {
+        sender: { select: { id: true, name: true, profileImage: true, role: true } },
+      },
+    });
+
+    if (message) {
+      // 1. Broadcast to the room
+      io.to(roomId).emit('new_message', message);
+
+      // 2. Also notify the specific user (recipient)
+      const room = await prisma.chatRoom.findUnique({
+        where: { id: roomId },
+        include: {
+          clientProfile: { select: { userId: true } },
+          freelancerProfile: { select: { userId: true } },
+        },
+      });
+
+      if (room) {
+        let recipientId: string | null = null;
+        if (room.clientProfile?.userId === message.senderId) {
+          recipientId = room.freelancerProfile?.userId || null;
+        } else if (room.freelancerProfile?.userId === message.senderId) {
+          recipientId = room.clientProfile?.userId || null;
+        }
+
+        if (recipientId) {
+          io.to(`user:${recipientId}`).emit('new_message', message);
+        }
+      }
+
+      return res.json({ success: true });
+    }
+
+    return res.status(404).json({ success: false, message: 'Message not found' });
+  } catch (error: any) {
+    console.error('❌ AI Broadcast Error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export const aiRoutes = router;

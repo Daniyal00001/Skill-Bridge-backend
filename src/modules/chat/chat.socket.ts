@@ -252,23 +252,9 @@ export const initChatSocket = (
                       replyText: content
                     });
 
-                    // Step 3: Broadcast the AI reply back into the chat room via socket
-                    const aiReply = aiResponse.data?.reply;
-                    if (aiReply) {
-                      // Save AI reply as a real message — using already-imported saveMessage
-                      const clientUserId = room.clientProfile?.userId || recipientId;
-                      if (clientUserId) {
-                        const savedAiMsg = await saveMessage({
-                          chatRoomId: roomId,
-                          senderId: clientUserId,
-                          content: aiReply,
-                          type: "TEXT",
-                          isAiMessage: true,
-                        });
-                        ioInstance.to(roomId).emit("new_message", savedAiMsg);
-                        console.log(`[AI Autopilot] AI reply sent to room ${roomId}`);
-                      }
-                    }
+                    // The AI backend now handles the message saving and broadcasting directly
+                    // via the /api/assistant/broadcast-message endpoint.
+                    console.log(`[AI Autopilot] AI processing completed for room ${roomId}`);
                   } catch (err: any) {
                     console.error("[AI Autopilot] Error:", err.message);
                   }

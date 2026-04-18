@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { checkContentModeration } from '../utils/moderation';
 
 export const contentFilterMiddleware = async (req: Request, res: Response, next: NextFunction) => {
-  const { content } = req.body;
-  const userId = (req as any).user?.id;
+  const content = req.body?.content;
+  const userId = (req as any).user?.userId;
 
   if (!content || !userId) return next();
 
