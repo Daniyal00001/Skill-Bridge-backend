@@ -96,6 +96,7 @@ export const getAllFreelancers = async (req: Request, res: Response) => {
               isEmailVerified: true,
               isIdVerified: true,
               idVerificationStatus: true,
+              lastActiveAt: true,
             },
           },
           skills: {

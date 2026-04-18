@@ -46,6 +46,21 @@ export const protect = async (
       role: decoded.role,
     }
 
+    // ── Update lastActiveAt (once every 5 mins) ───────────
+    // WHY: Keep online status accurate without spamming the DB on every request.
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const prisma = require('../config/prisma').prisma;
+    prisma.user.updateMany({
+      where: {
+        id: decoded.userId,
+        OR: [
+          { lastActiveAt: { lt: fiveMinsAgo } },
+          { lastActiveAt: null }
+        ]
+      },
+      data: { lastActiveAt: new Date() }
+    }).catch((err: any) => console.error("[AuthMiddleware] Activity update failed:", err));
+
     next()
 
   } catch (error) {
