@@ -1,0 +1,5 @@
+[33m51e6ef4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/ahmed[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mahmed[m[33m)[m Merge branch 'main' and resolve conflict in project.controller.ts
+[33m92a1b0a[m Fix AI Assistant: resolve double-messages, add auto-redirection, and fix attachment upload crash
+[33m10e5841[m buy skills token
+[33m6689fd1[m feat: implement admin and extended admin controllers for backend management
+[33mcb856fc[m feat: implement project creation and update controllers with skill validation and file upload support
