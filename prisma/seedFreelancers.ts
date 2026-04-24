@@ -1227,7 +1227,7 @@ export async function seedFreelancers() {
           passwordHash,
           role: Role.FREELANCER,
           isEmailVerified: true,
-          profileImage: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(freelancer.name)}`,
+          profileImage: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(freelancer.name)}&backgroundColor=003366,006699,330066,660033,004d40`,
         },
       });
 

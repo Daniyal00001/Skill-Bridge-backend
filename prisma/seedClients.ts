@@ -433,7 +433,7 @@ export async function seedClients() {
           passwordHash,
           role: Role.CLIENT,
           isEmailVerified: true,
-          profileImage: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(client.name)}`,
+          profileImage: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(client.name)}&backgroundColor=003366,006699,330066,660033,004d40`,
         },
       });
 

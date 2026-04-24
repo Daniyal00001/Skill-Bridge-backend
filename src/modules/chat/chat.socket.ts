@@ -297,10 +297,11 @@ export const initChatSocket = (
       },
     );
 
-    // ── Event: typing_start ─────────────────────────────────────────────────
     socket.on(
       "typing_start",
-      ({ roomId, userName }: { roomId: string; userName: string }) => {
+      async ({ roomId, userName }: { roomId: string; userName: string }) => {
+        const restricted = await isUserRestricted(roomId, userId);
+        if (restricted) return; // Silent discard for blocked users
         socket.to(roomId).emit("typing_start", { userId, userName, roomId });
       },
     );
