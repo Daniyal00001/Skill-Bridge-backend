@@ -185,25 +185,27 @@ export const getAdminPayments = async (req: Request, res: Response) => {
       })
     ]);
 
-    const formattedStats = {
-      totalReleased: 0,
-      totalInEscrow: 0,
-      totalPending: 0,
-      totalRefunded: 0,
-    };
-    paymentStats.forEach(s => {
-      if (s.status === 'RELEASED') formattedStats.totalReleased = s._sum.amount || 0;
-      if (s.status === 'HELD_IN_ESCROW') formattedStats.totalInEscrow = s._sum.amount || 0;
-      if (s.status === 'PENDING') formattedStats.totalPending = s._sum.amount || 0;
-      if (s.status === 'REFUNDED') formattedStats.totalRefunded = s._sum.amount || 0;
+    const totalReleased = paymentStats.find(s => s.status === 'RELEASED')?._sum.amount || 0;
+    const totalInEscrow = paymentStats.find(s => s.status === 'HELD_IN_ESCROW')?._sum.amount || 0;
+    const totalPending = paymentStats.find(s => s.status === 'PENDING')?._sum.amount || 0;
+    const totalRefunded = paymentStats.find(s => s.status === 'REFUNDED')?._sum.amount || 0;
+
+    // Calculate Platform Revenue: 10% of all released payments + all token purchase revenue
+    const tokenRevenueSum = await prisma.platformEarning.aggregate({
+      where: { type: 'TOKEN_PURCHASE' },
+      _sum: { amount: true }
     });
+    const platformRevenue = (tokenRevenueSum._sum.amount || 0) + (totalReleased * 0.10);
 
     const responseData = { 
       payments, 
       total, 
       stats: {
-        ...formattedStats,
-        platformRevenue: platformEarningStats._sum.amount || 0
+        totalReleased,
+        totalInEscrow,
+        totalPending,
+        totalRefunded,
+        platformRevenue
       } 
     };
     await setCache(cacheKey, responseData, 300);
@@ -454,19 +456,29 @@ export const getAdminAnalytics = async (req: Request, res: Response) => {
 
     const monthlyData = await Promise.all(
       months.map(async (m) => {
-        const [users, projects, revenue] = await Promise.all([
+        const [users, projects, tokenRevenue, releasedPayments] = await Promise.all([
           prisma.user.count({ where: { createdAt: { gte: m.start, lte: m.end } } }),
           prisma.project.count({ where: { createdAt: { gte: m.start, lte: m.end } } }),
           prisma.platformEarning.aggregate({
             _sum: { amount: true },
-            where: { createdAt: { gte: m.start, lte: m.end } },
+            where: { 
+              type: 'TOKEN_PURCHASE',
+              createdAt: { gte: m.start, lte: m.end } 
+            },
           }),
+          prisma.payment.aggregate({
+            _sum: { amount: true },
+            where: { 
+              status: 'RELEASED',
+              releasedAt: { gte: m.start, lte: m.end } 
+            }
+          })
         ]);
         return {
           month: m.label,
           users,
           projects,
-          revenue: revenue._sum.amount || 0,
+          revenue: (tokenRevenue._sum.amount || 0) + ((releasedPayments._sum.amount || 0) * 0.10),
         };
       })
     );

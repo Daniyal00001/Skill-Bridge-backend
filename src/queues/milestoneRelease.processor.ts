@@ -102,10 +102,33 @@ async function processAutoRelease(job: Job<AutoReleaseJobData>) {
       },
     })
 
-    // Credit freelancer balance
+    // Calculate 10% platform fee
+    const platformFee = milestone.amount * 0.10
+    const freelancerNet = milestone.amount - platformFee
+
+    // Credit freelancer balance (net amount after 10% fee)
     await tx.freelancerProfile.update({
       where: { userId: freelancerUserId },
-      data: { balance: { increment: milestone.amount } }
+      data: { balance: { increment: freelancerNet } }
+    })
+
+    // Record Platform Earning
+    await tx.platformEarning.create({
+      data: {
+        amount: platformFee,
+        type: 'PROJECT_FEE',
+        description: `10% fee from auto-released milestone "${milestone.title}" on contract ${contractId}`,
+        metadata: {
+          contractId,
+          milestoneId,
+          freelancerId: contract.freelancerProfileId,
+          grossAmount: milestone.amount,
+          feePercentage: 10,
+          feeAmount: platformFee,
+          netAmount: freelancerNet,
+          isAutoRelease: true
+        }
+      }
     })
 
 

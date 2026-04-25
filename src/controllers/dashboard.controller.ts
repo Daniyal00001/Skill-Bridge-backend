@@ -36,11 +36,22 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
       prisma.adminProfile.findUnique({ where: { userId: req.user?.userId } }),
     ]);
 
-    // Calculate revenue from PlatformEarning model
-    const earnings = await prisma.platformEarning.aggregate({
-      _sum: { amount: true },
-    });
-    const totalRevenue = earnings._sum.amount || 0;
+    // Calculate revenue: Sum of PlatformEarnings (Tokens + recent Project Fees) 
+    // + 10% of released payments (to cover historical fees not in PlatformEarning table)
+    const [earnings, paymentStats] = await Promise.all([
+      prisma.platformEarning.aggregate({
+        _sum: { amount: true },
+        where: { type: 'TOKEN_PURCHASE' } // Only count tokens here to avoid double-counting new project fees
+      }),
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: 'RELEASED' }
+      })
+    ]);
+
+    const tokenRevenue = earnings._sum.amount || 0;
+    const projectRevenue = (paymentStats._sum.amount || 0) * 0.10;
+    const totalRevenue = tokenRevenue + projectRevenue;
 
     // Fetch lists
     const [
