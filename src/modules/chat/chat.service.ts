@@ -408,6 +408,14 @@ export const restrictUser = async (
 }
 
 export const isUserRestricted = async (roomId: string, userId: string): Promise<boolean> => {
+  // 1. Check global ban status
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { isBanned: true }
+  })
+  if (user?.isBanned) return true
+
+  // 2. Check room-specific restriction in Redis
   return !!(await redis.get(RESTRICT_KEY(roomId, userId)))
 }
 

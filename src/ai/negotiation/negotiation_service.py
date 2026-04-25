@@ -93,7 +93,7 @@ class NegotiationService:
                 "clientProfileId":    client_profile["_id"],
                 "freelancerProfileId": ObjectId(freelancer_profile_id),
                 "projectId":          ObjectId(session.get("project", {}).get("id")) if session.get("project", {}).get("id") else None,
-                "isActiveAI":         True,
+                "isActiveAI":         False,
                 "createdAt":          datetime.now(),
                 "clientDeleted":      False,
                 "freelancerDeleted":  False,
@@ -102,7 +102,7 @@ class NegotiationService:
             room_id = str(res.inserted_id)
         else:
             room_id = str(room["_id"])
-            await db.chat_rooms.update_one({"_id": room["_id"]}, {"$set": {"isActiveAI": True}})
+            await db.chat_rooms.update_one({"_id": room["_id"]}, {"$set": {"isActiveAI": False}})
 
         # Generate outreach message
         prompt = build_negotiation_outreach_prompt(session, target)

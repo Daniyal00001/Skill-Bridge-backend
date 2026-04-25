@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
+import { prisma } from '../config/prisma';
 
 const router = Router();
 const PYTHON_AI_URL = process.env.PYTHON_AI_URL || 'http://localhost:8000/api';
@@ -14,6 +15,19 @@ router.post('/assistant/message', async (req: Request, res: Response) => {
     return res.status(error.response?.status || 500).json({ 
       success: false, 
       message: error.response?.data?.detail || 'AI Assistant is currently unavailable.' 
+    });
+  }
+});
+// ── Proxy Assistant Suggest Reply ────────────────────────────
+router.post('/assistant/suggest-reply', async (req: Request, res: Response) => {
+  try {
+    const response = await axios.post(`${PYTHON_AI_URL}/assistant/suggest-reply`, req.body);
+    return res.json(response.data);
+  } catch (error: any) {
+    console.error('❌ AI Proxy Error (Suggest Reply):', error.message);
+    return res.status(error.response?.status || 500).json({ 
+      success: false, 
+      message: 'Failed to generate AI suggestion.' 
     });
   }
 });

@@ -20,6 +20,8 @@ from negotiation.negotiation_service import NegotiationService
 from contract.contract_service import ContractService
 from memory.persistent_memory_service import PersistentMemoryService
 from shared.db import Database
+from bson import ObjectId
+from shared.constants import LLM_BASE_URL, LLM_MODEL
 from moderation.moderation_service import ModerationService
 
 router = APIRouter(prefix="/api/assistant", tags=["Assistant"])
@@ -89,6 +91,73 @@ class AssistantResponse(BaseModel):
     memory: Optional[Dict[str, Any]] = None
     title: Optional[str] = None
     history: Optional[List[Dict[str, Any]]] = None
+
+
+# ── Feature: AI Suggestion Engine ─────────────────────────────
+class SuggestRequest(BaseModel):
+    roomId: str
+    role: str # CLIENT or FREELANCER
+
+@router.post("/suggest-reply")
+async def suggest_reply(body: SuggestRequest):
+    """
+    Analyzes chat history and suggests a professional message for the user.
+    """
+    try:
+        db = await Database.get_db()
+        
+        # 1. Fetch recent messages
+        cursor = db.messages.find({"chatRoomId": ObjectId(body.roomId)}).sort("sentAt", -1).limit(15)
+        messages = await cursor.to_list(length=15)
+        messages.reverse()
+        
+        if not messages:
+            return {
+                "success": True, 
+                "suggestion": f"Hi! I'm interested in discussing the project further. How should we proceed?" if body.role == "FREELANCER" else "Hello! Thanks for your interest. Let's talk about the requirements."
+            }
+
+        # 2. Build context
+        room = await db.chat_rooms.find_one({"_id": ObjectId(body.roomId)})
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+            
+        history_formatted = []
+        for m in messages:
+            role_label = "CLIENT" if str(m["senderId"]) == str(room["clientProfileId"]) else "FREELANCER"
+            history_formatted.append(f"[{role_label}]: {m['content']}")
+            
+        history_text = "\n".join(history_formatted)
+        
+        # 3. Call LLM
+        llm = LLMService()
+        prompt = f"""
+ROLE: You are an elite communications assistant for SkillBridge, a high-end freelance platform.
+TASK: Suggest a single, professional, and strategic next message for the {body.role}.
+
+CONVERSATION HISTORY:
+{history_text}
+
+GUIDELINES:
+- MATCH THE TONE: If the chat is formal, stay formal. If casual, be friendly but professional.
+- BE CONCISE: Maximum 60 words.
+- GOAL DRIVEN: 
+    - If CLIENT: Focus on clarifying scope, asking about experience, or closing the deal.
+    - If FREELANCER: Focus on demonstrating value, clarifying requirements, or proposing next steps.
+- DO NOT use placeholders like [Name]. Use the names provided in the context if available.
+- ONLY return the message content. No meta-talk.
+
+SUGGESTION:
+"""
+        suggestion = await llm.call(prompt, task="negotiation")
+        
+        return {
+            "success": True,
+            "suggestion": suggestion.strip().replace('"', '')
+        }
+    except Exception as e:
+        print(f"❌ suggest_reply error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Feature: AI Moderation Engine ──────────────────────────────
