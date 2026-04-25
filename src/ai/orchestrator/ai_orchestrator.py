@@ -243,10 +243,19 @@ class AiOrchestrator:
         if not min_rounds_met: 
             return False
             
-        # 1. Perfect data match
-        if is_complete and confidence >= 70: 
-            return True
-            
+        # 🎯 PILLAR CHECK: Requirements, Budget, Tech Stack, Timeline
+        project = session.get("project", {})
+        has_reqs = bool(project.get("projectType") or project.get("features"))
+        has_budget = bool(project.get("budgetMax") or project.get("budgetMin"))
+        has_tech = bool(project.get("techPreferences"))
+        has_timeline = bool(project.get("timeline"))
+
+        pillars_met = has_reqs and has_budget and has_tech and has_timeline
+        
+        if not pillars_met and not is_complete:
+            # We don't have enough info yet
+            return False
+
         # 2. LLM Intent Detection: Did user explicitly ask for freelancers/matching?
         try:
             prompt = f"""
@@ -262,15 +271,23 @@ LAST AI REPLY: "{ai_reply}"
 DECIDE: Should we show freelancers matching results now?
 Consider 'true' if:
 1. The user explicitly asked to "show freelancers", "find someone", "let's hire", "matching", etc.
-2. The user has provided enough basic info (Goal + Budget) and seems ready for the next step.
+2. The user has provided all "Four Pillars" (What they want, Budget, Tech Stack, and Timeline).
+
+IMPORTANT: Even if the user asks for matches, if we are missing any of the 4 Pillars (Requirements, Budget, Tech Stack, Timeline), return 'false' and explain we need those first.
 
 RETURN ONLY: true OR false"""
             result = await self.llm.call([{"role": "user", "content": prompt}], task="intent")
             decision = "true" in result.strip().lower()
-            if decision: print("💡 LLM detected intent to match.")
+            
+            # Final Pillar Guard
+            if decision and not pillars_met:
+                print("⚠️ LLM wanted to match, but 'Four Pillars' not met yet.")
+                return False
+                
+            if decision: print("💡 LLM detected intent and pillars met.")
             return decision
         except:
-            return is_complete and confidence >= 50
+            return pillars_met and is_complete and confidence >= 60
 
     # ── MATCH/HIRE stage ───────────────────────────────────────────
     async def _handle_match(

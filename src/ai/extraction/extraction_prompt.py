@@ -60,6 +60,7 @@ HARD REQUIRMENTS (ALL MUST BE PRESENT):
 3. Budget (budgetMin or budgetMax)
 4. Timeline (timeline)
 5. Platform (platform)
+6. Tech Stack (techPreferences list cannot be empty)
 
 PROTOCOL: If ANY field is missing, 'isComplete' MUST be FALSE.
 

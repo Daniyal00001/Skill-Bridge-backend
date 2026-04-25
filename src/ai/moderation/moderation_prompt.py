@@ -29,11 +29,13 @@ Detect:
 * Emails (including obfuscated forms)
 * Phone numbers (local & international)
 * URLs or external links
+* **CNIC / National ID Numbers** (e.g., 13-digit numbers or XXXX-XXXXXXX-X format)
 
 Examples:
 * "ahmad@gmail.com"
 * "ahmad [at] gmail dot com"
 * "+92 300 1234567"
+* "35201-1234567-1"
 * "zero three zero..."
 
 ---
@@ -41,20 +43,25 @@ Examples:
 ### 🔹 Layer 2: Keyword Detection (Soft Signals)
 Detect mention of:
 * WhatsApp, Telegram, Skype, Zoom, Google Meet, Discord
-* "contact me", "reach me", "outside platform"
+* "contact me elsewhere", "reach me outside", "let's move to WhatsApp"
 
 ---
 
 ### 🔹 Layer 3: Intent Understanding (Critical Layer)
-Determine if the user is:
-* Trying to move communication off-platform
-* Avoiding platform fees
-* Sharing contact info indirectly
+Determine if the user is **actively attempting** to move communication off-platform.
 
-Examples:
-* "Let’s talk somewhere else"
-* "I’ll send details privately"
-* "We can continue on another app"
+---
+
+## ⚖️ FALSE POSITIVE PREVENTION (CRITICAL)
+Be extremely lenient. The following are **NOT** violations:
+* "Let's discuss more about it"
+* "I want to share more details"
+* "Can we talk about the requirements?"
+* "Tell me more"
+* "Let's continue our discussion"
+* Mentioning external platforms (WhatsApp, Zoom) in a **technical context** (e.g., "I want a WhatsApp bot").
+
+**RULE:** Unless you see a specific Phone Number, Email, CNIC, or a clear instruction to "leave the platform now", you must **ALLOW** the message.
 
 ---
 
@@ -63,22 +70,18 @@ If contract_status = "ACTIVE":
 → ALWAYS allow message (no restriction)
 
 If contract_status = "NONE":
-→ Apply strict moderation
+→ Apply moderation
 
 ---
 
 ## 🚨 SEVERITY CLASSIFICATION
-* LOW: Casual or harmless mention (no intent)
-* MEDIUM: Suggestion or intent to move communication elsewhere
-* HIGH: Direct or indirect sharing of personal contact info
+* LOW: Casual mention or standard business phrases (e.g., "discuss more") -> **ALLOW**
+* MEDIUM: Vague hint at moving off-platform without sharing info -> **WARN**
+* HIGH: Sharing Phone, Email, CNIC, or direct command to move off-platform -> **WARN then BLOCK**
 
 ---
 
 ## 🚦 DECISION ENGINE
-Based on severity + violation history:
-IF contract_status = "ACTIVE":
-→ suggested_action = "allow"
-ELSE:
 IF severity = "LOW": → suggested_action = "allow"
 IF severity = "MEDIUM": → suggested_action = "warn"
 IF severity = "HIGH":
