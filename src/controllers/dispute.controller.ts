@@ -386,15 +386,39 @@ export const resolveDispute = async (req: Request, res: Response) => {
         );
 
         if (resolution === "FAVOR_FREELANCER") {
+          // Calculate 10% platform fee
+          const platformFee = totalEscrow * 0.10;
+          const freelancerNet = totalEscrow - platformFee;
+
           // Release all to freelancer (INTERNAL BALANCE)
           await tx.payment.updateMany({
             where: { contractId: contract.id, status: "HELD_IN_ESCROW" },
             data: { status: "RELEASED", releasedAt: new Date() },
           });
+
           await tx.freelancerProfile.update({
             where: { id: contract.freelancerProfileId },
-            data: { balance: { increment: totalEscrow } },
+            data: { balance: { increment: freelancerNet } },
           });
+
+          // Record Platform Earning
+          await tx.platformEarning.create({
+            data: {
+              amount: platformFee,
+              type: 'PROJECT_FEE',
+              description: `10% fee from dispute resolution (FAVOR_FREELANCER) on project "${dispute.project?.title || ''}"`,
+              metadata: {
+                disputeId: dispute.id,
+                projectId: dispute.projectId,
+                freelancerId: contract.freelancerProfileId,
+                grossAmount: totalEscrow,
+                feeAmount: platformFee,
+                netAmount: freelancerNet,
+                resolution
+              }
+            }
+          });
+
           // Mark associated milestones as APPROVED
           const milestoneIds = contract.payments
             .map((p) => p.milestoneId)
@@ -409,7 +433,7 @@ export const resolveDispute = async (req: Request, res: Response) => {
           resolution === "FAVOR_CLIENT" ||
           resolution === "PROJECT_CANCELLED"
         ) {
-          // ── REAL STRIPE REFUNDS ────────────────────────────────
+          // ... (existing stripe refund logic) ...
           for (const payment of contract.payments) {
             if (payment.transactionId) {
               try {
@@ -418,7 +442,6 @@ export const resolveDispute = async (req: Request, res: Response) => {
                 });
               } catch (stripeErr: any) {
                 console.error(`Stripe refund failed for PI ${payment.transactionId}:`, stripeErr.message);
-                // We continue with DB updates even if one refund fails (manual intervention might be needed)
               }
             }
           }
@@ -441,7 +464,9 @@ export const resolveDispute = async (req: Request, res: Response) => {
           }
         } else if (resolution === "PARTIAL_SPLIT") {
           // Default 50/50 split
-          const totalHalf = totalEscrow / 2;
+          const totalFreelancerGross = totalEscrow / 2;
+          const platformFee = totalFreelancerGross * 0.10;
+          const freelancerNet = totalFreelancerGross - platformFee;
 
           for (const payment of contract.payments) {
             const halfAmount = payment.amount / 2;
@@ -474,14 +499,31 @@ export const resolveDispute = async (req: Request, res: Response) => {
                 status: "REFUNDED",
                 transactionId: payment.transactionId,
                 paidAt: payment.paidAt,
-                // milestoneId stays null for this record to avoid unique conflict
               },
             });
           }
 
           await tx.freelancerProfile.update({
             where: { id: contract.freelancerProfileId },
-            data: { balance: { increment: totalHalf } },
+            data: { balance: { increment: freelancerNet } },
+          });
+
+          // Record Platform Earning for the released portion
+          await tx.platformEarning.create({
+            data: {
+              amount: platformFee,
+              type: 'PROJECT_FEE',
+              description: `10% fee from partial dispute resolution on project "${dispute.project?.title || ''}"`,
+              metadata: {
+                disputeId: dispute.id,
+                projectId: dispute.projectId,
+                freelancerId: contract.freelancerProfileId,
+                grossAmount: totalFreelancerGross,
+                feeAmount: platformFee,
+                netAmount: freelancerNet,
+                resolution
+              }
+            }
           });
 
           // Mark milestones as APPROVED
