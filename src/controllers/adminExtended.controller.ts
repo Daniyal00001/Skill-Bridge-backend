@@ -667,8 +667,51 @@ export const deleteProjectByAdmin = async (req: Request, res: Response) => {
     }
     const { id } = req.params;
 
-    const project = await prisma.project.delete({
-      where: { id },
+    // Use a transaction to manually clean up related records and avoid unique constraint issues during cascade
+    const project = await prisma.$transaction(async (tx) => {
+      // 1. Get contract if exists
+      const contract = await tx.contract.findUnique({
+        where: { projectId: id },
+        select: { id: true }
+      });
+
+      if (contract) {
+        // 2. Delete Payments first (related to milestones and contracts)
+        await tx.payment.deleteMany({
+          where: { contractId: contract.id }
+        });
+
+        // 3. Delete Milestones
+        await tx.milestone.deleteMany({
+          where: { contractId: contract.id }
+        });
+
+        // 4. Delete ChatRooms related to contract
+        await tx.chatRoom.deleteMany({
+          where: { contractId: contract.id }
+        });
+
+        // 5. Delete Contract
+        await tx.contract.delete({
+          where: { id: contract.id }
+        });
+      }
+
+      // 6. Delete other project-level relations
+      await Promise.all([
+        tx.proposal.deleteMany({ where: { projectId: id } }),
+        tx.invitation.deleteMany({ where: { projectId: id } }),
+        tx.projectSkill.deleteMany({ where: { projectId: id } }),
+        tx.chatRoom.deleteMany({ where: { projectId: id } }),
+        tx.dispute.deleteMany({ where: { projectId: id } }),
+        tx.savedProject.deleteMany({ where: { projectId: id } }),
+        tx.browseInteraction.deleteMany({ where: { projectId: id } }),
+      ]);
+
+      // 7. Finally delete the project
+      return await tx.project.delete({
+        where: { id },
+      });
     });
 
     // Log the action
