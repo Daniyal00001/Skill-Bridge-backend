@@ -3,6 +3,8 @@ import { prisma } from "../config/prisma";
 import * as notificationService from "../services/notification.service";
 import { uploadMultipleToCloudinary } from "../utils/uploadToCloudinary";
 import { Prisma, Role } from "@prisma/client";
+import { inviteFreelancerSchema } from "../utils/validators";
+import { sanitize } from "../utils/sanitize";
 
 /**
  * @desc    Get all freelancers with advanced filtering and pagination
@@ -287,12 +289,32 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       req.body;
     const userId = (req as any).user?.userId;
 
-    if (!projectId) {
+    // Parse milestones if sent as FormData string
+    let parsedMilestones = milestones;
+    if (typeof milestones === "string") {
+      try {
+        parsedMilestones = JSON.parse(milestones);
+      } catch {
+        parsedMilestones = null;
+      }
+    }
+
+    const parsed = inviteFreelancerSchema.safeParse({
+      projectId,
+      message,
+      budget: budget ? Number(budget) : null,
+      revisionsAllowed: revisionsAllowed ? Number(revisionsAllowed) : 3,
+      milestones: parsedMilestones,
+    });
+
+    if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: "Project ID is required for invitation",
+        message: parsed.error.errors[0]?.message || "Invalid invitation data.",
       });
     }
+
+    const validatedData = parsed.data;
 
     // Verify client profile
     const clientProfile = await prisma.clientProfile.findUnique({
@@ -355,26 +377,16 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
       );
     }
 
-    // Parse milestones if sent as FormData string
-    let parsedMilestones = milestones;
-    if (typeof milestones === "string") {
-      try {
-        parsedMilestones = JSON.parse(milestones);
-      } catch {
-        parsedMilestones = null;
-      }
-    }
-
     // Create invitation
     const invitation = await prisma.invitation.create({
       data: {
-        projectId,
+        projectId: validatedData.projectId,
         freelancerProfileId,
         clientProfileId: clientProfile.id,
-        message,
-        milestones: parsedMilestones,
-        revisionsAllowed: revisionsAllowed ? Number(revisionsAllowed) : 3,
-        budget: budget ? Number(budget) : null,
+        message: sanitize(validatedData.message),
+        milestones: validatedData.milestones,
+        revisionsAllowed: validatedData.revisionsAllowed,
+        budget: validatedData.budget,
         attachments: attachmentUrls,
       } as any,
     });

@@ -5,6 +5,7 @@ import { scheduleMilestoneAutoRelease } from '../queues/milestoneRelease.queue'
 import { scheduleReviewAutoUnlock } from '../queues/reviewUnlock.queue'
 import * as notificationService from '../services/notification.service'
 import { updateClientStats } from '../services/tracking.service'
+import { setMilestonesSchema } from '../utils/validators'
 
 // ─────────────────────────────────────────────────────────────
 // HELPER: Check if user has access to a contract
@@ -224,6 +225,12 @@ export const setContractMilestones = async (req: Request, res: Response) => {
 
     if (!Array.isArray(milestones) || milestones.length === 0) {
       return res.status(400).json({ success: false, message: 'At least one milestone is required.' })
+    }
+
+    // Validate milestone shapes with Zod
+    const milestonesParsed = setMilestonesSchema.safeParse({ milestones: milestones.map((m: any) => ({ ...m, amount: Number(m.amount) })) })
+    if (!milestonesParsed.success) {
+      return res.status(400).json({ success: false, message: milestonesParsed.error.errors[0]?.message || 'Invalid milestone data.' })
     }
 
     const contract = await resolveContractAccess(contractId, userId, 'CLIENT')

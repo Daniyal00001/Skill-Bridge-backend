@@ -10,6 +10,7 @@ import {
   cancelReviewAutoUnlock,
   reviewUnlockQueue,
 } from '../queues/reviewUnlock.queue'
+import { createReviewSchema } from '../utils/validators'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/reviews — Submit a blind review
@@ -19,11 +20,20 @@ export const submitReview = async (req: Request, res: Response) => {
     const giverId = (req as any).user?.userId
     const { contractId, rating, comment } = req.body
 
-    // Validate rating
-    const ratingNum = Number(rating)
-    if (!ratingNum || ratingNum < 1 || ratingNum > 5) {
-      return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5.' })
+    if (!contractId) {
+      return res.status(400).json({ success: false, message: 'contractId is required.' })
     }
+
+    // Validate rating + comment via schema
+    const parsed = createReviewSchema.safeParse({
+      rating: Number(rating),
+      comment: String(comment || '').trim(),
+    })
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.errors[0]?.message || 'Invalid review data.' })
+    }
+    const ratingNum = parsed.data.rating
+    const sanitizedComment = parsed.data.comment
 
     // 1. Fetch contract with both profiles
     const contract = await prisma.contract.findUnique({
@@ -73,7 +83,7 @@ export const submitReview = async (req: Request, res: Response) => {
         giverId,
         receiverId,
         rating: ratingNum,
-        comment: comment?.trim() || null,
+        comment: sanitizedComment,
         isRevealed: false,
         giverRole,
         reviewDeadline,

@@ -5,6 +5,8 @@ import { calculateTokenCost, calculateTokenCostWithBreakdown } from '../utils/to
 import { sanitize, stripTags } from '../utils/sanitize'
 import * as notificationService from '../services/notification.service'
 import { updateClientStats } from '../services/tracking.service'
+import { submitProposalSchema } from '../utils/validators'
+import { z } from 'zod'
 
 // ─────────────────────────────────────────────────────────────
 // GET TOKEN COST FOR A PROJECT (preview before submitting)
@@ -81,12 +83,22 @@ export const submitProposal = async (req: Request, res: Response) => {
       })
     }
 
-    if (coverLetter.length < 50) {
+    // ── Schema Validation (coerce strings from multipart/form-data) ──
+    const parsed = submitProposalSchema.safeParse({
+      bidAmount: Number(bidAmount),
+      deliveryDays: Number(deliveryDays),
+      coverLetter: stripTags(coverLetter), // strip HTML for length check
+      generalRevisionLimit: generalRevisionLimit !== undefined ? Number(generalRevisionLimit) : undefined,
+    })
+    if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: 'Cover letter must be at least 50 characters.'
+        message: parsed.error.errors[0]?.message || 'Invalid proposal data.',
       })
     }
+
+    // Sanitize HTML cover letter (keep HTML but strip scripts/XSS)
+    const sanitizedCoverLetter = sanitize(coverLetter)
 
     // Get freelancer profile with token balance
     const freelancerProfile = await prisma.freelancerProfile.findUnique({
@@ -176,18 +188,27 @@ export const submitProposal = async (req: Request, res: Response) => {
           freelancerProfileId: freelancerProfile.id,
           proposedPrice: Number(bidAmount),
           deliveryTime: Number(deliveryDays),
-          coverLetter: sanitize(coverLetter),
+          coverLetter: sanitizedCoverLetter,
           attachments: Array.isArray(attachments) ? attachments : [],
           tokenCost,
           status: 'PENDING',
-          proposalMilestones: milestones 
-            ? JSON.parse(typeof milestones === 'string' ? milestones : JSON.stringify(milestones)).map((m: any) => ({
+          proposalMilestones: (() => {
+            try {
+              if (!milestones) return null
+              const raw = typeof milestones === 'string' ? JSON.parse(milestones) : milestones
+              if (!Array.isArray(raw)) return null
+              return raw.map((m: any) => ({
                 ...m,
-                title: stripTags(m.title),
-                description: m.description ? sanitize(m.description) : null
-              })) 
-            : null,
-          generalRevisionLimit: generalRevisionLimit ? Number(generalRevisionLimit) : 3,
+                title: stripTags(String(m.title || '')).slice(0, 100),
+                description: m.description ? sanitize(String(m.description)) : null,
+                amount: Number(m.amount),
+                allowedRevisions: m.allowedRevisions !== undefined ? Number(m.allowedRevisions) : 3,
+              }))
+            } catch {
+              return null
+            }
+          })(),
+          generalRevisionLimit: generalRevisionLimit !== undefined ? Number(generalRevisionLimit) : 3,
         },
         include: {
           project: {

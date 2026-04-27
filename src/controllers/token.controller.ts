@@ -1,6 +1,11 @@
 import { Request, Response } from 'express'
 import { prisma } from '../config/prisma'
 import Stripe from 'stripe'
+import { 
+  buyTokensWithBalanceSchema, 
+  createTokenIntentSchema, 
+  confirmTokenPurchaseSchema 
+} from '../utils/validators'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-03-25.dahlia',
@@ -139,11 +144,14 @@ export const buyTokens = async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId
     const { amountOfMoney } = req.body // How much money the freelancer is spending
 
-    if (!amountOfMoney || isNaN(Number(amountOfMoney)) || Number(amountOfMoney) <= 0) {
-      return res.status(400).json({ success: false, message: 'A valid positive amount of money is required.' })
+    const parsed = buyTokensWithBalanceSchema.safeParse({ amountOfMoney: Number(amountOfMoney) })
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+      })
     }
-
-    const money = Number(amountOfMoney)
+    const money = parsed.data.amountOfMoney
 
     const freelancer = await prisma.freelancerProfile.findUnique({
       where: { userId },
@@ -222,11 +230,14 @@ export const createTokenPaymentIntent = async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId
     const { amountOfMoney } = req.body
 
-    if (!amountOfMoney || isNaN(Number(amountOfMoney)) || Number(amountOfMoney) < 1) {
-      return res.status(400).json({ success: false, message: 'Minimum purchase is $1.00' })
+    const parsed = createTokenIntentSchema.safeParse({ amountOfMoney: Number(amountOfMoney) })
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+      })
     }
-
-    const money = Number(amountOfMoney)
+    const money = parsed.data.amountOfMoney
     const tokensToBuy = Math.floor(money * 10)
 
     // Fetch freelancer id (needed for raw MongoDB read)
@@ -291,8 +302,12 @@ export const confirmTokenCardPurchase = async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId
     const { paymentIntentId } = req.body
 
-    if (!paymentIntentId) {
-      return res.status(400).json({ success: false, message: 'paymentIntentId is required.' })
+    const parsed = confirmTokenPurchaseSchema.safeParse({ paymentIntentId })
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+      })
     }
 
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId)

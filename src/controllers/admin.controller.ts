@@ -8,9 +8,13 @@ import { getCache, setCache, deletePatternCache } from '../utils/redis';
 // ─────────────────────────────────────────────────────────────
 export const getAdminSkills = async (req: Request, res: Response) => {
   try {
-    const { status, page = '1', limit = '20' } = req.query;
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
-    const take = parseInt(limit as string);
+    const rawPage = parseInt(req.query.page as string);
+    const rawLimit = parseInt(req.query.limit as string);
+    const page = isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+    const limit = isNaN(rawLimit) || rawLimit < 1 || rawLimit > 100 ? 20 : rawLimit;
+    const { status } = req.query;
+    const skip = (page - 1) * limit;
+    const take = limit;
     
     // Only allow Admins to access this.
     if (req.user?.role !== 'ADMIN') {
@@ -308,9 +312,13 @@ export const getAllVerifications = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
     }
 
-    const { status, page = '1', limit = '12', search, role } = req.query;
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
-    const take = parseInt(limit as string);
+    const rawPage2 = parseInt(req.query.page as string);
+    const rawLimit2 = parseInt(req.query.limit as string);
+    const page = isNaN(rawPage2) || rawPage2 < 1 ? 1 : rawPage2;
+    const limit = isNaN(rawLimit2) || rawLimit2 < 1 || rawLimit2 > 100 ? 12 : rawLimit2;
+    const skip = (page - 1) * limit;
+    const take = limit;
+    const { status, search, role } = req.query;
 
     const cacheKey = `admin:verifications:${status}:${role}:${search}:${page}:${limit}`;
     const cached = await getCache<any>(cacheKey);
@@ -440,9 +448,15 @@ export const rejectVerification = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const { reason } = req.body;
-    
+
     if (req.user?.role !== 'ADMIN') {
       return res.status(403).json({ success: false, message: "Forbidden: Admins only" });
+    }
+    if (reason !== undefined && (typeof reason !== 'string' || reason.trim().length === 0)) {
+      return res.status(400).json({ success: false, message: 'Rejection reason cannot be empty.' });
+    }
+    if (reason && reason.length > 500) {
+      return res.status(400).json({ success: false, message: 'Rejection reason must not exceed 500 characters.' });
     }
 
     const userToReject = await prisma.user.findUnique({ where: { id: userId }});

@@ -2,6 +2,11 @@ import { Request, Response } from 'express'
 import Stripe from 'stripe'
 import { prisma } from '../config/prisma'
 import * as notificationService from '../services/notification.service'
+import { 
+  stripePaymentIntentSchema, 
+  stripeConfirmFundSchema, 
+  purchaseTokensSchema 
+} from '../utils/validators'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-03-25.dahlia',
@@ -17,8 +22,12 @@ export const createPaymentIntent = async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId
     const { contractId, milestoneId } = req.body
 
-    if (!contractId || !milestoneId) {
-      return res.status(400).json({ success: false, message: 'contractId and milestoneId are required.' })
+    const parsed = stripePaymentIntentSchema.safeParse({ contractId, milestoneId })
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+      })
     }
 
     // Load contract + milestone with access check
@@ -97,8 +106,12 @@ export const confirmFundMilestone = async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId
     const { contractId, milestoneId, paymentIntentId } = req.body
 
-    if (!contractId || !milestoneId || !paymentIntentId) {
-      return res.status(400).json({ success: false, message: 'contractId, milestoneId and paymentIntentId are required.' })
+    const parsed = stripeConfirmFundSchema.safeParse({ contractId, milestoneId, paymentIntentId })
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+      })
     }
 
     // Verify payment with Stripe

@@ -8,6 +8,13 @@ import { updateProfileCompletion } from "../utils/profileCompletion";
 import { ExperienceLevel, AvailabilityStatus } from "@prisma/client";
 import { validateSkillName } from "../utils/skillValidation";
 import { checkSkillRateLimit } from "../utils/redis";
+import { 
+  onboardingStep1Schema, 
+  onboardingStep2Schema, 
+  onboardingStep3Schema, 
+  onboardingStep5Schema 
+} from "../utils/validators";
+import { sanitize } from "../utils/sanitize";
 
 // Get Current User Profile
 export const getMyFreelancerProfile = async (req: Request, res: Response) => {
@@ -153,29 +160,13 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    if (!fullName || fullName.length < 3)
+    const parsed = onboardingStep1Schema.safeParse({ fullName, phoneNumber, location, region, tagline });
+    if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: "Full name must be at least 3 characters.",
-      });
-    if (!tagline || tagline.length < 10)
-      return res.status(400).json({
-        success: false,
-        message: "Tagline must be at least 10 characters.",
-      });
-    if (
-      !phoneNumber ||
-      !/^\+?[1-9]\d{1,14}$/.test(phoneNumber.replace(/\s/g, ""))
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid phone number format. Must start with '+'.",
+        message: parsed.error.errors[0]?.message || "Invalid input data.",
       });
     }
-    if (!location)
-      return res
-        .status(400)
-        .json({ success: false, message: "Country is required." });
 
     // Update User model (name)
     const user = await prisma.user.update({
@@ -231,25 +222,34 @@ export const updateOnboardingStep2 = async (req: Request, res: Response) => {
 
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
-    if (!hourlyRate || Number(hourlyRate) < 5)
-      return res
-        .status(400)
-        .json({ success: false, message: "Minimum hourly rate is $5." });
-    if (!bio || bio.length < 100)
+
+    const parsed = onboardingStep2Schema.safeParse({
+      hourlyRate: Number(hourlyRate),
+      bio: sanitize(bio),
+      availability,
+      experienceLevel,
+      preferredBudgetMin: preferredBudgetMin ? Number(preferredBudgetMin) : null,
+      preferredBudgetMax: preferredBudgetMax ? Number(preferredBudgetMax) : null,
+    });
+
+    if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: "Bio must be at least 100 characters.",
+        message: parsed.error.errors[0]?.message || "Invalid input data.",
       });
+    }
+
+    const validatedData = parsed.data;
 
     const profile = await prisma.freelancerProfile.update({
       where: { userId },
       data: {
-        hourlyRate: parseFloat(hourlyRate),
-        bio,
-        availability: availability as AvailabilityStatus,
-        experienceLevel: experienceLevel as ExperienceLevel,
-        preferredBudgetMin: preferredBudgetMin ? parseFloat(preferredBudgetMin) : null,
-        preferredBudgetMax: preferredBudgetMax ? parseFloat(preferredBudgetMax) : null,
+        hourlyRate: validatedData.hourlyRate,
+        bio: validatedData.bio,
+        availability: validatedData.availability as AvailabilityStatus,
+        experienceLevel: validatedData.experienceLevel as ExperienceLevel,
+        preferredBudgetMin: validatedData.preferredBudgetMin,
+        preferredBudgetMax: validatedData.preferredBudgetMax,
       },
     });
 
@@ -274,11 +274,16 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
 
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
-    if (!skills || !Array.isArray(skills) || skills.length === 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "At least one skill is required." });
+
+    const parsed = onboardingStep3Schema.safeParse({ skills, education, certifications, languages, gigs });
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: parsed.error.errors[0]?.message || "Invalid input data.",
+      });
     }
+
+    const validatedData = parsed.data;
 
     const profile = await prisma.freelancerProfile.findUnique({
       where: { userId },
@@ -594,14 +599,11 @@ export const updateOnboardingStep5 = async (req: Request, res: Response) => {
     const { github, linkedin, portfolio, website, preferredCategories } =
       req.body;
 
-    if (
-      preferredCategories &&
-      Array.isArray(preferredCategories) &&
-      preferredCategories.length > 4
-    ) {
+    const parsed = onboardingStep5Schema.safeParse({ github, linkedin, portfolio, website, preferredCategories });
+    if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: "You can select a maximum of 4 preferred categories.",
+        message: parsed.error.errors[0]?.message || "Invalid input data.",
       });
     }
 

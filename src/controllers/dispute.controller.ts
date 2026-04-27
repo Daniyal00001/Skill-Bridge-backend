@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { prisma } from '../config/prisma';
 import { createNotification } from '../services/notification.service';
+import { createDisputeSchema } from '../utils/validators';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2026-03-25.dahlia',
@@ -239,8 +240,14 @@ export const updateDisputeSummary = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { summary } = req.body;
 
-    if (summary === undefined) {
+    if (summary === undefined || summary === null) {
       return res.status(400).json({ success: false, message: 'Summary is required' });
+    }
+    if (typeof summary !== 'string' || summary.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Summary cannot be empty.' });
+    }
+    if (summary.length > 5000) {
+      return res.status(400).json({ success: false, message: 'Summary must not exceed 5000 characters.' });
     }
 
     const dispute = await prisma.dispute.update({
@@ -635,8 +642,10 @@ export const createDispute = async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const userRole = req.user!.role;
 
-    if (!projectId || !disputeType || !reason) {
-      return res.status(400).json({ success: false, message: 'projectId, disputeType, and reason are required' });
+    // Schema validation
+    const parsed = createDisputeSchema.safeParse({ projectId, disputeType, reason, details })
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.errors[0]?.message || 'Invalid dispute data.' })
     }
 
     // Fetch project with contract
@@ -801,8 +810,14 @@ export const addDisputeNote = async (req: Request, res: Response) => {
     const { note } = req.body;
     const userId = req.user!.userId;
 
-    if (!note) {
+    if (note === undefined || note === null) {
       return res.status(400).json({ success: false, message: 'Note content is required' });
+    }
+    if (typeof note !== 'string' || note.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Note content cannot be empty.' });
+    }
+    if (note.length > 3000) {
+      return res.status(400).json({ success: false, message: 'Note must not exceed 3000 characters.' });
     }
 
     // Get admin profile

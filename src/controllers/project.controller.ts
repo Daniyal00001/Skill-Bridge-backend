@@ -4,6 +4,7 @@ import * as notificationService from '../services/notification.service'
 import { uploadToCloudinary } from "../utils/uploadToCloudinary"
 import { validateSkillName } from "../utils/skillValidation";
 import { checkSkillRateLimit } from "../utils/redis";
+import { createProjectSchema } from "../utils/validators";
 // ─────────────────────────────────────────────────────────────
 // CREATE PROJECT (Client only)
 // POST /api/projects
@@ -12,18 +13,6 @@ export const createProject = async (req: Request, res: Response) => {
    console.log("create project route called")
   try {
     const userId = req.user?.userId
-
-    // Get client profile
-    const clientProfile = await prisma.clientProfile.findUnique({
-      where: { userId }
-    })
-
-    if (!clientProfile) {
-      return res.status(404).json({
-        success: false,
-        message: 'Client profile not found.'
-      })
-    }
 
     const {
       title,
@@ -46,6 +35,53 @@ export const createProject = async (req: Request, res: Response) => {
       locationId,
       status = 'OPEN'
     } = req.body
+
+    // ── Schema Validation (skip for DRAFT saves where budget/deadline may be empty) ──
+    if (status !== 'DRAFT') {
+      const parsed = createProjectSchema.safeParse({
+        title,
+        shortDesc,
+        description,
+        requirements,
+        budget: Number(budget),
+        budgetType,
+        deadline,
+        skills: Array.isArray(skills) ? skills : (skills ? [skills] : []),
+        experienceLevel,
+        hiringMethod,
+        categoryId,
+        subCategoryId,
+        languageId,
+        locationId,
+        referenceLinks,
+      })
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.errors[0]?.message || 'Invalid project data.',
+        })
+      }
+    } else {
+      // Minimal validation for drafts
+      if (!title || String(title).trim().length < 3) {
+        return res.status(400).json({ success: false, message: 'Project title is required (min 3 chars).' })
+      }
+      if (budget !== undefined && budget !== null && budget !== '' && isNaN(Number(budget))) {
+        return res.status(400).json({ success: false, message: 'Budget must be a valid number.' })
+      }
+    }
+
+    // Get client profile
+    const clientProfile = await prisma.clientProfile.findUnique({
+      where: { userId }
+    })
+
+    if (!clientProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Client profile not found.'
+      })
+    }
 
     // Handle uploaded files (from upload.middleware)
  const attachments: string[] = []
@@ -76,7 +112,7 @@ if (req.files && Array.isArray(req.files)) {
         referenceLinks,
         categoryId,
         subCategoryId,
-        budget: Number(budget),
+        budget: budget !== undefined && budget !== '' ? Number(budget) : 0,
         budgetType,
         size: sizeMap[projectSize] || 'MEDIUM',
         deadline: deadline ? new Date(deadline) : null,
