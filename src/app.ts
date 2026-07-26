@@ -28,6 +28,7 @@ const app = express();
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: false,
   }),
 );
 const rawOrigins = [
