@@ -4,6 +4,7 @@
 # ============================================================
 
 import json
+import os
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -123,9 +124,10 @@ class NegotiationService:
         # Notify Node.js backend to broadcast via Socket.io
         try:
             import httpx
+            node_backend = os.getenv("NODE_BACKEND_URL", "http://localhost:5000").rstrip("/")
             async with httpx.AsyncClient() as client:
                 await client.post(
-                    "http://localhost:5000/api/ai/assistant/broadcast-message",
+                    f"{node_backend}/api/ai/assistant/broadcast-message",
                     json={"roomId": room_id, "messageId": message_id}
                 )
         except Exception as e:
@@ -263,9 +265,10 @@ class NegotiationService:
             # Notify Node.js backend to broadcast via Socket.io
             try:
                 import httpx
+                node_backend = os.getenv("NODE_BACKEND_URL", "http://localhost:5000").rstrip("/")
                 async with httpx.AsyncClient() as client:
                     await client.post(
-                        "http://localhost:5000/api/ai/assistant/broadcast-message",
+                        f"{node_backend}/api/ai/assistant/broadcast-message",
                         json={"roomId": room_id, "messageId": message_id}
                     )
             except Exception as e:

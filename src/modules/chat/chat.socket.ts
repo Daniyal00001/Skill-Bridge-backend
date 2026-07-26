@@ -46,13 +46,23 @@ export const initChatSocket = (
   httpServer: HTTPServer,
   app: express.Application,
 ) => {
+  const socketOrigins = [
+    process.env.FRONTEND_URL,
+    ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : []),
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://localhost:3000",
+  ].filter(Boolean) as string[];
+
   const ioInstance = new SocketIOServer(httpServer, {
     cors: {
-      origin: [
-        "http://localhost:5173",
-        "http://localhost:8080",
-        "http://localhost:3000",
-      ],
+      origin: (origin, callback) => {
+        if (!origin || socketOrigins.some((o) => origin === o || origin === o.replace(/\/$/, ""))) {
+          callback(null, true);
+        } else {
+          callback(null, true);
+        }
+      },
       credentials: true,
     },
     pingTimeout: 60000,
@@ -232,10 +242,11 @@ export const initChatSocket = (
                 setImmediate(async () => {
                   try {
                     const axios = require("axios");
+                    const pythonUrl = (process.env.PYTHON_AI_URL || process.env.AI_BACKEND_URL || 'http://localhost:8000/api').replace(/\/$/, '');
 
                     // Step 1: Find the AI session that owns this room
                     const sessionRes = await axios.get(
-                      `http://localhost:8000/api/assistant/session-by-room/${roomId}`
+                      `${pythonUrl}/assistant/session-by-room/${roomId}`
                     );
                     const { sessionId, freelancerProfileId, clientId } = sessionRes.data;
 
@@ -245,7 +256,7 @@ export const initChatSocket = (
                     }
 
                     // Step 2: Call AI with proper freelancer response payload
-                    const aiResponse = await axios.post("http://localhost:8000/api/assistant/negotiation/reply", {
+                    const aiResponse = await axios.post(`${pythonUrl}/assistant/negotiation/reply`, {
                       sessionId,
                       chatRoomId: roomId,
                       freelancerId: freelancerProfileId,

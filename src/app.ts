@@ -30,13 +30,26 @@ app.use(
     crossOriginResourcePolicy: { policy: "cross-origin" },
   }),
 );
+const rawOrigins = [
+  process.env.FRONTEND_URL,
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "http://localhost:3000",
+];
+const allowedOrigins = rawOrigins
+  .filter(Boolean)
+  .flatMap((url) => [url, (url as string).replace(/\/$/, "")]);
+
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:8080",
-      "http://localhost:3000",
-    ],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true);
+      }
+    },
     credentials: true,
   }),
 );

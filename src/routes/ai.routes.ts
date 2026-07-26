@@ -3,32 +3,37 @@ import axios from 'axios';
 import { prisma } from '../config/prisma';
 
 const router = Router();
-const PYTHON_AI_URL = process.env.PYTHON_AI_URL || 'http://localhost:8000/api';
+const getPythonUrl = () => {
+  const url = process.env.PYTHON_AI_URL || process.env.AI_BACKEND_URL || 'http://localhost:8000/api';
+  return url.replace(/\/$/, '');
+};
+
+// Helper for proxy errors
+const handleProxyError = (tag: string, error: any, res: Response, defaultMsg: string) => {
+  const pythonUrl = getPythonUrl();
+  console.error(`❌ AI Proxy Error (${tag}) target=${pythonUrl}:`, error.message, error.response?.data || error.code || '');
+  return res.status(error.response?.status || 500).json({
+    success: false,
+    message: error.response?.data?.detail || defaultMsg,
+  });
+};
 
 // ── Proxy Assistant Message ─────────────────────────────────────
 router.post('/assistant/message', async (req: Request, res: Response) => {
   try {
-    const response = await axios.post(`${PYTHON_AI_URL}/assistant/message`, req.body);
+    const response = await axios.post(`${getPythonUrl()}/assistant/message`, req.body);
     return res.json(response.data);
   } catch (error: any) {
-    console.error('❌ AI Proxy Error (Assistant Message):', error.message);
-    return res.status(error.response?.status || 500).json({ 
-      success: false, 
-      message: error.response?.data?.detail || 'AI Assistant is currently unavailable.' 
-    });
+    return handleProxyError('Assistant Message', error, res, 'AI Assistant is currently unavailable.');
   }
 });
 // ── Proxy Assistant Suggest Reply ────────────────────────────
 router.post('/assistant/suggest-reply', async (req: Request, res: Response) => {
   try {
-    const response = await axios.post(`${PYTHON_AI_URL}/assistant/suggest-reply`, req.body);
+    const response = await axios.post(`${getPythonUrl()}/assistant/suggest-reply`, req.body);
     return res.json(response.data);
   } catch (error: any) {
-    console.error('❌ AI Proxy Error (Suggest Reply):', error.message);
-    return res.status(error.response?.status || 500).json({ 
-      success: false, 
-      message: 'Failed to generate AI suggestion.' 
-    });
+    return handleProxyError('Suggest Reply', error, res, 'Failed to generate AI suggestion.');
   }
 });
 
@@ -36,14 +41,10 @@ router.post('/assistant/suggest-reply', async (req: Request, res: Response) => {
 router.get('/assistant/sessions', async (req: Request, res: Response) => {
   try {
     const { clientId } = req.query;
-    const response = await axios.get(`${PYTHON_AI_URL}/assistant/sessions?clientId=${clientId}`);
+    const response = await axios.get(`${getPythonUrl()}/assistant/sessions?clientId=${clientId}`);
     return res.json(response.data);
   } catch (error: any) {
-    console.error('❌ AI Proxy Error (Sessions):', error.message);
-    return res.status(error.response?.status || 500).json({ 
-      success: false, 
-      message: 'Failed to fetch chat history.' 
-    });
+    return handleProxyError('Sessions', error, res, 'Failed to fetch chat history.');
   }
 });
 
@@ -51,28 +52,20 @@ router.get('/assistant/sessions', async (req: Request, res: Response) => {
 router.get('/assistant/session/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const response = await axios.get(`${PYTHON_AI_URL}/assistant/session/${id}`);
+    const response = await axios.get(`${getPythonUrl()}/assistant/session/${id}`);
     return res.json(response.data);
   } catch (error: any) {
-    console.error('❌ AI Proxy Error (Session Detail):', error.message);
-    return res.status(error.response?.status || 500).json({ 
-      success: false, 
-      message: 'Failed to load session details.' 
-    });
+    return handleProxyError('Session Detail', error, res, 'Failed to load session details.');
   }
 });
 
 // ── Proxy Cover Letter Generation ────────────────────────────────
 router.post('/cover-letter', async (req: Request, res: Response) => {
   try {
-    const response = await axios.post(`${PYTHON_AI_URL}/ai/cover-letter`, req.body);
+    const response = await axios.post(`${getPythonUrl()}/ai/cover-letter`, req.body);
     return res.json(response.data);
   } catch (error: any) {
-    console.error('❌ AI Proxy Error (Cover Letter):', error.message);
-    return res.status(error.response?.status || 500).json({ 
-      success: false, 
-      message: error.response?.data?.detail || 'Cover Letter service is currently unavailable.' 
-    });
+    return handleProxyError('Cover Letter', error, res, 'Cover Letter service is currently unavailable.');
   }
 });
 
