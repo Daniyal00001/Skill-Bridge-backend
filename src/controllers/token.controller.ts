@@ -148,7 +148,7 @@ export const buyTokens = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ 
         success: false, 
-        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+        message: parsed.error.issues[0]?.message || 'Invalid input data.' 
       })
     }
     const money = parsed.data.amountOfMoney
@@ -234,7 +234,7 @@ export const createTokenPaymentIntent = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ 
         success: false, 
-        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+        message: parsed.error.issues[0]?.message || 'Invalid input data.' 
       })
     }
     const money = parsed.data.amountOfMoney
@@ -306,7 +306,7 @@ export const confirmTokenCardPurchase = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ 
         success: false, 
-        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+        message: parsed.error.issues[0]?.message || 'Invalid input data.' 
       })
     }
 

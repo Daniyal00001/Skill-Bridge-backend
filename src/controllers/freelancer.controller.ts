@@ -310,7 +310,7 @@ export const inviteFreelancer = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: parsed.error.errors[0]?.message || "Invalid invitation data.",
+        message: parsed.error.issues[0]?.message || "Invalid invitation data.",
       });
     }
 

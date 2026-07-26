@@ -93,7 +93,7 @@ export const submitProposal = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: parsed.error.errors[0]?.message || 'Invalid proposal data.',
+        message: parsed.error.issues[0]?.message || 'Invalid proposal data.',
       })
     }
 

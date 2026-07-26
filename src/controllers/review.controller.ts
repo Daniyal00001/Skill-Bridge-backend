@@ -30,7 +30,7 @@ export const submitReview = async (req: Request, res: Response) => {
       comment: String(comment || '').trim(),
     })
     if (!parsed.success) {
-      return res.status(400).json({ success: false, message: parsed.error.errors[0]?.message || 'Invalid review data.' })
+      return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message || 'Invalid review data.' })
     }
     const ratingNum = parsed.data.rating
     const sanitizedComment = parsed.data.comment

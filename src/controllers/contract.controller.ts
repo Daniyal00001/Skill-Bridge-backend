@@ -230,7 +230,7 @@ export const setContractMilestones = async (req: Request, res: Response) => {
     // Validate milestone shapes with Zod
     const milestonesParsed = setMilestonesSchema.safeParse({ milestones: milestones.map((m: any) => ({ ...m, amount: Number(m.amount) })) })
     if (!milestonesParsed.success) {
-      return res.status(400).json({ success: false, message: milestonesParsed.error.errors[0]?.message || 'Invalid milestone data.' })
+      return res.status(400).json({ success: false, message: milestonesparsed.error.issues[0]?.message || 'Invalid milestone data.' })
     }
 
     const contract = await resolveContractAccess(contractId, userId, 'CLIENT')

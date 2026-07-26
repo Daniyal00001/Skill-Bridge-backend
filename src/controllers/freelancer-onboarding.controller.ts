@@ -164,7 +164,7 @@ export const updateOnboardingStep1 = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: parsed.error.errors[0]?.message || "Invalid input data.",
+        message: parsed.error.issues[0]?.message || "Invalid input data.",
       });
     }
 
@@ -235,7 +235,7 @@ export const updateOnboardingStep2 = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: parsed.error.errors[0]?.message || "Invalid input data.",
+        message: parsed.error.issues[0]?.message || "Invalid input data.",
       });
     }
 
@@ -279,7 +279,7 @@ export const updateOnboardingStep3 = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: parsed.error.errors[0]?.message || "Invalid input data.",
+        message: parsed.error.issues[0]?.message || "Invalid input data.",
       });
     }
 
@@ -603,7 +603,7 @@ export const updateOnboardingStep5 = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: parsed.error.errors[0]?.message || "Invalid input data.",
+        message: parsed.error.issues[0]?.message || "Invalid input data.",
       });
     }
 

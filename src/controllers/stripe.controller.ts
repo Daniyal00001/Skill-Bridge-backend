@@ -26,7 +26,7 @@ export const createPaymentIntent = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ 
         success: false, 
-        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+        message: parsed.error.issues[0]?.message || 'Invalid input data.' 
       })
     }
 
@@ -110,7 +110,7 @@ export const confirmFundMilestone = async (req: Request, res: Response) => {
     if (!parsed.success) {
       return res.status(400).json({ 
         success: false, 
-        message: parsed.error.errors[0]?.message || 'Invalid input data.' 
+        message: parsed.error.issues[0]?.message || 'Invalid input data.' 
       })
     }
 

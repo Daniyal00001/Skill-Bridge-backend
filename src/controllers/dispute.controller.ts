@@ -645,7 +645,7 @@ export const createDispute = async (req: Request, res: Response) => {
     // Schema validation
     const parsed = createDisputeSchema.safeParse({ projectId, disputeType, reason, details })
     if (!parsed.success) {
-      return res.status(400).json({ success: false, message: parsed.error.errors[0]?.message || 'Invalid dispute data.' })
+      return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message || 'Invalid dispute data.' })
     }
 
     // Fetch project with contract
