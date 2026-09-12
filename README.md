@@ -1,10 +1,12 @@
 # SkillBridge — Backend
 
-SkillBridge is an AI-powered freelance marketplace that helps clients find suitable freelancers, define project requirements, negotiate, and manage projects through a streamlined workflow.
+SkillBridge is an AI-powered freelance marketplace that helps clients turn project ideas into complete freelance engagements. The backend powers authentication, project management, freelancer matching, negotiation, contracts, payments, real-time communication, and the AI hiring workflow.
 
 ## 🤖 Autonomous AI Agent
 
-The core of SkillBridge includes an **autonomous AI agent** designed to assist with the hiring process. Instead of requiring the client to manually perform every step, the agent analyzes the conversation, understands project requirements, recommends suitable freelancers, assists with negotiation, and helps move the project toward an agreement.
+The core of SkillBridge is an **autonomous AI hiring agent**. Unlike a traditional chatbot that only responds to messages, the agent understands the client's requirements and can take actions throughout the hiring process.
+
+It analyzes the conversation, extracts the project's **scope, budget, technology requirements, and timeline**, evaluates project feasibility, finds suitable freelancers, ranks them based on skills and experience, communicates with freelancers, assists with negotiation, and moves the project toward an agreement.
 
 ### AI Workflow
 
@@ -13,64 +15,86 @@ Client Conversation
         ↓
 Understand Requirements
         ↓
-Analyze Project Scope
+Analyze Project
         ↓
-Find & Match Freelancers
+Scope + Budget + Tech Stack + Timeline
         ↓
-Compare / Recommend
+Find & Rank Freelancers
         ↓
-Assist with Negotiation
+AI Outreach
         ↓
-Agreement / Contract
+Negotiation
         ↓
-Project Management
+Agreement
+        ↓
+Contract Generation
 ```
 
-The AI can adapt its interaction based on the user's requirements and assist throughout the hiring journey.
+The agent adapts its communication according to the client's expertise level. Beginners receive simpler explanations and guided questions, while experienced users can move through the process with fewer clarification steps.
 
-## ⚙️ Backend Features
+### AI Architecture
 
-* User authentication & authorization
-* Client, Freelancer & Admin roles
-* Project creation and management
-* AI-assisted project scoping
-* Intelligent freelancer matching
-* Proposals and bidding
-* AI-assisted negotiation
-* Real-time communication with Socket.IO
-* Stripe-based payments
+The AI system is divided into specialized services:
+
+* **AI Orchestrator** — controls the workflow and decides the next stage
+* **Conversation Service** — manages the AI conversation and adapts responses
+* **Extraction Service** — extracts structured project requirements from conversations
+* **Matching Service** — finds and ranks suitable freelancers
+* **Moderation Service** — protects conversations from harmful content, PII, and prompt injection
+* **Negotiation Service** — communicates with freelancers and assists in closing deals
+* **Scoring Service** — evaluates freelancer suitability
+* **Memory System** — maintains short-term conversation and long-term user context
+* **Contract Service** — generates the agreement once the deal is finalized
+
+### Five-Stage AI Process
+
+```text
+UNDERSTAND → ANALYZE → MATCH → NEGOTIATE → CONTRACT
+```
+
+The **Four Pillars — Scope, Budget, Tech Stack, and Timeline — act as a hard gate** before freelancer matching can begin. This ensures the agent has enough information to make meaningful recommendations.
+
+## ⚙️ Backend
+
+The backend provides the APIs and services required for the complete marketplace lifecycle, including:
+
+* Authentication & role-based access
+* Client, Freelancer & Admin workflows
+* Project and proposal management
+* AI-powered freelancer matching
+* Real-time communication
+* Negotiation and contract workflow
+* Stripe payments
 * Project and revision management
 * Reviews and ratings
 * Admin and dispute management
 
 ## 🛠️ Tech Stack
 
-**Node.js · Express.js · TypeScript · Prisma · MongoDB · Redis · JWT · Socket.IO · Stripe**
+**Node.js · Express.js · TypeScript · Prisma · MongoDB · Redis · JWT · Socket.IO · Stripe · AI/LLM**
 
-## 🔄 Marketplace Workflow
+## 🔄 Marketplace Flow
 
 ```text
 Client
   ↓
-Create Project
+Describe Project
   ↓
-AI Project Scoping
+AI Understands & Scopes
   ↓
 Freelancer Matching
   ↓
-Proposal / Selection
+Selection & Outreach
   ↓
-Chat & Negotiation
+AI Negotiation
   ↓
-Agreement
+Agreement & Contract
   ↓
 Payment
   ↓
-Project
+Project Development
   ↓
 Submission & Revisions
   ↓
 Completion & Review
 ```
-
-The backend provides the APIs and services that power the SkillBridge marketplace, AI-assisted hiring workflow, real-time communication, payments, and project lifecycle.
